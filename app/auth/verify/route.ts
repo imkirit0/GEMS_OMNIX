@@ -1,6 +1,7 @@
+import { safeRoute } from "@/server/safe-route";
 import { auth, CHALLENGE_COOKIE, clearCookie, forbidden, form, readCookie, sameOrigin, seeOther } from "@/server/auth/http";
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const challenge = readCookie(req.headers.get("cookie"), CHALLENGE_COOKIE);
   if (!challenge) return seeOther(req, "/login?error=expired");
@@ -10,3 +11,5 @@ export async function POST(req: Request) {
   if (r.kind === "locked") return seeOther(req, "/login?error=locked", [clearCookie(CHALLENGE_COOKIE)]);
   return seeOther(req, "/login/verify?error=code");
 }
+
+export const POST = safeRoute(handle);

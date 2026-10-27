@@ -1,8 +1,9 @@
+import { safeRoute } from "@/server/safe-route";
 import { auth, CHALLENGE_COOKIE, clearCookie, forbidden, form, readCookie, sameOrigin, seeOther } from "@/server/auth/http";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const challenge = readCookie(req.headers.get("cookie"), CHALLENGE_COOKIE);
   if (!challenge) return seeOther(req, "/login?error=expired");
@@ -19,3 +20,5 @@ export async function POST(req: Request) {
   headers.append("set-cookie", clearCookie(CHALLENGE_COOKIE));
   return new Response(html, { status: 200, headers });
 }
+
+export const POST = safeRoute(handle);

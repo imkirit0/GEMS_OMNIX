@@ -1,9 +1,10 @@
+import { safeRoute } from "@/server/safe-route";
 import { adminPost } from "@/server/admin-http";
 import { assignRole, type ScopeInput } from "@/server/rbac";
 
 const int = (v: string | undefined) => (v && /^\d+$/.test(v) ? Number(v) : undefined);
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handle(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return adminPost(req, `/admin/users/${id}`, async (session, f) => {
     const kind = (["ALL", "REGION", "AREA", "CENTRE"] as const).find((k) => k === f["scopeKind"]) ?? "CENTRE";
@@ -14,3 +15,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return `/admin/users/${id}`;
   });
 }
+
+export const POST = safeRoute(handle);

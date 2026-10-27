@@ -1,3 +1,4 @@
+import { safeRoute } from "@/server/safe-route";
 import { Forbidden } from "@/server/action";
 import { forbidden, readCookie, sameOrigin, seeOther, SESSION_COOKIE } from "@/server/auth/http";
 import { issueSetupToken, RbacError, StepUpRequired } from "@/server/rbac";
@@ -6,7 +7,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};
 
 // PR-12: no password is ever chosen or seen by the admin. The user sets their own via this one-time link.
 // ponytail: shown to the admin until the e-mail adapter exists (D-COMM-1); then it is mailed instead.
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handle(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!sameOrigin(req)) return forbidden();
   const session = readCookie(req.headers.get("cookie"), SESSION_COOKIE);
@@ -26,3 +27,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 <p><code>${esc(link)}</code></p><p><a href="/admin/users/${esc(id)}">Back to user</a></p></main>`;
   return new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } });
 }
+
+export const POST = safeRoute(handle);

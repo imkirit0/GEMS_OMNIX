@@ -1,8 +1,9 @@
+import { safeRoute } from "@/server/safe-route";
 import { auth, forbidden, form, readCookie, sameOrigin, seeOther, SESSION_COOKIE } from "@/server/auth/http";
 import { safeNext } from "@/server/admin-http";
 
 // Re-authentication for sensitive actions (T-AUTH-015). Rotates the session id (T-AUTH-014).
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const token = readCookie(req.headers.get("cookie"), SESSION_COOKIE);
   const { password = "", next = "/" } = await form(req);
@@ -15,3 +16,5 @@ export async function POST(req: Request) {
     return seeOther(req, `/stepup?error=password&next=${encodeURIComponent(target)}`);
   }
 }
+
+export const POST = safeRoute(handle);

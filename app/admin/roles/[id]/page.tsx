@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import { ADMIN_MESSAGES } from "@/server/admin-http";
-import { adminRead } from "@/server/admin-page";
+import { pageRead } from "@/server/page-read";
 import { listPermissions, listRoles } from "@/server/rbac";
 
 export default async function RoleDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {
   const { id } = await params;
   const { error, saved } = await searchParams;
-  const [roles, permissions] = await adminRead((s) => Promise.all([listRoles(s), listPermissions(s)]));
+  const [roles, permissions] = await pageRead((s) => Promise.all([listRoles(s), listPermissions(s)]));
   const role = roles.find((r) => String(r.id) === id);
   if (!role) notFound();
   return (

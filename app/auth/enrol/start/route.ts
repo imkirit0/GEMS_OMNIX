@@ -1,6 +1,7 @@
+import { safeRoute } from "@/server/safe-route";
 import { auth, CHALLENGE_COOKIE, forbidden, form, readCookie, sameOrigin, seeOther } from "@/server/auth/http";
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const challenge = readCookie(req.headers.get("cookie"), CHALLENGE_COOKIE);
   if (!challenge) return seeOther(req, "/login?error=expired");
@@ -12,3 +13,5 @@ export async function POST(req: Request) {
   }
   return seeOther(req, "/login/enrol"); // the page now shows the secret (read from the encrypted pending record)
 }
+
+export const POST = safeRoute(handle);

@@ -11,6 +11,7 @@ for v in MIGRATE_URL ADMIN_DATABASE_URL APP_DATABASE_URL AUTH_DATABASE_URL AUTH_
   [ -n "${!v:-}" ] || { echo "missing environment variable $v" >&2; exit 1; }
 done
 PY=$(command -v python3 || command -v python)
+rm -rf .next # stale generated route types from an earlier build must not mask or cause typecheck results
 step() { printf '\n== %s\n' "$1"; }
 
 step "T-DOC-001: requirements matrix consistency"
@@ -24,7 +25,8 @@ git diff --exit-code -- docs/requirements/FRD-GEMS-OMNIX.md \
   || { echo "FRD is stale: run python -I docs/requirements/tools/build_frd.py . and commit" >&2; exit 1; }
 
 step "Prisma client"
-npx prisma generate >/dev/null && echo "generated"
+npx prisma generate >/dev/null
+echo "generated"
 
 step "Fresh database"
 docker compose down -v >/dev/null 2>&1 || true
@@ -41,10 +43,26 @@ if grep -rnE "(query|execute)RawUnsafe" src app; then echo "unsafe raw SQL is ba
 echo "none"
 
 step "Typecheck"
-npx tsc --noEmit && echo "0 errors"
+# no "cmd && echo" here: under set -e a failing command on the left of && would NOT stop the script
+npx tsc --noEmit
+echo "0 errors"
 
 step "Tests"
 npx vitest run
 
 step "Production build"
 npx next build
+
+step "No secrets in the client bundle (T-SEC-017)"
+node scripts/scan-client-bundle.mjs
+
+step "Real server: first-admin journey and security checks on a fresh database"
+docker compose down -v >/dev/null 2>&1 || true
+docker compose up -d --wait
+npx prisma migrate deploy >/dev/null
+node node_modules/next/dist/bin/next start -p 3101 > .next/ci-server.log 2>&1 &
+SERVER=$!
+trap 'kill $SERVER 2>/dev/null || true' EXIT
+for _ in $(seq 1 60); do curl -s -o /dev/null http://localhost:3101/login && break; sleep 1; done
+bash scripts/smoke-admin.sh http://localhost:3101
+node scripts/smoke-security.mjs http://localhost:3101

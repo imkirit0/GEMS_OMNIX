@@ -1,9 +1,9 @@
 import { ADMIN_MESSAGES } from "@/server/admin-http";
-import { adminRead } from "@/server/admin-page";
+import { pageRead } from "@/server/page-read";
 import { listRoles } from "@/server/rbac";
 
 export default async function Roles({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const roles = await adminRead(listRoles);
+  const roles = await pageRead(listRoles);
   const { error } = await searchParams;
   return (
     <main>

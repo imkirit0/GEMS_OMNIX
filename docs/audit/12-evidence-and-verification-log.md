@@ -579,3 +579,56 @@ File SHA-256 at run time:
 | scripts/ci.sh | 849f1d3880f0ec00bdaab160a7e609e8663bd948b4f1acb0ff67fd94182da808 |
 | .github/workflows/ci.yml | 27be054457ec4c6dcbb6fa92062de0894a931aec1a04d0a0e1d6d9f18f0228b7 |
 | .gitattributes | b1ac1a6247d134514af85157cbe58715710b3a07abfd02d0566d1eacdd83fd8e |
+
+## E-020 T-SEC suite for existing surfaces; CI real-server stage; CI defect fixed (2026-10-27)
+- **Request:** the user said "push it and continue with the T-SEC suite".
+- **Push:** `b77d262..e753f44`.
+- **GitHub CI runs:** 40501900222 (`b77d262`) and 40503305157 (`e753f44`), both `completed / success` (public API).
+
+**Built**
+- `proxy.ts`: a fresh nonce per request in a strict CSP (`script-src 'self' 'nonce-…' 'strict-dynamic'`, `frame-ancestors 'none'`, `form-action 'self'`, `object-src 'none'`). It follows the CSP guide bundled with Next 16.4.2; `upgrade-insecure-requests` is omitted so plain-http localhost works.
+- `next.config.ts`: HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; `poweredByHeader: false`.
+- `src/server/safe-route.ts`: every route handler (15) wrapped; unexpected errors give a generic 500 plus a reference id; details are logged under that id.
+- `app/error.tsx`: generic message plus digest. `app/not-found.tsx`: a single 404.
+- Migration `0006_centre_view`: catalogue entry `org.centre.view`.
+- `src/server/centres.ts` and the pages `/centres`, `/centres/[id]` (FR-022, FR-022.02, read-only). RLS **and** `has_permission('org.centre.view', id)`; filters can only narrow. The admin page helper was renamed to `src/server/page-read.ts`.
+- `scripts/scan-client-bundle.mjs` (T-SEC-017) and `scripts/smoke-security.mjs` (13 real-server checks).
+- `scripts/ci.sh` new stages: bundle scan; fresh DB → `next start` → `smoke-admin.sh` + `smoke-security.mjs` → server stopped by trap.
+
+**Tests** (`tests/sec.test.ts`): T-SEC-001, 005, 007, 012, 013. The rest are mapped to the feature each needs in STATUS §4a.
+
+**Mutation checks** (all restored):
+1. Permission gate removed from the centre queries: T-SEC-001 failed. This needed a new case (in scope by RLS, but without `org.centre.view`), because no fixture role exercised that gate.
+2. A server DB URL inside a client component: the bundle scan exited 1 (3 hits).
+3. `proxy.ts` removed: 4 smoke checks failed (CSP, nonce freshness, script nonces, frame-ancestors).
+
+**My defects found and fixed**
+1. **CI gate defect:** `npx tsc --noEmit && echo "0 errors"` under `set -e` does not stop on failure. A type error (here, stale `.next/types` from the probe page) let CI continue to green. Fixed: commands run alone; `rm -rf .next` at the start. Proven: an injected type error now gives exit 2 before the tests. The earlier local runs had printed "0 errors", so they were genuine passes. The GitHub runs' typecheck output was not readable without a login.
+2. The 404-parity check compared raw HTML. The two 404s differ only in the per-request nonce and the echoed requested id (route param `"k"`, path segments `"c"`, nonce inside the React payload). Normalising exactly those made the bodies identical: no existence oracle.
+3. A regex mangled by Python string escaping (fixed with an exact edit).
+
+**Final run** `evidence/tsec-2026-10-27T180310.txt` (`bash scripts/ci.sh`, fresh DB, set-up token redacted):
+- exit 0; T-DOC-001 ERRORS (0); no drift; no unsafe SQL; tsc 0 errors;
+- **6 files, 64 tests passed**;
+- build compiled; no secrets in the client bundle;
+- admin journey 10/10; security smoke 13/13.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| proxy.ts | 001730a48016f054e2ebbbc4488c92f3333c66ea072f3ebeade841c7dfb038f1 |
+| next.config.ts | 310059f369c8240f6defe952fa8e2ad29507279d9db7632d680d4d540a092317 |
+| src/server/safe-route.ts | 514dc7ede963daf6db3a3a9c1239fb00a915f9bcc478430384f7d4bd705202f6 |
+| src/server/centres.ts | 9bab1eff122a15fc95d2921df7185505822d9d8516bb8d01b929311d71ea0e76 |
+| src/server/page-read.ts | b28e5565db189ab2aba809bb8cf7ec17f7f3e6ab9aec0b149bb7a60441f5631f |
+| prisma/migrations/0006_centre_view/migration.sql | 5a0f3db8c394917b902decf38c36e4d102072f811e70b9c4ccdec4ae91a4867b |
+| app/error.tsx | be950cd611517e9f066719bc837f6c898af8581dc7b8eefc45e33acfe9e9a717 |
+| app/not-found.tsx | 6f1e26cb005c8cf4a3517e2f93b5c06203c0ef6184594621b0fd55ae48bee55e |
+| app/centres/page.tsx | 0be74c4a30b89703d37c235d0810baf84d9664fc7499eede5949351611acb565 |
+| app/centres/[id]/page.tsx | bf99ee669271d6381c2a0e590d8876b300547f5a2bdd1b218a621e63c687a35d |
+| tests/sec.test.ts | 09d06f25093f60a0a89f76b6497b02b770e81537c0d307c593b00b2e5587b06d |
+| scripts/scan-client-bundle.mjs | 054378a9ec733d94df9c20569e9ba5ef78202025f62072c64d76fe8b66d312b0 |
+| scripts/smoke-security.mjs | 0a5e69013b15fa4511fdf46fa169d28c34fec3ee140919ecc27e902e17026f08 |
+| scripts/ci.sh | a1d8f2fed94920f123eb0acb8b5beed5d0450659f09cc4ea003f2c6c891de4c5 |
+| evidence/tsec-2026-10-27T180310.txt | ab30e3c9e9fa3ed09e118266f1899af65f68ad1c87dddb1d3c37a1288dd1dd54 |

@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import { ADMIN_MESSAGES } from "@/server/admin-http";
-import { adminRead } from "@/server/admin-page";
+import { pageRead } from "@/server/page-read";
 import { getUser, listRoles, scopeOptions } from "@/server/rbac";
 
 export default async function UserDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; created?: string }> }) {
   const { id } = await params;
   const { error, created } = await searchParams;
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
-  const [user, roles, scopes] = await adminRead((s) => Promise.all([getUser(s, id), listRoles(s), scopeOptions(s)]));
+  const [user, roles, scopes] = await pageRead((s) => Promise.all([getUser(s, id), listRoles(s), scopeOptions(s)]));
   if (!user) notFound();
   const self = `/admin/users/${user.id}`;
   return (

@@ -1,6 +1,7 @@
+import { safeRoute } from "@/server/safe-route";
 import { auth, CHALLENGE_COOKIE, clientIp, cookie, forbidden, form, sameOrigin, seeOther } from "@/server/auth/http";
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!sameOrigin(req)) return forbidden();
   const { login = "", password = "" } = await form(req);
   const r = await auth().signIn(login, password, clientIp(req));
@@ -13,3 +14,5 @@ export async function POST(req: Request) {
     default: return seeOther(req, "/login?error=invalid");
   }
 }
+
+export const POST = safeRoute(handle);
