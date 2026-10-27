@@ -97,3 +97,22 @@ The owner chose "update doc first". The author made the edits on the owner's ins
 | N5 | Generic forbidden text; `conflict` message added |
 | N6 | D-TKT-5 dropped; the choice is recorded against NP-1 |
 | N7 | `revalidate` optional; defaults to `validate` |
+
+## Re-audit (the single allowed re-audit, fresh reviewer, 2026-10-27)
+
+**Verdict: changes requested (minor).** No blocker. B1, M1, M2, M4 and N1–N7 were verified as resolved. M3 was only partly resolved: the queue could still show tickets that the act check refuses. The reviewer recommended applying the remaining fixes directly, without a third review. EGM allows only one re-audit per stage, so the author applied them and recorded them here.
+
+**Checked by the author:**
+*   NN2 holds: `AuditOutcome` is `('OK', 'DENIED')` in migration 0001, line 14.
+*   NN3 holds: T-RLS-002 checks the exact list of tables that have `centre_id`, and T-RLS-005 checks the exact list of definer functions, both in `tests/foundation.test.ts`.
+
+| ID | Severity | Finding | Resolution |
+|---|---|---|---|
+| NM1 | Major | The queue checked only `ticket_may_act`, but Act also needs `ticket.approve` and the self-approval rule. So a level role holder without the permission, or the raiser, could see a ticket and then be refused. | `ticket_may_act` now includes the `ticket.approve` check. The queue leaves out tickets the user raised, and the detail page offers only actions the engine allows. The test now compares the queue with the result of `act()` for each fixture user, including those two cases. |
+| NM2 | Major | The fake-storage guard was keyed on `NODE_ENV=production`, which CI's `next build` and `next start` also set. | Both the fake driver and `TICKET_TEST_HANDLER` now refuse to load on any Vercel deployment (`VERCEL_ENV` set). Test added. |
+| NN1 | Nit | A yearly counter reset would repeat numbers, because the format has no period in it. | Stage 2 uses the single key `ALL`. If NP-3 chooses a reset, the period goes into the format in the same change. `numberPeriod` removed. |
+| NN2 | Nit | No audit outcome was named for `apply_failed`. | A new `AuditOutcome` value, FAILED, in 0009. Used by the `onFailure` hook. |
+| NN3 | Nit | `tests/foundation.test.ts` was missing from the plan, and the RLS policy wording contradicted the 0002 loop. | All four policies come from the 0002 loop, and the grants limit what the app can do. New item 20a updates T-RLS-002 and T-RLS-005. |
+| NN4 | Nit | The components diagram was out of date. | It now shows `allocateTicketNumber()` and `ticket_number_series`. |
+| NN5 | Nit | `ticket_may_act` took a user parameter it did not need, and "not the actor" was not inside `ticket_may_receive`. | `ticket_may_act(ticket)` uses `session_user_id()`. `ticket_may_receive` now excludes the caller. |
+| M2 (leftover) | Nit | Alternative G still argued from the old reason. | It now points to DD-4's stated reason. |

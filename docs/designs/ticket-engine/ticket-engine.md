@@ -163,7 +163,8 @@ one is PRO until the design is reviewed and approved.
     (owner decision after the Stage 5 review, M4). With no production handler
     they cannot be used for real. For the manual Supabase check, a dev-only
     setting `TICKET_TEST_HANDLER=1` registers the test handler. The engine
-    refuses to start with that setting when `NODE_ENV=production`.
+    refuses to start with that setting on any Vercel deployment (`VERCEL_ENV`
+    set, production or preview).
 *   **DD-8: One network-wide ticket counter** (owner decision after the Stage 5
     review, B1). This matches the legacy counter (TK-26/CMC/23642, current
     23,652). Whether it resets each year, and the starting value, stay NP
@@ -255,12 +256,13 @@ one is PRO until the design is reviewed and approved.
    ▼
  src/server/tickets/engine.ts   raise · act(approve|reject|forward) · queue · view
    │   uses scopedAction() = authorize → change → audit, one transaction
-   │   uses allocate() for numbers
+   │   uses allocateTicketNumber() for numbers
    │   calls handler.validate / revalidate / apply   ◄── src/server/tickets/handlers.ts
    ▼                                                    (registry: key → handler)
  Postgres (schema app)
    ticket_category · ticket_type · ticket_type_level · ticket_type_viewer   (setup)
    ticket · ticket_level · ticket_event · ticket_upload · ticket_document   (per ticket)
+   ticket_number_series                                                     (network-wide counter)
    RLS by centre · guard trigger · append-only triggers · app.audit()
 ```
 
@@ -370,19 +372,24 @@ trigger).
     OPEN or `version` differs from what the user saw, return **Conflict**
     (T-TKT-006: the second of two racing approvers waits on the lock, then
     sees the new version).
-2.  **Who may act:** `app.ticket_may_act(ticket_id, actor)` must be true (see
-    Eligibility and visibility). The queue uses the same function, so a ticket
-    in your queue is always one you can act on.
+2.  **Who may act:** `app.ticket_may_act(ticket_id)` must be true for the
+    session's user (see Eligibility and visibility). It includes the
+    `ticket.approve` check for the ticket's centre, so it agrees with
+    `scopedAction()`'s own check.
 3.  **Self-approval.** If `TICKET_POLICY.blockSelfApproval` is set, the person
     who raised the ticket cannot approve or forward at any level (T-TKT-010).
+    The queue and the detail page apply the same rule: the queue leaves out
+    tickets the user raised, and the detail page offers only the actions the
+    engine would allow. So a ticket in your queue is always one you can
+    approve.
 4.  **Approve, not the last level:** `current_level + 1`, clear
     `assigned_user_id`, APPROVE event (T-TKT-004).
 5.  **Approve, last level:** `handler.revalidate`, then `handler.apply`, then
     status APPROVED with `closed_at`, APPROVE event. The audit row takes
     `before` and `after` from `apply` (T-TKT-005). If anything throws, the
     whole transaction rolls back. If the error came from `handler.apply`, a
-    `ticket.apply_failed` audit row is written in its own transaction
-    (T-TKT-007). This uses a new optional failure-audit hook on
+    `ticket.apply_failed` audit row with outcome FAILED (a new
+    `AuditOutcome` value) is written in its own transaction (T-TKT-007). This uses a new optional failure-audit hook on
     `scopedAction()`, the same mechanism as its DENIED rows. A `StaleRequest`
     from `revalidate` or a Conflict changed nothing and writes no audit row;
     the user sees the reason.
@@ -390,8 +397,8 @@ trigger).
     REJECT event. Notifying the centre waits for D-COMM-1.
 7.  **Forward:** the target must be active, must not be the actor or the
     person who raised the ticket, and must hold `ticket.approve` over the
-    ticket's centre (T-TKT-009), checked by `app.ticket_may_receive(ticket_id,
-    user_id)`. Set `assigned_user_id` and write a FORWARD event.
+    ticket's centre (T-TKT-009), all checked by
+    `app.ticket_may_receive(ticket_id, user_id)`. Set `assigned_user_id` and write a FORWARD event.
 8.  Every update is
     `update app.ticket set …, version = version + 1 where id = $1 and version = $seen`.
     The guard trigger checks the transition.
@@ -422,9 +429,9 @@ only read and never write, so DD-1 still holds.
 
 | Function | True when | Used by |
 |---|---|---|
-| `app.ticket_may_act(ticket, user)` | The ticket is OPEN and either `assigned_user_id = user`, or no one is assigned and `user` is the current level's named user or holds its role through an assignment covering the ticket's centre (DD-5) | Act step 2, the approval queue, `canAct` on the detail page |
-| `app.ticket_may_receive(ticket, user)` | `user` is active, is not the person who raised the ticket, and holds `ticket.approve` over the ticket's centre | Forward step 7 |
-| `app.ticket_forward_candidates(ticket)` | Returns id and display name of every user for whom `ticket_may_receive` is true, excluding the caller | The forward picker |
+| `app.ticket_may_act(ticket)` | For the session's user (`app.session_user_id()`; no user parameter, so it cannot be asked about others): the ticket is OPEN, the user holds `ticket.approve` over its centre, and either `assigned_user_id` is the user, or no one is assigned and the user is the current level's named user or holds its role through an assignment covering the ticket's centre (DD-5) | Act step 2, the approval queue, `canAct` on the detail page |
+| `app.ticket_may_receive(ticket, user)` | `user` is active, is not the caller, is not the person who raised the ticket, and holds `ticket.approve` over the ticket's centre | Forward step 7 |
+| `app.ticket_forward_candidates(ticket)` | Returns id and display name of every user for whom `ticket_may_receive` is true | The forward picker |
 | `app.ticket_may_view(ticket)` | The caller holds `ticket.view` over the centre, raised the ticket, is or was named on one of its levels (user, or role over the centre), or is a viewer of its type | List, detail, document download |
 
 Every one of these returns false, or nothing, when the ticket's centre is not
@@ -470,9 +477,11 @@ returning current;
 *   **No seeding step (M1).** The first raise in a new period creates the row.
     The row lock taken by the upsert serialises concurrent raises, and a
     rolled-back raise releases its number, exactly as with `allocate()`.
-*   **Period.** `TICKET_POLICY.numberPeriod` is `"none"` (one counter forever,
-    period key `ALL`) or `"fy"` (key from the existing `financialYear()`). The
-    default is `"none"`, PMC under NP-3.
+*   **Period.** Stage 2 uses one period key, `ALL`: the counter never resets.
+    A yearly reset (NP-3) is not offered yet, because the format has no
+    period in it and a reset would repeat numbers. If NP-3 chooses a reset,
+    the period is added to the format in the same change; the `period`
+    column is already there for it.
 *   **Continuing from legacy (NP-8).** If signed, a one-line seed in the
     migration-day script sets `current` to the legacy value. Nothing in
     Stage 2 depends on it.
@@ -488,8 +497,8 @@ returning current;
 `/tickets/new`, `/tickets/[id]` (detail, history, documents, action buttons),
 `/tickets/approvals` (queue), and `/admin/ticket-types` (setup; step-up
 required, as for RBAC writes). In Stage 2 these are the manual test harness
-(DD-7): they can only be used with `TICKET_TEST_HANDLER=1` outside
-production.
+(DD-7): they can only be used with `TICKET_TEST_HANDLER=1`, which is refused
+on Vercel.
 
 ## Alternatives Considered
 
@@ -561,9 +570,10 @@ production.
 
 *   **Pros**: A much smaller Stage 2 with no storage decision.
 *   **Cons**: References only gives a T-TKT-001 that can pass while no file
-    exists. Blocking means no type that needs a document can go live, and most
-    correction types need one.
-*   **Reason for Rejection**: The owner chose Supabase Storage now (DD-4).
+    exists. Blocking would push storage to the first domain handler that
+    needs it.
+*   **Reason for Rejection**: The owner chose Supabase Storage now, on purpose
+    ahead of need, to settle ADR-002 early and prove the upload path (DD-4).
 
 ### Alternative H: Supabase JavaScript SDK instead of `fetch`
 
@@ -667,14 +677,17 @@ routes and screens, then the documentation. Every step leaves
 *   **Proposed Changes**:
     *   Enums `TicketStatus` (OPEN, APPROVED, REJECTED), `TicketAction`
         (RAISE, APPROVE, REJECT, FORWARD) and `TicketPriority` (values to
-        match the legacy list; LOW, MEDIUM, HIGH until legacy is readable).
+        match the legacy list; LOW, MEDIUM, HIGH until legacy is readable),
+        and a new value FAILED on the existing `AuditOutcome` enum.
     *   The ten tables in the Technical Plan, with check constraints: exactly
         one of user or role per level and per viewer, level 1–4,
         `current_level <= level_count`.
     *   RLS on the five per-ticket tables (`ticket`, `ticket_level`,
         `ticket_event`, `ticket_upload`, `ticket_document`), using the loop
-        pattern from 0002 (select and insert by `visible_centre_ids()`, update
-        on `ticket` only).
+        pattern from 0002, which creates all four policies (select, insert,
+        update, delete by `visible_centre_ids()`). What the app may actually
+        do is limited by the grants: insert on all five, update on `ticket`
+        only, delete on none.
     *   RLS on the setup tables: select for all app users, and insert, update
         and delete only when
         `app.has_permission('ticket.type.manage', null)`.
@@ -708,7 +721,8 @@ routes and screens, then the documentation. Every step leaves
     `HANDLERS: Record<string, TicketHandler<unknown>>`, which is empty in
     production. Tests add their handler under the key `test.counter`. When
     `TICKET_TEST_HANDLER=1`, the module also registers `test.counter` from
-    `test-handler.ts`, and throws at load if `NODE_ENV=production` (DD-7).
+    `test-handler.ts`, and throws at load on any Vercel deployment
+    (`VERCEL_ENV` set) (DD-7).
 
 #### 6a. `src/server/tickets/test-handler.ts` (Create)
 
@@ -726,7 +740,7 @@ routes and screens, then the documentation. Every step leaves
         `exports.ts`: `blockSelfApproval: true`,
         `maxFileBytes: 10 * 1024 * 1024`,
         `allowedSignatures: [pdf, jpeg, png]`, `uploadUrlSeconds: 120`,
-        `downloadUrlSeconds: 60`, `numberPad`, `numberPeriod: "none"`.
+        `downloadUrlSeconds: 60`, `numberPad`.
     *   Writes: `requestUpload(session, {centreId, fileName, size,
         contentType})`, `raise(session, {typeId, centreId, payload,
         uploadIds, reraiseOf?})` and `act(session, {ticketId, action,
@@ -769,7 +783,10 @@ routes and screens, then the documentation. Every step leaves
     streamed read that stops after the size limit. It is configured
     with environment variables `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` and
     `TICKET_BUCKET`. The fake driver is selected by `STORAGE_DRIVER=fake`. It
-    refuses to run when `NODE_ENV=production`, so the fake can never be live.
+    refuses to load on any Vercel deployment (`VERCEL_ENV` set), so the fake
+    can never be live. The check is not tied to `NODE_ENV`, because CI's
+    `next build` and real-server smoke run with `NODE_ENV=production` and the
+    fake driver.
 
 #### 10. `src/server/numbering.ts` (Modify)
 
@@ -791,7 +808,7 @@ routes and screens, then the documentation. Every step leaves
 *   **Proposed Changes**: `scopedAction()` gains an optional last argument
     `onFailure?: (e: unknown) => { action: string; extra: AuditExtra } | null`.
     When the business transaction throws and the hook returns a value, that
-    audit row is written in its own transaction, the same way DENIED rows are
+    audit row is written with outcome FAILED in its own transaction, the same way DENIED rows are
     written today. Existing callers do not change.
 
 #### 12. `src/server/admin-http.ts` (Modify)
@@ -851,7 +868,8 @@ routes and screens, then the documentation. Every step leaves
 *   **Type / Scope**: Test-only SQL, applied by the admin connection, as with
     `audit-fault.sql`.
 *   **Proposed Changes**: Table `app.test_ticket_counter(centre_id, key,
-    value)` with RLS by centre, granted to `gems_app`, used by
+    value)` with RLS by centre (all four policies, as in 0002), granted to
+    `gems_app`, used by
     `test-handler.ts`. For the manual harness it is applied by hand to the
     local database.
 
@@ -870,11 +888,12 @@ routes and screens, then the documentation. Every step leaves
         duplicates; a rolled-back raise leaves no gap; the first raise of a
         new period creates its row (M1). Reset and legacy continuation wait
         for NP-3 and NP-8.
-    *   Eligibility: the queue and `ticket_may_act` agree for every fixture
-        user; `ticket_may_receive` and `ticket_forward_candidates` return
+    *   Eligibility: for every fixture user, including a level role holder
+        without `ticket.approve` and the raiser, a ticket is in the queue
+        exactly when `act(approve)` succeeds; `ticket_may_receive` and `ticket_forward_candidates` return
         false or nothing for a ticket at a centre the caller cannot see.
-    *   Loading the handler registry with `TICKET_TEST_HANDLER=1` and
-        `NODE_ENV=production` throws.
+    *   Loading the handler registry with `TICKET_TEST_HANDLER=1`, or the
+        fake storage driver, with `VERCEL_ENV` set throws.
     *   T-TKT-016, 017 and 018 are listed as Stage 5 or as belonging to the
         domain modules, not skipped silently.
 
@@ -884,6 +903,16 @@ routes and screens, then the documentation. Every step leaves
 *   **Proposed Changes**: Helpers to create a ticket type with levels, users
     with scoped approver roles, and sessions for each, reusing the existing
     user and session fixtures.
+
+#### 20a. `tests/foundation.test.ts` (Modify)
+
+*   **Type / Scope**: Foundation RLS tests.
+*   **Proposed Changes**: T-RLS-002's expected table list gains the five
+    per-ticket tables. `test_ticket_counter` also has `centre_id` and may
+    exist when T-RLS-002 runs, so the test SQL gives it all four policies and
+    the test excludes tables created by test SQL by name. T-RLS-005's
+    definer-function inventory gains `ticket_forward_candidates`,
+    `ticket_may_act`, `ticket_may_receive` and `ticket_may_view`.
 
 #### 21. `tests/audit-catalogue.ts` and `tests/audit.test.ts` (Modify)
 
