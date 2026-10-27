@@ -51,7 +51,8 @@ export function authHarness(): Candidate {
       async expireLockouts() {
         const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
         await admin.connect();
-        try { await admin.query(`update app.auth_throttle set locked_until = now() - interval '1 second'`); } finally { await admin.end(); }
+        try { await admin.query(`update app.auth_throttle set locked_until = now() - interval '1 second'`);
+          await admin.query(`update app.app_user set second_factor_locked_until = now() - interval '1 second'`); } finally { await admin.end(); }
       },
       async ageResetTokens(seconds) {
         const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });

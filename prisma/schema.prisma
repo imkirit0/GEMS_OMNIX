@@ -81,6 +81,9 @@ model AppUser {
   requiresTotp  Boolean  @default(false) @map("requires_totp")
   totpSecretEnc String?  @map("totp_secret_enc")
   totpLastStep  BigInt?  @map("totp_last_step") // last accepted 30 s step: replay protection
+  // second-factor brute-force guard (TOTP + recovery codes), across challenges
+  secondFactorFailures    Int       @default(0) @map("second_factor_failures")
+  secondFactorLockedUntil DateTime? @map("second_factor_locked_until") @db.Timestamptz
   assignments   RoleAssignment[]
   sessions      AppSession[]
   challenges    AuthChallenge[]

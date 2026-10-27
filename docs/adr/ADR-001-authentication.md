@@ -151,3 +151,8 @@ Named IT/Sponsor signatures are still blank. Countersign, or record that the pro
 | T-AUTH suite permanent (`tests/auth/`) | **Done**: 17/17 against the production module |
 | Gap 3: `gems_auth` through the pooler | **Done** (local PgBouncer) |
 | Gaps 1, 2, 4; independent security review | Open; tracked in `docs/STATUS.md` §4 |
+| Gap 1: second-factor throttling | **Done** (E-017): per user across challenges, 5 failures then lockout (T-AUTH-006b) |
+| Gap 2: idle timeout in the DB | **Done** (E-017): `app.session_user_id()` checks `last_seen_at` and `app.account_usable()` (T-AUTH-013b) |
+| Gap 4: timing equality | **Done** (E-017): measured, **found a real oracle** (unknown logins skipped the dummy hash; ratio 2.62), fixed (ratio ≈ 1.0) |
+| T-AUTH-012 centre deactivation; T-AUTH-016 foreign Origin | **Done** (E-017) |
+| Independent security review | Open |

@@ -387,3 +387,73 @@ File SHA-256 at run time:
 | tests/sql/audit-fault.sql | 6132ee6d5f0a1b29ee55cd4884dc7ce180f5beda3f6c3037ed37dd965cf51a20 |
 | evidence/auth-port-2026-10-27T162701.txt | c6c497abb50385e6ee1dd4e230595e9e916095f56b22b7d459236c25087bbca4 |
 | docs/STATUS.md | 4b52592e8769550e41329f423d4e491fbfaa590b27c5288fdbb0a0dbd072497c |
+
+## E-017 Auth follow-ups and sign-in screens (2026-10-27)
+- **Request:** the user said "push it and continue with the auth follow-ups".
+- **Push:** `a47eaf8..4558768` to `origin/main`. Verified with `git ls-remote`.
+
+**Migration `0004_auth_hardening`**
+- Second-factor failure columns.
+- `app.idle_minutes()` (30, PMC; a test asserts it equals `POLICY.idleMinutes`).
+- `app.account_usable(user)`: active, and at least one assignment that is wider than a centre or on an ACTIVE centre.
+- `app.session_user_id()` now enforces the idle timeout and `account_usable` in the database.
+- The test-only table `bakeoff_audit_fault` is deliberately not dropped.
+
+**Module**
+- Second-factor guesses are counted per user across challenges (5, then a 15-minute lock; TOTP and recovery codes share the counter).
+- `account_usable` is used on every path.
+- Password minimum (12, PMC) is enforced in `changePassword` and `confirmReset`.
+- New: `enrolmentSecret` and `profile`.
+
+**Defect found by the new timing test (T-AUTH-002b)**
+- `signIn` short-circuited for unknown logins (`!user || …`), so the dummy-hash comparison never ran.
+- Median ratio known/unknown was **2.62** (17.4 vs 6.6 ms), a user-enumeration oracle.
+- Fixed by always running the hash check. Ratio after the fix: 1.07, 1.14, 1.07 (three runs) and 0.99 (final run).
+
+**HTTP layer**
+- `src/server/auth/http.ts`: same-origin check, cookies, IP; `TRUST_PROXY_HEADERS` gates `x-forwarded-for`.
+- Route handlers: `/auth/{login,verify,enrol/start,enrol/confirm,logout,reset/request,reset/confirm}`.
+- Pages: `/login`, `/login/verify`, `/login/enrol`, `/reset`, `/reset/confirm`, and `/`, which requires a session.
+- The challenge sits in a 5-minute `__Host-` cookie. The TOTP secret is read back from the encrypted pending record. Recovery codes are rendered once (`no-store`).
+
+**Mutation checks**
+- `sameOrigin` returning true: T-AUTH-016 failed.
+- The timing test failed before the fix.
+
+**Real-server smoke** (`next start -p 3101`, curl):
+1. `GET /` with no session: 307 to /login.
+2. `/login` renders the form.
+3. Foreign-Origin login: 403.
+4. Same-origin login: 303 to /, `Set-Cookie: __Host-gems_session=…; Path=/; HttpOnly; Secure; SameSite=Lax`.
+5. `GET /`: "Signed in as User A (uA)".
+6. Logout: 303 to /login.
+7. Revoked cookie: 307 to /login.
+
+(The first attempt at step 4 returned `error=invalid` because the preceding test run had reset the user's password. It was re-run with the current password.)
+
+**Final run** (`evidence/auth-followups-2026-10-27T163706.txt`, fresh DB):
+- migrations 0001–0004 applied;
+- drift: empty migration;
+- `tsc`: 0 errors;
+- **Vitest: 3 files, 45 passed, 0 failed**;
+- `next build` compiled.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0004_auth_hardening/migration.sql | 52c4e817c47581c0db788ea493e1cef442d95de2e0a01aa27f473f7fc321a5c3 |
+| src/server/auth/http.ts | b1942c88bee578e09695acb398c4819a5f32622410d4e571d98b2df3e43236dd |
+| src/server/auth/index.ts | e3aa495b622ae72051354d08526414f158f778d4729d513fab0022d2f808b8c2 |
+| src/server/auth/policy.ts | 12aace5dd47e5f1619dd481536fa2722d45d7561cfccc60406ee8455e7617a8a |
+| src/server/auth/session.ts | 4264d6914ced3e7f1009f51a4f6b10e31962efb100fc4d3a18651220ecdf00c8 |
+| app/auth/login/route.ts | 8effc6e7f0abd8611b0921f245995afb118b1ecb23b6bf16edfb34ec94c39891 |
+| app/auth/logout/route.ts | 285f6ed6e63c4b4b04867a6f18f7395831f066d4101ed746f837652ba38ab4a3 |
+| app/auth/verify/route.ts | 39314d9f4660e1f9655e9591fea62e699648d06ef30c4cb2e64a8da6f044b851 |
+| app/auth/enrol/confirm/route.ts | b3809932c4a3a11bbb4b14fc228a98df25f08f5527c5594edbb059d3610be194 |
+| app/auth/enrol/start/route.ts | 2c041ae76ab967c5670d37808fb657b93d0179e4c6833d3b9b10005e75225167 |
+| app/auth/reset/confirm/route.ts | cde729688269169d0eef8ef92a55684b568adb4e454411abf8023dada508f094 |
+| app/auth/reset/request/route.ts | dc28ccf76b4f2e2f2f6b1022256b3a666f1a2b615aa62c8e4122b84523930a01 |
+| tests/auth-http.test.ts | 90528a6d85a7871ef0010d6e545f408143431816f38cc8b9db38c2374529f66e |
+| tests/auth/suite.ts | 11ea7753980b3b9b1c95853c30e015a067e0a8494a37e182c31d55af48f1d8d9 |
+| evidence/auth-followups-2026-10-27T163706.txt | 6e6ff0ced3263fcd2d7e90beb8d97e8424a572037824f45ac0d0eca7b780a702 |

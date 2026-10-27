@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-27, after the ADR-001 port (evidence E-016).
+**Last updated:** 2026-10-27, after the auth follow-ups (evidence E-017).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -12,13 +12,13 @@
 | Measure | Value | Source |
 |---|---|---|
 | Requirements (traceability matrix) | 290 | audit 02, T-DOC-001 |
-| Requirements verified (VER) | **0** | E-016 |
+| Requirements verified (VER) | **0** | E-017 |
 | Open business decisions | **115** (107 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
-| Automated tests | **36 passing** locally (19 foundation + 17 T-AUTH), 0 failing | `evidence/auth-port-2026-10-27T162701.txt` |
+| Automated tests | **45 passing** locally (19 foundation + 21 T-AUTH + 5 auth HTTP), 0 failing | `evidence/auth-followups-2026-10-27T163706.txt` |
 | CI | **none yet** | — |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `a47eaf8` only; later commits are local | `git log` |
+| Git | `main`. Pushed to GitHub (public) up to `4558768`; later commits are local until you approve a push | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -35,7 +35,9 @@
 | 9 | App foundation: Next.js 16 + Prisma 7, org/access/session/audit/numbering schema, RLS migration, scoped DB access, authorize + audit gate | 2026-10-27 | E-014, commit `a34600c` |
 | 10 | GitHub repository created and pushed (public, by user decision) | 2026-10-27 | commit `a47eaf8` |
 | 11 | ADR-001 bake-off: Auth.js eliminated, Better Auth 15/17, first-party 17/17; **B approved** | 2026-10-27 | E-015, commit `cc4766f` |
-| 12 | Auth module ported into the app (`src/server/auth`, migration `0003_auth`, permanent T-AUTH suite); Better Auth/Auth.js code and packages removed; `gems_auth` routed through the pooler | 2026-10-27 | E-016 |
+| 12 | Auth module ported into the app (`src/server/auth`, migration `0003_auth`, permanent T-AUTH suite); Better Auth/Auth.js code and packages removed; `gems_auth` routed through the pooler | 2026-10-27 | E-016, commit `4558768` |
+| 13 | Auth follow-ups: second-factor lockout across challenges (T-AUTH-006b); idle timeout and account rules enforced in the DB (T-AUTH-013b); centre deactivation (T-AUTH-012); **timing oracle found and fixed** (ratio 2.62 → 0.99, T-AUTH-002b); password minimum in the module | 2026-10-27 | E-017 |
+| 14 | Sign-in screens and route handlers: login, two-step verify, TOTP enrolment (recovery codes shown once), logout, password reset; same-origin check on every POST (T-AUTH-016); verified on a real `next start` server | 2026-10-27 | E-017 |
 
 ## 3. Partly done
 
@@ -44,18 +46,17 @@
 | POC P2/P3 on Supabase (C-17) | Each test passed in ≥ 1 full run | No fully green run: 38/39 twice, intermittent connection drops, **cause unknown** (C-26) | E-010, rev. v1.4 |
 | BRD / FRD | Drafts written | Your review; named owners (BRD §5, §18) | E-013 |
 | ADR-001 approval | Project owner approved B | Named IT / Sponsor countersignature (or a note that yours suffices) | ADR §7 |
-| Stage 1 security POC (audit 11) | P0 auth choice, P2 isolation (local), P3 numbering, part of P4 (audit atomicity, step-up) | P1 login **screens/routes** (module exists, no UI), T-SEC-001…019, P4 rest (T-AUD-003…010), P7 export in the app | E-014–E-016 |
+| Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, part of P4 (audit atomicity, step-up) | T-SEC-001…019 (app-level cross-centre suite), P4 rest (T-AUD-003…010), P7 export in the app | E-014–E-017 |
 
 ## 4. To do (in roadmap order)
 
-**Authentication follow-ups** (from ADR-001 §6; before any real user logs in):
-- [ ] Throttle TOTP and recovery-code attempts per challenge/user
-- [ ] Enforce the idle timeout in the DB scope function (today it is in `resolve()` only)
-- [ ] Measure login timing equality (known vs unknown login)
-- [ ] Platform tests T-AUTH-012 (centre deactivation), 016 (foreign Origin), 017 (API tokens)
-- [ ] Login / logout / TOTP / reset screens and route handlers; `__Host-` cookie wiring in Next.js
-- [ ] E-mail adapter for reset links (D-COMM-1); today links go to an in-memory outbox
+**Authentication (remaining before any real user logs in):**
+- [ ] E-mail adapter for reset links. Needs a provider decision (D-COMM-1); today links go to an in-memory outbox, so **reset does not reach users yet**
 - [ ] Independent security review of the auth module (required before production)
+- [ ] Set `TRUST_PROXY_HEADERS=1` on the hosting platform (otherwise every client shares one rate-limit bucket)
+- [ ] User and role administration (WF-X13): today users and passwords can only be created by SQL
+- [ ] T-AUTH-017 API bearer tokens: only when an API consumer needs them (D-API-1)
+- [ ] Visual design of the screens. They are unstyled on purpose; needs a design system decision
 
 **Platform:**
 - [ ] CI pipeline running migrate + tests on every push

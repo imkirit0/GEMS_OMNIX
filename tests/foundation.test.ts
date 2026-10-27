@@ -57,7 +57,7 @@ describe("database isolation (T-RLS)", () => {
              (select rolsuper or rolbypassrls from pg_roles where oid = p.proowner) owner_bypasses
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.prosecdef order by 1`).then((r) => r.rows));
-    expect(fns.map((f) => f.proname)).toEqual(["has_permission", "scoped_centre_ids", "session_user_id", "visible_centre_ids"]);
+    expect(fns.map((f) => f.proname)).toEqual(["account_usable", "has_permission", "scoped_centre_ids", "session_user_id", "visible_centre_ids"]);
     for (const f of fns) expect(f, f.proname).toMatchObject({ fixed: true, owner_bypasses: true });
 
     expect(await visibleCentres(T.uA)).toEqual([C.A]);

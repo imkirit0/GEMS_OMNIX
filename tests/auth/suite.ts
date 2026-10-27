@@ -11,7 +11,6 @@ import { GENERIC_INVALID, POLICY, type SignIn } from "../../src/server/auth/poli
 import type { Candidate } from "./contract";
 
 export const PLATFORM_TESTS = {
-  "T-AUTH-012": "centre deactivation: scope function (platform), identical for every candidate",
   "T-AUTH-016": "foreign Origin on server actions: enforced by Next.js itself",
   "T-AUTH-017": "API bearer tokens: separate machine-auth module, not a mandatory criterion",
 };
@@ -100,6 +99,21 @@ export function defineSuite(make: () => Candidate) {
       expect(await auditActions()).toContain("auth.login.failure");
     });
 
+    t("T-AUTH-002b", "known and unknown logins take about the same time (no timing oracle)", async () => {
+      const time = async (fn: () => Promise<unknown>) => { const t0 = performance.now(); await fn(); return performance.now() - t0; };
+      const known: number[] = [], unknown: number[] = [];
+      for (let i = 0; i < 15; i++) {
+        await asAdmin((db) => db.query("truncate app.auth_throttle")); // stay below lockout so both paths do full work
+        known.push(await time(() => c.signIn(CENTRE_USER.login, "wrong-password", `10.3.${i}.1`)));
+        unknown.push(await time(() => c.signIn(`nobody-${i}`, "wrong-password", `10.3.${i}.2`)));
+      }
+      const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+      const ratio = median(known) / median(unknown);
+      console.log(`T-AUTH-002b median known ${median(known).toFixed(1)} ms, unknown ${median(unknown).toFixed(1)} ms, ratio ${ratio.toFixed(2)}`);
+      expect(ratio).toBeGreaterThan(0.75);
+      expect(ratio).toBeLessThan(1.33);
+    });
+
     t("T-AUTH-003", "lockout after N failures across IPs, same for unknown logins, unlocks after the window", async () => {
       for (let i = 0; i < POLICY.lockoutThreshold; i++) await c.signIn(CENTRE_USER.login, "nope", `10.1.0.${i}`);
       expect((await c.signIn(CENTRE_USER.login, CENTRE_USER.password, "10.1.1.1")).kind).toBe("locked");
@@ -142,6 +156,19 @@ export function defineSuite(make: () => Candidate) {
       expect((await c.verifyTotp(ch2, next)).kind).toBe("session");
       const r3 = await c.signIn(HO_USER.login, HO_USER.password, "10.0.0.1");
       expect((await c.verifyTotp((r3 as { challenge: string }).challenge, next)).kind).not.toBe("session"); // replay of a used code
+    });
+
+    t("T-AUTH-006b", "second-factor guesses lock the second factor across challenges and recovery codes", async () => {
+      const { secret, recoveryCodes } = await enrolHo();
+      const challenge = async () => ((await c.signIn(HO_USER.login, HO_USER.password, "10.0.0.1")) as { challenge: string }).challenge;
+      const kinds: string[] = [];
+      for (let i = 0; i < POLICY.secondFactorMaxFailures; i++) kinds.push((await c.verifyTotp(await challenge(), "000000")).kind);
+      expect(kinds).toEqual([...Array(POLICY.secondFactorMaxFailures - 1).fill("invalid"), "locked"]);
+      expect((await c.verifyTotp(await challenge(), totp(secret, 1))).kind).toBe("locked"); // right code, still locked
+      expect((await c.useRecoveryCode(await challenge(), recoveryCodes[0]!)).kind).toBe("locked");
+      expect(await auditActions()).toContain("auth.2fa.lockout");
+      await c.test.expireLockouts();
+      expect((await c.verifyTotp(await challenge(), totp(secret, 1))).kind).toBe("session");
     });
 
     t("T-AUTH-007", "recovery codes: single use; regenerating invalidates old ones", async () => {
@@ -194,6 +221,27 @@ export function defineSuite(make: () => Candidate) {
       expect(await c.resolve(s)).toBeNull();
       await expect(withScope(s, async () => 1)).rejects.toBeInstanceOf(ScopeError);
       expect((await c.signIn(CENTRE_USER.login, CENTRE_USER.password, "10.0.0.1")).kind).not.toBe("session");
+    });
+
+    t("T-AUTH-012", "centre deactivated: its staff are rejected; HO with wider scope keeps access", async () => {
+      const s = session(await c.signIn(CENTRE_USER.login, CENTRE_USER.password, "10.0.0.1"));
+      const { token: ho } = await enrolHo();
+      await asAdmin((db) => db.query(`update app.centre set status = 'INACTIVE' where id = $1`, [C.A]));
+      expect(await c.resolve(s)).toBeNull();
+      await expect(withScope(s, async () => 1)).rejects.toBeInstanceOf(ScopeError);
+      expect((await c.signIn(CENTRE_USER.login, CENTRE_USER.password, "10.0.0.2")).kind).toBe("invalid");
+      expect(await c.resolve(ho)).toEqual({ userId: HO_USER.id });
+      const seen = await withScope(ho, async (tx) => (await tx.$queryRaw<{ id: number }[]>`select id from app.centre order by id`).map((x) => x.id));
+      expect(seen).toContain(C.A); // history of the inactive centre stays visible to HO
+    });
+
+    t("T-AUTH-013b", "idle timeout is enforced by the database even if the app skips resolve()", async () => {
+      const s = session(await c.signIn(CENTRE_USER.login, CENTRE_USER.password, "10.0.0.1"));
+      await withScope(s, async () => 1); // fresh: allowed
+      await c.test.ageSession(s, { idleSeconds: POLICY.idleMinutes * 60 + 1 });
+      await expect(withScope(s, async () => 1)).rejects.toBeInstanceOf(ScopeError);
+      const dbIdle = await asAdmin((db) => db.query("select app.idle_minutes() m").then((r) => r.rows[0].m));
+      expect(dbIdle).toBe(POLICY.idleMinutes); // one policy value, two enforcement points
     });
 
     t("T-AUTH-013", "idle and absolute timeouts", async () => {
