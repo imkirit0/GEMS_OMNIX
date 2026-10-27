@@ -1,5 +1,6 @@
 import { pageRead } from "@/server/page-read";
 import { listCentres } from "@/server/centres";
+import { exportAllowed } from "@/server/exports";
 
 type Params = { q?: string; region?: string | string[]; area?: string | string[]; centre?: string | string[] };
 const ids = (v?: string | string[]) => (v === undefined ? undefined : [v].flat().map(Number).filter(Number.isSafeInteger));
@@ -7,7 +8,10 @@ const ids = (v?: string | string[]) => (v === undefined ? undefined : [v].flat()
 // Centre master list (FR-022). Only centres in the viewer's scope; URL filters can only narrow the list.
 export default async function Centres({ searchParams }: { searchParams: Promise<Params> }) {
   const p = await searchParams;
-  const centres = await pageRead((s) => listCentres(s, { q: p.q, regionIds: ids(p.region), areaIds: ids(p.area), centreIds: ids(p.centre) }));
+  const [centres, canExport] = await pageRead((s) => Promise.all([
+    listCentres(s, { q: p.q, regionIds: ids(p.region), areaIds: ids(p.area), centreIds: ids(p.centre) }),
+    exportAllowed(s, "centres"),
+  ]));
   return (
     <main>
       <p><a href="/">Home</a></p>
@@ -27,6 +31,15 @@ export default async function Centres({ searchParams }: { searchParams: Promise<
         </tbody>
       </table>
       {centres.length === 0 && <p>No centres to show.</p>}
+      {canExport && (
+        <form method="post" action="/export/centres">
+          {p.q && <input type="hidden" name="q" value={p.q} />}
+          {(ids(p.region) ?? []).map((v) => <input key={`r${v}`} type="hidden" name="region" value={v} />)}
+          {(ids(p.area) ?? []).map((v) => <input key={`a${v}`} type="hidden" name="area" value={v} />)}
+          {(ids(p.centre) ?? []).map((v) => <input key={`c${v}`} type="hidden" name="centre" value={v} />)}
+          <button type="submit">Download CSV</button>
+        </form>
+      )}
     </main>
   );
 }

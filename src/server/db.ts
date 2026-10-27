@@ -29,7 +29,7 @@ const RETRYABLE = "P2034";
 export async function withScope<T>(
   sessionToken: string | undefined,
   fn: (tx: Tx, ctx: Ctx) => Promise<T>,
-  { retries = 3 }: { retries?: number } = {},
+  { retries = 3, timeoutMs }: { retries?: number; timeoutMs?: number } = {},
 ): Promise<T> {
   if (!sessionToken) throw new ScopeError("missing session");
   for (let attempt = 0; ; attempt++) {
@@ -40,7 +40,7 @@ export async function withScope<T>(
         // fail loudly rather than render an empty page (T-RLS-006/007)
         if (!row?.uid) throw new ScopeError("invalid, expired or revoked session");
         return fn(tx, { userId: row.uid });
-      });
+      }, timeoutMs ? { timeout: timeoutMs, maxWait: 10_000 } : undefined); // default 5 s; long exports pass more
     } catch (e) {
       if (attempt < retries && (e as { code?: string }).code === RETRYABLE) continue;
       throw e;

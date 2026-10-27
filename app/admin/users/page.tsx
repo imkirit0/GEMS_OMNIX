@@ -1,9 +1,10 @@
 import { ADMIN_MESSAGES } from "@/server/admin-http";
 import { pageRead } from "@/server/page-read";
 import { listUsers } from "@/server/rbac";
+import { exportAllowed } from "@/server/exports";
 
 export default async function Users({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const users = await pageRead(listUsers);
+  const [users, canExport] = await pageRead((s) => Promise.all([listUsers(s), exportAllowed(s, "users")]));
   const { error } = await searchParams;
   return (
     <main>
@@ -24,6 +25,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
           ))}
         </tbody>
       </table>
+      {canExport && <form method="post" action="/export/users"><button type="submit">Download CSV</button></form>}
       <h2>New user</h2>
       <form method="post" action="/admin/users/create">
         <label>Login <input name="login" required pattern="[A-Za-z0-9._-]+" /></label>

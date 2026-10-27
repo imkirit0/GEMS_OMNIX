@@ -11,7 +11,7 @@ export function listCentres(session: string | undefined, f: CentreFilter = {}): 
   return withScope(session, (tx) => tx.$queryRaw<CentreRow[]>`
     select c.id, c.code, c.name, c.status::text, a.name as area, r.code as region
     from app.centre c join app.area a on a.id = c.area_id join app.region r on r.id = a.region_id
-    where app.has_permission('org.centre.view', c.id)
+    where c.id in (select unnest(app.scoped_centre_ids('org.centre.view'))) -- scope computed once, hash join
       and (${ints(f.regionIds)}::int[] is null or r.id = any (${ints(f.regionIds)}::int[]))
       and (${ints(f.areaIds)}::int[] is null or a.id = any (${ints(f.areaIds)}::int[]))
       and (${ints(f.centreIds)}::int[] is null or c.id = any (${ints(f.centreIds)}::int[]))

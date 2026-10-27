@@ -632,3 +632,66 @@ File SHA-256 at run time:
 | scripts/smoke-security.mjs | 0a5e69013b15fa4511fdf46fa169d28c34fec3ee140919ecc27e902e17026f08 |
 | scripts/ci.sh | a1d8f2fed94920f123eb0acb8b5beed5d0450659f09cc4ea003f2c6c891de4c5 |
 | evidence/tsec-2026-10-27T180310.txt | ab30e3c9e9fa3ed09e118266f1899af65f68ad1c87dddb1d3c37a1288dd1dd54 |
+
+## E-021 Exports (Stage 1 P7) (2026-10-27)
+- **Request:** the user said "push it and continue with exports".
+- **Push:** `e753f44..b1c5962`. GitHub run 40508221829 for `b1c5962`: `completed / success` (first run with the real-server stage).
+
+**Built**
+- Migration `0007_exports`:
+  - permissions `org.centre.export`, `rbac.user.export` (sensitive), `pii.export` (sensitive);
+  - `app.recent_export_count(minutes)`, a definer function counting the caller's own export audit rows (the rate-limit source);
+  - `scoped_centre_ids` granted to `gems_app`;
+  - `rbac_read` policies rewritten to evaluate `has_permission` once (sub-select).
+- `src/server/exports.ts` (dataset registry):
+  - permission per dataset; PII columns only with `pii.export`, otherwise omitted and recorded as `piiOmitted`;
+  - one transaction with a server-side cursor; `ReadableStream` with `highWaterMark: 0` (pull-driven), so the transaction opens on the first read and the producer never runs ahead;
+  - audit row `export.<dataset>` with the requested filters, actual scope, columns, rows and cancelled flag;
+  - 10 exports per 10 min per user (PMC); CSV formula-injection guard;
+  - `withScope` gained a `timeoutMs` option (120 s for exports).
+- `POST /export/[dataset]`: same-origin; 404 for unknown and forbidden alike; 429 with `Retry-After`; `attachment` + `no-store`.
+- Download buttons on `/centres` (carrying the current filters) and `/admin/users`, shown only when allowed.
+- The centre list query switched to the same set-based scope filter.
+
+**Tests** (`tests/exports.test.ts`, 10):
+- T-SEC-006 / T-RLS-011 / T-RPT-010: tampered filters and the audit of the actual scope;
+- permission and DENIED audit;
+- T-RPT-011: PII gate;
+- T-RPT-012: 1,234 rows in batches of 100, no duplicates or losses;
+- T-RPT-013: 200,000 rows in about 1.2 s, **0 batches fetched while the reader was stalled**, peak heap growth about 78 MB (PERF-04 PROPOSED ≤ 512 MB);
+- cancellation audited with the partial row count;
+- an unread export holds no transaction;
+- T-SEC-015 rate limit; formula injection;
+- the HTTP route.
+
+The real-server smoke gained 2 export checks (15 in total).
+
+**Defects found and fixed while building:**
+1. **Quadratic scope filter.** `has_permission()` per row rebuilt the caller's centre set for every row: 200,000 rows took 131 s and hit the timeout. Replaced by a set computed once and hash-joined.
+2. **`42P18` untyped parameters** inside `DECLARE CURSOR` and `jsonb_build_object`; casts added.
+3. **Cancelled export went unaudited:** an enqueue after cancel threw and rolled the transaction back. Sending is now skipped once cancelled.
+4. **An unread export held a transaction open** for up to 120 s. First a lazy start in `pull()`; that was insufficient because streams call `pull()` eagerly up to `highWaterMark`. Fixed with `highWaterMark: 0`. Regression test added; the mutation back to `highWaterMark: 2` failed it.
+5. **My test design:** the bounded-memory test was moved from 200,000 centres to 200,000 users (production has ~327 centres); the 64 MB heap guess was replaced by the spec's PROPOSED 512 MB plus a structural backpressure assertion.
+6. **My tooling:** Python-on-Windows edits broke a JS line (CRLF inside a string literal); a crafted smoke filter (region R2 with centre A) made a correct empty export look like a failure; a `&&`-chained command skipped the timestamp and wrote `evidence/exports-.txt` (deleted, as were the superseded run files).
+
+**Also:** T-RLS-005 pins 20 definer functions now; `recent_export_count` was reviewed (caller's own rows, fixed `search_path`).
+
+**Final run** `evidence/exports-2026-10-27T185028.txt` (`bash scripts/ci.sh`, fresh DB, set-up token redacted):
+- exit 0; ERRORS (0); no drift; no unsafe SQL; tsc 0 errors;
+- **7 files, 74 tests passed**;
+- build compiled; no client secrets;
+- admin journey 10/10; security smoke 15/15.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0007_exports/migration.sql | 7cfbf530b546ed108b9477f349c836eff364de44267aff87e6580bdf16b21827 |
+| src/server/exports.ts | 38dc450544b316c363e1020c532e84d88dfd05446435ff65ca11ec83f1a09979 |
+| src/server/db.ts | e1ad131c7ae7c9802593830078464ba7931dda35118cf2c12e1e7afb2e183ef5 |
+| src/server/centres.ts | 02cb136bf39ab66a0f43ab2956668aee95432542e6c606cdc98f1703f755c562 |
+| app/export/[dataset]/route.ts | a7f3b3a78224fa99cbf852c24284644954d767daca1ceb8c5a381a68fc0014df |
+| tests/exports.test.ts | b483bf3e1e91056fffee4a7f9c824b9900340b8191d56ad27b5a279969bfcaaf |
+| scripts/smoke-security.mjs | 6636d0167decf244c4084e0b207e10a63876f4ca2dbd7c4d16a186db6780f118 |
+| tests/foundation.test.ts | 2f0d67158eefce5c87e3420b475af50b0161240c89505b7e92f586389e38396e |
+| evidence/exports-2026-10-27T185028.txt | e7f7c432695acbb6da509bf8e0ee2c1741973dd67ffb5d57ebe4af70f1763b24 |

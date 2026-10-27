@@ -24,7 +24,7 @@ try {
   ids.A = (await db.query(`insert into app.centre (code, name, area_id, status) values ('SMK-A', 'Smoke Centre A', $1, 'ACTIVE') returning id`, [a1])).rows[0].id;
   ids.B = (await db.query(`insert into app.centre (code, name, area_id, status) values ('SMK-B', 'Smoke Centre B', $1, 'ACTIVE') returning id`, [a2])).rows[0].id;
   const role = (await db.query(`insert into app.role (key, name) values ('smoke_viewer', 'Smoke viewer') returning id`)).rows[0].id;
-  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'org.centre.view')`, [role]);
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'org.centre.view'), ($1, 'org.centre.export')`, [role]);
   const user = async (login, display) => {
     const id = (await db.query(`insert into app.app_user (id, login, display_name) values (gen_random_uuid(), $1, $2) returning id`, [login, display])).rows[0].id;
     await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', $3)`, [id, role, ids.A]);
@@ -81,6 +81,17 @@ try {
   const badBody = await bad.text();
   check("T-SEC-012 generic 500 with reference, no internals", bad.status === 500 && /^Something went wrong\. Reference: [0-9a-f-]{36}$/.test(badBody)
     && bad.headers.get("x-request-id") !== null, `${bad.status} ${badBody.slice(0, 60)}`);
+
+  // T-SEC-006: export with crafted filters over real HTTP
+  const exportReq = (origin) => fetch(`${BASE}/export/centres`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${viewer}`, "content-type": "application/x-www-form-urlencoded", ...(origin ? { origin } : {}) },
+    body: new URLSearchParams([["centre", String(ids.A)], ["centre", String(ids.B)], ["region", String(ids.r1)], ["region", String(ids.r2)]]) });
+  check("T-SEC-006 export from a foreign origin is refused", (await exportReq("https://evil.example")).status === 403);
+  const exp = await exportReq(BASE);
+  const csv = await exp.text();
+  check("T-SEC-006 export holds only in-scope rows, as an uncached attachment", exp.status === 200
+    && /^attachment; filename="centres-/.test(exp.headers.get("content-disposition") ?? "") && exp.headers.get("cache-control") === "no-store"
+    && csv.includes("SMK-A") && !csv.includes("SMK-B"), `${exp.status} ${csv.trimEnd().split(/\r?\n/).length - 1} data rows`);
 
   // unauthenticated access to scoped pages
   const anon = await get(`/centres/${ids.A}`);

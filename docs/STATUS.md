@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-27, after the T-SEC suite (evidence E-020).
+**Last updated:** 2026-10-27, after exports (evidence E-021).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -12,13 +12,13 @@
 | Measure | Value | Source |
 |---|---|---|
 | Requirements (traceability matrix) | 290 | audit 02, T-DOC-001 |
-| Requirements verified (VER) | **0** | E-020 |
+| Requirements verified (VER) | **0** | E-021 |
 | Open business decisions | **115** (107 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
-| Automated tests | **64 passing** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC), plus real-server checks in CI: admin journey (10 steps) and security smoke (13 checks) | `evidence/tsec-2026-10-27T180310.txt` |
-| CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`) and 40503305157 (`e753f44`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
+| Automated tests | **74 passing** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports), plus real-server checks in CI: admin journey (10 steps) and security smoke (15 checks) | `evidence/exports-2026-10-27T185028.txt` |
+| CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `e753f44`; later commits are local until you approve a push | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) up to `b1c5962`; later commits are local until you approve a push | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -39,6 +39,7 @@
 | 13 | Auth follow-ups: second-factor lockout across challenges (T-AUTH-006b); idle timeout and account rules enforced in the DB (T-AUTH-013b); centre deactivation (T-AUTH-012); **timing oracle found and fixed** (ratio 2.62 → 0.99, T-AUTH-002b); password minimum in the module | 2026-10-27 | E-017 |
 | 14 | Sign-in screens and route handlers: login, two-step verify, TOTP enrolment (recovery codes shown once), logout, password reset; same-origin check on every POST (T-AUTH-016); verified on a real `next start` server | 2026-10-27 | E-017, commit `6e1d30b` |
 | 15 | User and role administration (WF-X13; FR-009/093/228): create/disable users, assign/remove scoped roles, roles and permissions, one-time set-up links; **no over-grant**, step-up, audit, sessions revoked, TOTP requirement automatic; enforced in the app **and** the DB; screens `/admin/*` and `/stepup`; first-admin bootstrap script | 2026-10-27 | E-018, commit `9e93ce2` |
+| 18 | Exports (Stage 1 P7): one generic, permissioned, PII-gated, streamed (cursor + backpressure, transaction opens only on first read), audited, rate-limited CSV export with formula-injection guard; datasets centres and users; download buttons; real-server check | 2026-10-27 | E-021 |
 | 17 | T-SEC suite for existing surfaces: centre list/view (first centre-scoped pages, FR-022/022.02) with 404 parity; crafted filters; masters immutable for the app role; generic errors with reference ids on every route and page; no impersonation; per-request CSP nonce + security headers; client-bundle secret scan; real-server smoke in CI | 2026-10-27 | E-020 |
 | 16 | Continuous integration: `scripts/ci.sh` (docs consistency, generated-file sync, fresh DB + migrations, schema-drift gate, no unsafe SQL, typecheck, all tests, build) run by GitHub Actions on every push/PR; LF line endings fixed via `.gitattributes` | 2026-10-27 | E-019, commit `b77d262`, run 40501900222 |
 
@@ -49,7 +50,7 @@
 | POC P2/P3 on Supabase (C-17) | Each test passed in ≥ 1 full run | No fully green run: 38/39 twice, intermittent connection drops, **cause unknown** (C-26) | E-010, rev. v1.4 |
 | BRD / FRD | Drafts written | Your review; named owners (BRD §5, §18) | E-013 |
 | ADR-001 approval | Project owner approved B | Named IT / Sponsor countersignature (or a note that yours suffices) | ADR §7 |
-| Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, part of P4 (audit atomicity, step-up), T-SEC for every surface that exists (see the T-SEC table below) | P4 rest (T-AUD-003…010), P7 export in the app, the T-SEC items waiting on features | E-014–E-020 |
+| Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, part of P4 (audit atomicity, step-up), **P7 exports**, T-SEC for every surface that exists (see the T-SEC table below) | P4 rest (T-AUD-003…010); the T-SEC items waiting on features; P2 on Supabase (C-26) | E-014–E-021 |
 
 ## 4. To do (in roadmap order)
 
@@ -59,6 +60,11 @@
 - [ ] Set `TRUST_PROXY_HEADERS=1` on the hosting platform (otherwise every client shares one rate-limit bucket)
 - [ ] T-AUTH-017 API bearer tokens: only when an API consumer needs them (D-API-1)
 - [ ] Visual design of the screens. They are unstyled on purpose; needs a design system decision
+
+**Exports (remaining):**
+- [ ] Async export of very large files to private storage with a 5-minute signed link, re-authorised on download (06 §3). Needs a storage decision (e.g. Vercel Blob)
+- [ ] PII per centre for centre-scoped PII datasets (today `pii.export` must be held for all centres)
+- [ ] Search rate limit (T-SEC-015, search part)
 
 **Administration (remaining):**
 - [ ] Delegated administration (regional admins managing only their region): today RBAC actions need network-wide rights, the safe default
@@ -83,7 +89,7 @@
 | 003 receipt with tampered centreId | waits on fees/receipts | Stage 4 |
 | 004 `/api/v1?centreId=B` | waits on the API | Stage 7 |
 | 005 crafted list/search filters | **done** (centre list) | tests/sec.test.ts, smoke-security |
-| 006 export with tampered filters | waits on exports in the app | Stage 1 P7 |
+| 006 export with tampered filters | **done** | tests/exports.test.ts, smoke-security |
 | 007 mutate HO-global master without permission | **done** (DB: app role cannot write masters; RBAC) | tests/sec.test.ts, tests/rbac.test.ts |
 | 008 approve a ticket raised by B | waits on tickets | Stage 2/5 |
 | 009 download a B document | waits on documents/uploads | Stage 3 |
@@ -92,7 +98,7 @@
 | 012 forced error → generic message + reference | **done** (all routes and pages) | tests/sec.test.ts, smoke-security |
 | 013 HO "act as centre" impossible | **done** | tests/sec.test.ts |
 | 014 XSS inert; CSP blocks inline script | **done** (escaping + nonce CSP); template rendering still to come (certificates/ID cards) | smoke-security |
-| 015 rate limit on exports and search | waits on exports/search | Stage 1 P7 |
+| 015 rate limit on exports and search | **exports done**; search rate limit still to do (search is cheap and scoped today) | tests/exports.test.ts |
 | 016 uploads: magic bytes, size, zip bomb | waits on uploads | Stage 3 |
 | 017 client bundle secret scan | **done** (CI gate) | scripts/scan-client-bundle.mjs |
 | 018 cron endpoint without secret → 401 | waits on jobs | Stage 6/7 |

@@ -65,7 +65,7 @@ describe("database isolation (T-RLS)", () => {
     // every privileged function is listed on purpose: a new one must be reviewed and added here
     expect(fns.map((f) => f.proname)).toEqual(["account_usable", "assert_can_grant_role", "can_grant_permission", "has_permission",
       "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
-      "rbac_set_user_status", "rbac_unassign", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
+      "rbac_set_user_status", "rbac_unassign", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
       "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids", "visible_centre_ids"]);
     for (const f of fns) expect(f, f.proname).toMatchObject({ fixed: true, owner_bypasses: true });
 
