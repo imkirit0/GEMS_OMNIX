@@ -531,3 +531,51 @@ File SHA-256 at run time:
 | tests/rbac.test.ts | a5da586656a1efc58eacd3630f2f8d7b64f7f50616f991cda8aaae1ca523a799 |
 | tests/admin-http.test.ts | 0e522d0dd5e568fd874792bafc7ba95cbec758b0d7130f7d987069b90fb5a633 |
 | evidence/rbac-2026-10-27T173016.txt | 6661f148595ab6d6ba8d9a25ae65e53a1313f7c933c0ff5987459dd5ed976e6e |
+
+## E-019 Continuous integration (2026-10-27)
+- **Request:** the user said "push it and continue with CI".
+- **Push:** `6e1d30b..9e93ce2` to `origin/main`.
+
+**`scripts/ci.sh`** is the single definition of green. In order:
+1. T-DOC-001 (0 errors).
+2. Matrix CSV in sync with its generator (`git diff --exit-code`).
+3. FRD in sync with its generator.
+4. `prisma generate`.
+5. Fresh Docker DB (`down -v`, then `up --wait`) and `migrate deploy`.
+6. Drift gate (`prisma migrate diff … --exit-code`).
+7. No `(query|execute)RawUnsafe` in src/ or app/.
+8. `tsc --noEmit`.
+9. `vitest run`.
+10. `next build`.
+
+**Workflow `.github/workflows/ci.yml`**
+- Triggers: push to `main`, and pull requests.
+- `permissions: contents: read`; `persist-credentials: false`.
+- `actions/checkout` pinned to `3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1), and `actions/setup-node` to `949feb2413d6458794dcd2491c4babbbce0c15c1` (v7.1.0). Tags were resolved through the annotated-tag objects.
+- Node 24.19.0 with npm cache; `npm ci`, honouring the `allowScripts` already in package.json.
+- Per-run random `AUTH_ENC_KEY`. The DB URLs are the throwaway Docker credentials from `docker-compose.yml`.
+- Concurrency cancel.
+
+**`.gitattributes`:** `* text=auto eol=lf`, binaries marked. `git add --renormalize .` changed no files.
+
+**Local run** of `bash scripts/ci.sh`: exit 0; ERRORS (0); no drift; no unsafe SQL; tsc 0 errors; 5 files, 59 tests passed; build compiled.
+
+**Gate checks (each must fail):**
+- G1, a Prisma field added without a migration: exit 1, "schema drift" with the ALTER shown.
+- G2, a hand edit to the generated FRD:
+  - first attempt **not caught**, because the script regenerated over an *uncommitted* edit and so compared equal to HEAD;
+  - re-tested with the edit staged (as a commit would carry it): exit 1, "FRD is stale".
+- G3, a `$queryRawUnsafe` call in `src/`: exit 1, "unsafe raw SQL is banned".
+
+**GitHub run 40501900222** (commit `b77d262`):
+- `completed` / `success`; job `build` 12:12:08Z → 12:13:10Z.
+- All steps success: checkout, setup-node, key, `npm ci`, `bash scripts/ci.sh`.
+- Read from the public API without authentication. Step logs need a GitHub login, so the CI-side test count was not read; the script exits non-zero on any failing test.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| scripts/ci.sh | 849f1d3880f0ec00bdaab160a7e609e8663bd948b4f1acb0ff67fd94182da808 |
+| .github/workflows/ci.yml | 27be054457ec4c6dcbb6fa92062de0894a931aec1a04d0a0e1d6d9f18f0228b7 |
+| .gitattributes | b1ac1a6247d134514af85157cbe58715710b3a07abfd02d0566d1eacdd83fd8e |

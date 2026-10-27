@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-27, after user and role administration (evidence E-018).
+**Last updated:** 2026-10-27, after CI (evidence E-019).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -12,13 +12,13 @@
 | Measure | Value | Source |
 |---|---|---|
 | Requirements (traceability matrix) | 290 | audit 02, T-DOC-001 |
-| Requirements verified (VER) | **0** | E-018 |
+| Requirements verified (VER) | **0** | E-019 |
 | Open business decisions | **115** (107 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
 | Automated tests | **59 passing** locally (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap), 0 failing | `evidence/rbac-2026-10-27T173016.txt` |
-| CI | **none yet** | — |
+| CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. First run 40501900222 succeeded | E-019 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `6e1d30b`; later commits are local until you approve a push | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) up to `b77d262`; later commits are local until you approve a push | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -38,7 +38,8 @@
 | 12 | Auth module ported into the app (`src/server/auth`, migration `0003_auth`, permanent T-AUTH suite); Better Auth/Auth.js code and packages removed; `gems_auth` routed through the pooler | 2026-10-27 | E-016, commit `4558768` |
 | 13 | Auth follow-ups: second-factor lockout across challenges (T-AUTH-006b); idle timeout and account rules enforced in the DB (T-AUTH-013b); centre deactivation (T-AUTH-012); **timing oracle found and fixed** (ratio 2.62 → 0.99, T-AUTH-002b); password minimum in the module | 2026-10-27 | E-017 |
 | 14 | Sign-in screens and route handlers: login, two-step verify, TOTP enrolment (recovery codes shown once), logout, password reset; same-origin check on every POST (T-AUTH-016); verified on a real `next start` server | 2026-10-27 | E-017, commit `6e1d30b` |
-| 15 | User and role administration (WF-X13; FR-009/093/228): create/disable users, assign/remove scoped roles, roles and permissions, one-time set-up links; **no over-grant**, step-up, audit, sessions revoked, TOTP requirement automatic; enforced in the app **and** the DB; screens `/admin/*` and `/stepup`; first-admin bootstrap script | 2026-10-27 | E-018 |
+| 15 | User and role administration (WF-X13; FR-009/093/228): create/disable users, assign/remove scoped roles, roles and permissions, one-time set-up links; **no over-grant**, step-up, audit, sessions revoked, TOTP requirement automatic; enforced in the app **and** the DB; screens `/admin/*` and `/stepup`; first-admin bootstrap script | 2026-10-27 | E-018, commit `9e93ce2` |
+| 16 | Continuous integration: `scripts/ci.sh` (docs consistency, generated-file sync, fresh DB + migrations, schema-drift gate, no unsafe SQL, typecheck, all tests, build) run by GitHub Actions on every push/PR; LF line endings fixed via `.gitattributes` | 2026-10-27 | E-019, commit `b77d262`, run 40501900222 |
 
 ## 3. Partly done
 
@@ -64,9 +65,7 @@
 - [ ] Permission keys for the business modules are added as each module is built
 
 **Platform:**
-- [ ] CI pipeline running migrate + tests on every push
 - [ ] Root-cause the Supabase connection drops (C-26), from inside the region
-- [ ] `.gitattributes` for stable line endings (evidence hashes)
 
 **Stage 0 (discovery):** ⛔ blocked on legacy MySQL read-only access.
 
