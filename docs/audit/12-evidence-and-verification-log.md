@@ -695,3 +695,5 @@ The real-server smoke gained 2 export checks (15 in total).
 | scripts/smoke-security.mjs | 6636d0167decf244c4084e0b207e10a63876f4ca2dbd7c4d16a186db6780f118 |
 | tests/foundation.test.ts | 2f0d67158eefce5c87e3420b475af50b0161240c89505b7e92f586389e38396e |
 | evidence/exports-2026-10-27T185028.txt | e7f7c432695acbb6da509bf8e0ee2c1741973dd67ffb5d57ebe4af70f1763b24 |
+
+**E-021 correction (same day):** `evidence/exports-2026-10-27T184726.txt` was *not* deleted, contrary to the line above (its `rm` was skipped by a failed `&&`). It is kept as the record of a failed run: 74/74 tests passed, but the security smoke failed with a SyntaxError in `scripts/smoke-security.mjs` (the CRLF defect, item 6). Deleted: `exports-.txt` and `exports-2026-10-27T184937.txt` (the wrong smoke filter).
