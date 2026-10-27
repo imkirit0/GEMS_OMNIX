@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-27, after the audit-trail tests (evidence E-022).
+**Last updated:** 2026-10-27, after starting the ticket-engine design draft (last evidence: E-022).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -49,7 +49,7 @@
 | Item | Done | Missing | Evidence |
 |---|---|---|---|
 | POC P2/P3 on Supabase (C-17) | Each test passed in ≥ 1 full run | No fully green run: 38/39 twice, intermittent connection drops, **cause unknown** (C-26) | E-010, rev. v1.4 |
-| Ticket/approval engine design (Stage 2 core) | Design workflow chosen: EGM plugin (`egm@egm`, google/elephant-goldfish-model 0.1.0). Input brief `docs/designs/ticket-engine/input-brief.md`; `CLAUDE.md` points EGM artifacts to `docs/designs` | You: restart Claude Code, run `/egm:egm-draft` with the brief, then `/egm:egm-review`; human review before implementation | commit `9632364` |
+| Ticket/approval engine design (Stage 2 core) | Design workflow chosen: EGM plugin (`egm@egm`, google/elephant-goldfish-model 0.1.0). Input brief `docs/designs/ticket-engine/input-brief.md`; `CLAUDE.md` points EGM artifacts to `docs/designs`. **Design drafted 2026-10-27** (EGM draft skill followed manually: its skills are not registered as commands): `docs/designs/ticket-engine/ticket-engine.md`, status Proposed, every section approved by the project owner in session. Owner decisions DD-1…6: rules in app code + DB guard; test-only handler in Stage 2; forward = reassign at same level; documents in Supabase Storage (needs ADR-002); role-level approver = role held over the ticket's centre; direct browser-to-Supabase upload (Vercel 4.5 MB body cap). Open: Q2 numbering series scope, Q4 self-approval sign-off, Q7 migration, Q8 legacy config, Q9 storage limits | EGM review (`egm-review` skill on the design); then EGM review; human review before implementation | commit `9632364` |
 | BRD / FRD | Drafts written | Your review; named owners (BRD §5, §18) | E-013 |
 | ADR-001 approval | Project owner approved B | Named IT / Sponsor countersignature (or a note that yours suffices) | ADR §7 |
 | Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, **P4 audit** (T-AUD 001–005, 009), **P7 exports**, T-SEC for every surface that exists (see the tables below) | T-AUD 006/007 (need imports and jobs), 008 (needs D-FIN-8), 010 (needs an audit viewer and a PMC decision); T-SEC items waiting on features; P2 on Supabase (C-26) | E-014–E-022 |
