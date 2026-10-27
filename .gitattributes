@@ -1,0 +1,7 @@
+# Store and check out text as LF everywhere: evidence hashes and shell scripts stay byte-stable.
+* text=auto eol=lf
+*.pdf binary
+*.png binary
+*.xlsx binary
+*.docx binary
+*.crt text eol=lf
