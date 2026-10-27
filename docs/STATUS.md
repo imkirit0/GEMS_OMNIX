@@ -18,7 +18,7 @@
 | Automated tests | **80 passing** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD), plus real-server checks in CI: admin journey (10 steps) and security smoke (16 checks) | `evidence/audit-2026-10-27T190404.txt` |
 | CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `857b51a`; later commits are local until you approve a push | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) up to `857b51a`; `949e91e` (audit) and later commits are local until you approve a push | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -49,6 +49,7 @@
 | Item | Done | Missing | Evidence |
 |---|---|---|---|
 | POC P2/P3 on Supabase (C-17) | Each test passed in ≥ 1 full run | No fully green run: 38/39 twice, intermittent connection drops, **cause unknown** (C-26) | E-010, rev. v1.4 |
+| Ticket/approval engine design (Stage 2 core) | Design workflow chosen: EGM plugin (`egm@egm`, google/elephant-goldfish-model 0.1.0). Input brief `docs/designs/ticket-engine/input-brief.md`; `CLAUDE.md` points EGM artifacts to `docs/designs` | You: restart Claude Code, run `/egm:egm-draft` with the brief, then `/egm:egm-review`; human review before implementation | commit `9632364` |
 | BRD / FRD | Drafts written | Your review; named owners (BRD §5, §18) | E-013 |
 | ADR-001 approval | Project owner approved B | Named IT / Sponsor countersignature (or a note that yours suffices) | ADR §7 |
 | Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, **P4 audit** (T-AUD 001–005, 009), **P7 exports**, T-SEC for every surface that exists (see the tables below) | T-AUD 006/007 (need imports and jobs), 008 (needs D-FIN-8), 010 (needs an audit viewer and a PMC decision); T-SEC items waiting on features; P2 on Supabase (C-26) | E-014–E-022 |
