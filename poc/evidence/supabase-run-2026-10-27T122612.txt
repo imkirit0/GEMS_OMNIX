@@ -1,0 +1,70 @@
+▶ NP-3 mode GAPLESS
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (36666.9483ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (10482.5066ms)
+  ✔ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (3756.4139ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (4555.4669ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (3790.5842ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (12785.5034ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (3617.0282ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (3436.5342ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (1693.6295ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (2718.6251ms)
+✔ NP-3 mode GAPLESS (83505.3022ms)
+▶ NP-3 mode UNIQUE
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (34652.2343ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (9903.5616ms)
+  ✔ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (3790.0364ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (4907.3174ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (3996.4009ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (12256.1601ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (3958.7947ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (3771.5531ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (2006.9065ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (2568.9213ms)
+✔ NP-3 mode UNIQUE (81812.9079ms)
+{"centrePage":{"p95NoRlsMs":49.296,"p95RlsMs":51.204,"overheadPct":3.9},"allCentresPage":{"p95NoRlsMs":48.765,"p95RlsMs":52.237,"overheadPct":7.1}}
+✔ T-RLS-017 RLS overhead on paged lists is measured (73395.5565ms)
+✔ T-RLS-001 app roles have no superuser/bypass/owner/DDL/SET ROLE (4639.1994ms)
+✔ T-RLS-002 every table with centre_id has ENABLE+FORCE RLS and SELECT/INSERT/UPDATE/DELETE policies (435.3091ms)
+✔ T-RLS-003 every view is security_invoker and filters by scope (1161.4729ms)
+✔ T-RLS-004 materialized view not readable by app roles; aggregate table is RLS-scoped (1521.7386ms)
+✔ T-RLS-005 SECURITY DEFINER inventory, fixed search_path, scope function truth table (2634.147ms)
+✔ T-RLS-006 missing scope: 0 rows, writes fail, app guard raises (731.1271ms)
+✔ T-RLS-007 forged/expired/revoked sessions and other GUCs grant nothing (2211.6794ms)
+✔ T-RLS-008 cross-centre writes under an A session are rejected or affect 0 rows (3235.3959ms)
+✖ T-RLS-009 PgBouncer transaction pooling: 2,000 interleaved txs, aborted txs, 0 leaks (22047.8704ms)
+✔ T-RLS-010 query outside the transaction throws before reaching the DB (494.8649ms)
+✔ T-RLS-011 streamed export with tampered filters returns only in-scope rows and audits actual scope (972.1408ms)
+✔ T-RLS-012 job as gems_job limited to declared centre list; undeclared scope fails loudly (556.3858ms)
+✔ T-RLS-013 raw SQL via the app client and via a direct gems_app connection is under RLS (873.671ms)
+✔ T-RLS-014 region scope follows centre moves on the next transaction (1425.3383ms)
+✔ T-RLS-015 no unexpected BYPASSRLS role; platform API roles cannot reach the app schema (790.4493ms)
+✔ T-RLS-016 gems_report_ro is under the same policies and cannot write (no replica in POC) (795.8103ms)
+✔ T-RLS-018 denied action consumes no number and writes only a denial audit row (1991.6238ms)
+✔ audit_log is append-only for app roles and the owner (1249.985ms)
+ℹ tests 39
+ℹ suites 2
+ℹ pass 38
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 302620.23
+
+✖ failing tests:
+
+test at test\rls.test.js:155:1
+✖ T-RLS-009 PgBouncer transaction pooling: 2,000 interleaved txs, aborted txs, 0 leaks (22047.8704ms)
+  Error: read ECONNRESET
+      at D:\GEMS OMNIX\poc\node_modules\pg-pool\index.js:45:11
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async one (file:///D:/GEMS%20OMNIX/poc/test/rls.test.js:161:15)
+      at async file:///D:/GEMS%20OMNIX/poc/test/rls.test.js:182:83
+      at async Promise.all (index 5)
+      at async TestContext.<anonymous> (file:///D:/GEMS%20OMNIX/poc/test/rls.test.js:182:3)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    errno: -4077,
+    code: 'ECONNRESET',
+    syscall: 'read'
+  }

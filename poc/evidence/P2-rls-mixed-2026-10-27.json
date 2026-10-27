@@ -1,0 +1,29 @@
+{
+  "T-RLS-017": {
+    "rows": 300000,
+    "runs": 300,
+    "proposedThresholdPct": 10,
+    "env": "local Docker, direct connections",
+    "results": {
+      "centrePage": {
+        "p95NoRlsMs": 49.296,
+        "p95RlsMs": 51.204,
+        "overheadPct": 3.9
+      },
+      "allCentresPage": {
+        "p95NoRlsMs": 48.765,
+        "p95RlsMs": 52.237,
+        "overheadPct": 7.1
+      }
+    }
+  },
+  "updatedAt": "2026-10-27T07:00:58.893Z",
+  "T-RLS-009": {
+    "total": 2000,
+    "ok": 1714,
+    "aborted": 286,
+    "leaks": 0,
+    "dirtyStarts": 0,
+    "distinctServerBackends": 2
+  }
+}

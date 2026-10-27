@@ -1,0 +1,22 @@
+# Local development database only. Passwords here are throwaway local values, not secrets.
+name: gems-omnix-dev
+services:
+  db:
+    image: postgres@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b # 17.11-alpine (Supabase runs 17.6)
+    environment:
+      POSTGRES_PASSWORD: dev_postgres_pw
+      POSTGRES_DB: gems
+    ports: ["127.0.0.1:54320:5432"]
+    volumes: ["./docker/initdb:/docker-entrypoint-initdb.d:ro"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "gems"]
+      interval: 2s
+      retries: 30
+  pooler:
+    image: edoburu/pgbouncer@sha256:8638aa563607256d3c7440437534195f1066a92b68015d89ae9d6b935b444a6d # 1.26.1
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["127.0.0.1:64320:6432"]
+    volumes:
+      - ./docker/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./docker/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro

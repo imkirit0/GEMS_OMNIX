@@ -1,0 +1,48 @@
+## migrate
+Applying migration `0001_foundation`
+Applying migration `0002_security`
+The following migration(s) have been applied:
+All migrations have been successfully applied.
+## typecheck
+tsc: 0 errors
+## tests
+ RUN  v4.1.12 D:/GEMS OMNIX
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-001 runtime roles: not superuser, no BYPASSRLS, own nothing, no DDL 70ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-002 every table with centre_id (and centre itself) has ENABLE+FORCE RLS and per-command policies 45ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-005 definer functions: inventory, fixed search_path, owner bypasses RLS; scope truth table 113ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-006/007 missing, forged, expired, revoked or disabled-user sessions fail loudly 54ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-008 cross-centre writes under a centre-A session affect nothing 56ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-009 pooled transactions never inherit another session's scope 315ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-010 the transaction handle is dead after withScope returns 37ms
+ ✓ tests/foundation.test.ts > authorization and audit > permission must be held over a scope that covers the centre 68ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-RLS-018 denied action: no number consumed, one DENIED audit row, no OK row 61ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: change and audit commit together; a failure leaves neither 64ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: audit log is append-only for the app and for the owner 68ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 249ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 102ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-006 series are independent per centre and document type 93ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 247ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 97ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-006 series are independent per centre and document type 95ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-007 FY boundary in Asia/Kolkata 0ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-009 format and length are NP-5 parameters; over-length is rejected 0ms
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  15:49:35
+   Duration  2.03s (transform 52ms, setup 0ms, import 104ms, tests 1.83s, environment 0ms)
+## build
+  We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+  The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+  	- allowJs was set to true
+  	- include was updated to add '.next/dev/types/**/*.ts'
+  The following mandatory changes were made to your tsconfig.json:
+  	- esModuleInterop was set to true (requirement for SWC / babel)
+  Finished TypeScript in 1355ms ...
+  Collecting page data using 4 workers ...
+  Generating static pages using 4 workers (0/3) ...
+✓ Generating static pages using 4 workers (3/3) in 358ms
+  Finalizing page optimization ...
+Route (app)
+┌ ○ /
+└ ○ /_not-found
+○  (Static)  prerendered as static content

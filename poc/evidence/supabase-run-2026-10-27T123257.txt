@@ -1,0 +1,64 @@
+▶ NP-3 mode GAPLESS
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (33548.5034ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (9342.9604ms)
+  ✖ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (5713.1973ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (4568.7327ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (3853.1392ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (11766.7003ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (3853.3061ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (3483.8205ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (2277.2025ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (2721.1579ms)
+✖ NP-3 mode GAPLESS (81130.5867ms)
+▶ NP-3 mode UNIQUE
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (33983.0835ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (10001.514ms)
+  ✔ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (3726.8539ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (4387.0255ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (3592.6502ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (11945.0977ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (3787.23ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (3730.396ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (1763.6597ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (2591.0608ms)
+✔ NP-3 mode UNIQUE (79509.5606ms)
+{"centrePage":{"p95NoRlsMs":50.958,"p95RlsMs":49.169,"addedMs":-1.789,"overheadPct":-3.5},"allCentresPage":{"p95NoRlsMs":51.389,"p95RlsMs":50.405,"addedMs":-0.984,"overheadPct":-1.9}}
+✔ T-RLS-017 RLS overhead on paged lists is measured (77595.4732ms)
+✔ T-RLS-001 app roles have no superuser/bypass/owner/DDL/SET ROLE (3425.8752ms)
+✔ T-RLS-002 every table with centre_id has ENABLE+FORCE RLS and SELECT/INSERT/UPDATE/DELETE policies (406.9266ms)
+✔ T-RLS-003 every view is security_invoker and filters by scope (1420.1004ms)
+✔ T-RLS-004 materialized view not readable by app roles; aggregate table is RLS-scoped (1487.6541ms)
+✔ T-RLS-005 SECURITY DEFINER inventory, fixed search_path, scope function truth table (2576.4127ms)
+✔ T-RLS-006 missing scope: 0 rows, writes fail, app guard raises (671.0092ms)
+✔ T-RLS-007 forged/expired/revoked sessions and other GUCs grant nothing (2576.5051ms)
+✔ T-RLS-008 cross-centre writes under an A session are rejected or affect 0 rows (3731.1222ms)
+✔ T-RLS-009 PgBouncer transaction pooling: 2,000 interleaved txs, aborted txs, 0 leaks (32117.8658ms)
+✔ T-RLS-010 query outside the transaction throws before reaching the DB (498.8745ms)
+✔ T-RLS-011 streamed export with tampered filters returns only in-scope rows and audits actual scope (950.3556ms)
+✔ T-RLS-012 job as gems_job limited to declared centre list; undeclared scope fails loudly (647.6966ms)
+✔ T-RLS-013 raw SQL via the app client and via a direct gems_app connection is under RLS (820.3103ms)
+✔ T-RLS-014 region scope follows centre moves on the next transaction (1684.4392ms)
+✔ T-RLS-015 no unexpected BYPASSRLS role; platform API roles cannot reach the app schema (903.7437ms)
+✔ T-RLS-016 gems_report_ro is under the same policies and cannot write (no replica in POC) (1025.1423ms)
+✔ T-RLS-018 denied action consumes no number and writes only a denial audit row (1905.2913ms)
+✔ audit_log is append-only for app roles and the owner (1241.073ms)
+ℹ tests 39
+ℹ suites 2
+ℹ pass 38
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 312368.6591
+
+✖ failing tests:
+
+test at test\num.test.js:52:5
+✖ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (5713.1973ms)
+  Error: Connection terminated unexpectedly
+      at Connection.<anonymous> (D:\GEMS OMNIX\poc\node_modules\pg\lib\client.js:136:73)
+      at Object.onceWrapper (node:events:630:28)
+      at Connection.emit (node:events:509:28)
+      at Socket.<anonymous> (D:\GEMS OMNIX\poc\node_modules\pg\lib\connection.js:62:12)
+      at Socket.emit (node:events:521:24)
+      at TCP.<anonymous> (node:net:355:12)

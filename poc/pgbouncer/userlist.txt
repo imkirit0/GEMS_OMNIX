@@ -1,0 +1,3 @@
+"gems_app" "app_pw"
+"gems_job" "job_pw"
+"gems_report_ro" "ro_pw"

@@ -1,0 +1,52 @@
+▶ NP-3 mode GAPLESS
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (604.0168ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (189.4158ms)
+  ✔ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (282.8987ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (96.6573ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (80.3553ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (298.9131ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (80.9538ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (75.0024ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (49.1766ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (66.7549ms)
+✔ NP-3 mode GAPLESS (1826.2003ms)
+▶ NP-3 mode UNIQUE
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (554.0278ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (182.142ms)
+  ✔ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (276.3004ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (93.0952ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (78.0338ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (287.7835ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (81.5665ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (71.1898ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (51.3026ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (65.4214ms)
+✔ NP-3 mode UNIQUE (1742.1698ms)
+{"centrePage":{"p95NoRlsMs":0.635,"p95RlsMs":0.814,"overheadPct":28.2},"allCentresPage":{"p95NoRlsMs":0.528,"p95RlsMs":0.772,"overheadPct":46.2}}
+✔ T-RLS-017 RLS overhead on paged lists is measured (4223.673ms)
+✔ T-RLS-001 app roles have no superuser/bypass/owner/DDL/SET ROLE (84.7246ms)
+✔ T-RLS-002 every table with centre_id has ENABLE+FORCE RLS and SELECT/INSERT/UPDATE/DELETE policies (11.7909ms)
+✔ T-RLS-003 every view is security_invoker and filters by scope (14.7913ms)
+✔ T-RLS-004 materialized view not readable by app roles; aggregate table is RLS-scoped (23.7517ms)
+✔ T-RLS-005 SECURITY DEFINER inventory, fixed search_path, scope function truth table (31.7838ms)
+✔ T-RLS-006 missing scope: 0 rows, writes fail, app guard raises (8.6381ms)
+✔ T-RLS-007 forged/expired/revoked sessions and other GUCs grant nothing (21.965ms)
+✔ T-RLS-008 cross-centre writes under an A session are rejected or affect 0 rows (42.9551ms)
+✔ T-RLS-009 PgBouncer transaction pooling: 2,000 interleaved txs, aborted txs, 0 leaks (1828.8928ms)
+✔ T-RLS-010 query outside the transaction throws before reaching the DB (2.4075ms)
+✔ T-RLS-011 streamed export with tampered filters returns only in-scope rows and audits actual scope (16.1956ms)
+✔ T-RLS-012 job as gems_job limited to declared centre list; undeclared scope fails loudly (14.4031ms)
+✔ T-RLS-013 raw SQL via the app client and via a direct gems_app connection is under RLS (13.0702ms)
+✔ T-RLS-014 region scope follows centre moves on the next transaction (22.2168ms)
+✔ T-RLS-015 no BYPASSRLS role besides the bootstrap superuser in the production-like env (7.3899ms)
+✔ T-RLS-016 gems_report_ro is under the same policies and cannot write (no replica in POC) (18.4869ms)
+✔ T-RLS-018 denied action consumes no number and writes only a denial audit row (33.6745ms)
+✔ audit_log is append-only for app roles and the owner (17.0459ms)
+ℹ tests 39
+ℹ suites 2
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10231.1891

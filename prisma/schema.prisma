@@ -1,0 +1,208 @@
+// GEMS OMNIX. Foundation schema: organisation, access, sessions, audit, numbering.
+// Everything lives in schema "app" (Supabase's public schema is exposed to its Data API, C-15).
+// Row-level security, roles and grants are hand-written SQL in the migrations (see 0002_security).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["app"]
+}
+
+// ---------- Organisation (FR-033.04/.05, FR-022/023; hierarchy semantics open: D-ORG-5) ----------
+
+model Region {
+  id      Int     @id @default(autoincrement())
+  code    String  @unique
+  name    String
+  areas   Area[]
+  scopes  RoleAssignment[]
+
+  @@map("region")
+  @@schema("app")
+}
+
+model Area {
+  id       Int      @id @default(autoincrement())
+  regionId Int      @map("region_id")
+  name     String
+  region   Region   @relation(fields: [regionId], references: [id])
+  centres  Centre[]
+  scopes   RoleAssignment[]
+
+  @@unique([regionId, name])
+  @@map("area")
+  @@schema("app")
+}
+
+enum CentreStatus {
+  INACTIVE
+  ACTIVE
+
+  @@schema("app")
+}
+
+model Centre {
+  id           Int          @id @default(autoincrement())
+  code         String       @unique
+  name         String
+  areaId       Int          @map("area_id")
+  centreClass  String?      @map("centre_class") // FR-033.06; class semantics D-ORG-2, D-CAT-1
+  // D-ORG-1 default (UNAPPROVED): centres are created inactive and activated through a checklist
+  status       CentreStatus @default(INACTIVE)
+  area         Area         @relation(fields: [areaId], references: [id])
+  scopes       RoleAssignment[]
+  numberSeries NumberSeries[]
+
+  @@map("centre")
+  @@schema("app")
+}
+
+// ---------- Access: named users, roles, permission keys, scoped assignments (06 §3) ----------
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+
+  @@schema("app")
+}
+
+model AppUser {
+  id          String           @id @default(uuid()) @db.Uuid
+  login       String           @unique
+  displayName String           @map("display_name")
+  status      UserStatus       @default(ACTIVE)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  assignments RoleAssignment[]
+  sessions    AppSession[]
+
+  @@map("app_user")
+  @@schema("app")
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  key         String           @unique
+  name        String
+  permissions RolePermission[]
+  assignments RoleAssignment[]
+
+  @@map("role")
+  @@schema("app")
+}
+
+// Permission keys follow domain.resource.action
+model Permission {
+  key         String           @id
+  description String
+  roles       RolePermission[]
+
+  @@map("permission")
+  @@schema("app")
+}
+
+model RolePermission {
+  roleId        Int        @map("role_id")
+  permissionKey String     @map("permission_key")
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionKey], references: [key])
+
+  @@id([roleId, permissionKey])
+  @@map("role_permission")
+  @@schema("app")
+}
+
+enum ScopeKind {
+  ALL
+  REGION
+  AREA
+  CENTRE
+
+  @@schema("app")
+}
+
+// One row = one role held over one scope. Shape is enforced by a CHECK constraint in 0002_security.
+model RoleAssignment {
+  id            Int       @id @default(autoincrement())
+  userId        String    @map("user_id") @db.Uuid
+  roleId        Int       @map("role_id")
+  scopeKind     ScopeKind @map("scope_kind")
+  regionId      Int?      @map("region_id")
+  areaId        Int?      @map("area_id")
+  scopeCentreId Int?      @map("scope_centre_id")
+  user          AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role          Role      @relation(fields: [roleId], references: [id])
+  region        Region?   @relation(fields: [regionId], references: [id])
+  area          Area?     @relation(fields: [areaId], references: [id])
+  centre        Centre?   @relation(fields: [scopeCentreId], references: [id])
+
+  @@index([userId])
+  @@map("role_assignment")
+  @@schema("app")
+}
+
+// Opaque session token; only its SHA-256 is stored. The scope of every DB transaction derives from it.
+// ADR-001 (authentication) decides how sessions are created; this table is what RLS trusts.
+model AppSession {
+  tokenHash Bytes     @id @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  stepUpAt  DateTime? @map("step_up_at") @db.Timestamptz
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("app_session")
+  @@schema("app")
+}
+
+// ---------- Audit (append-only; T-AUD-*) ----------
+
+enum AuditOutcome {
+  OK
+  DENIED
+
+  @@schema("app")
+}
+
+model AuditLog {
+  id             BigInt       @id @default(autoincrement())
+  at             DateTime     @default(now()) @db.Timestamptz
+  userId         String?      @map("user_id") @db.Uuid
+  action         String
+  outcome        AuditOutcome
+  targetCentreId Int?         @map("target_centre_id")
+  targetType     String?      @map("target_type")
+  targetId       String?      @map("target_id")
+  detail         Json         @default("{}")
+
+  @@index([at])
+  @@map("audit_log")
+  @@schema("app")
+}
+
+// ---------- Numbering mechanism (C-02.2). Policy NP-1..NP-8 is UNAPPROVED. ----------
+
+enum GapRule {
+  GAPLESS
+  UNIQUE
+
+  @@schema("app")
+}
+
+model NumberSeries {
+  centreId Int     @map("centre_id")
+  docType  String  @map("doc_type")
+  period   String
+  gapRule  GapRule @map("gap_rule")
+  current  BigInt  @default(0)
+  centre   Centre  @relation(fields: [centreId], references: [id])
+
+  @@id([centreId, docType, period])
+  @@map("number_series")
+  @@schema("app")
+}

@@ -1,0 +1,31 @@
+{
+  "T-RLS-009": {
+    "total": 2000,
+    "ok": 1714,
+    "aborted": 286,
+    "leaks": 0,
+    "dirtyStarts": 0,
+    "distinctServerBackends": 16
+  },
+  "updatedAt": "2026-10-27T07:08:09.438Z",
+  "T-RLS-017": {
+    "rows": 300000,
+    "runs": 300,
+    "proposedThresholdPct": 10,
+    "env": "Supabase ap-southeast-1 via session pooler, client in India (RTT included)",
+    "results": {
+      "centrePage": {
+        "p95NoRlsMs": 50.958,
+        "p95RlsMs": 49.169,
+        "addedMs": -1.789,
+        "overheadPct": -3.5
+      },
+      "allCentresPage": {
+        "p95NoRlsMs": 51.389,
+        "p95RlsMs": 50.405,
+        "addedMs": -0.984,
+        "overheadPct": -1.9
+      }
+    }
+  }
+}

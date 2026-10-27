@@ -1,0 +1,116 @@
+{
+  "docs/audit/tools/build_matrix.py": {
+    "mtime": 1793005297.2813032,
+    "seen": 1793005922.048608,
+    "ast_hash": "60910f234663969b81371ff002e15663",
+    "semantic_hash": "60910f234663969b81371ff002e15663"
+  },
+  "docs/audit/tools/split_baselines.py": {
+    "mtime": 1793004817.2901528,
+    "seen": 1793005922.0486114,
+    "ast_hash": "38b16d1a55404959adc9730b5e9bd7c3",
+    "semantic_hash": "38b16d1a55404959adc9730b5e9bd7c3"
+  },
+  "docs/audit/00-README.md": {
+    "mtime": 1793005661.472505,
+    "seen": 1793005922.0486126,
+    "ast_hash": "2027b4cd91f12ccb916b1f0f26d590fb",
+    "semantic_hash": "2027b4cd91f12ccb916b1f0f26d590fb"
+  },
+  "docs/audit/01-executive-architecture-review.md": {
+    "mtime": 1793005683.9721124,
+    "seen": 1793005922.0486135,
+    "ast_hash": "68e6fbbbc0f38a9e44cdcb53d3fc2cce",
+    "semantic_hash": "68e6fbbbc0f38a9e44cdcb53d3fc2cce"
+  },
+  "docs/audit/03-requirements-discrepancy-report.md": {
+    "mtime": 1793005414.7657323,
+    "seen": 1793005922.0486145,
+    "ast_hash": "9dda0e793253aeeeeb0397b002dc0f35",
+    "semantic_hash": "9dda0e793253aeeeeb0397b002dc0f35"
+  },
+  "docs/audit/04-manager-decision-register.md": {
+    "mtime": 1793005479.227172,
+    "seen": 1793005922.0486155,
+    "ast_hash": "481c604c4a0b28e9dafeefe31c1e0f05",
+    "semantic_hash": "481c604c4a0b28e9dafeefe31c1e0f05"
+  },
+  "docs/audit/05-workflow-to-test-mapping.md": {
+    "mtime": 1793005540.6082237,
+    "seen": 1793005922.0486162,
+    "ast_hash": "d73000cab40803461d6fe39f79e3f6f6",
+    "semantic_hash": "d73000cab40803461d6fe39f79e3f6f6"
+  },
+  "docs/audit/06-security-threat-model.md": {
+    "mtime": 1793005540.8870716,
+    "seen": 1793005922.048617,
+    "ast_hash": "e90ef498c0bb0c855580b1d54219575c",
+    "semantic_hash": "e90ef498c0bb0c855580b1d54219575c"
+  },
+  "docs/audit/07-financial-invariants-and-transactions.md": {
+    "mtime": 1793005625.123695,
+    "seen": 1793005922.0486178,
+    "ast_hash": "59aa32321bb30f7700ff2bc6c2353c13",
+    "semantic_hash": "59aa32321bb30f7700ff2bc6c2353c13"
+  },
+  "docs/audit/08-data-migration-and-reconciliation-plan.md": {
+    "mtime": 1793005625.3842666,
+    "seen": 1793005922.0486188,
+    "ast_hash": "97699043181411c92aec3f4201af3a47",
+    "semantic_hash": "97699043181411c92aec3f4201af3a47"
+  },
+  "docs/audit/09-test-strategy-and-acceptance-criteria.md": {
+    "mtime": 1793005378.5935345,
+    "seen": 1793005922.0486195,
+    "ast_hash": "1a76165163e256004b35fcdcc510d918",
+    "semantic_hash": "1a76165163e256004b35fcdcc510d918"
+  },
+  "docs/audit/10-implementation-roadmap.md": {
+    "mtime": 1793005625.6375923,
+    "seen": 1793005922.0486202,
+    "ast_hash": "36fcfbfb431af7659626d2e3a0c83d42",
+    "semantic_hash": "36fcfbfb431af7659626d2e3a0c83d42"
+  },
+  "docs/audit/11-proof-of-concept-specification.md": {
+    "mtime": 1793005625.9136477,
+    "seen": 1793005922.0486214,
+    "ast_hash": "05ab6a02a6fe029269fd18090a2f52e4",
+    "semantic_hash": "05ab6a02a6fe029269fd18090a2f52e4"
+  },
+  "docs/audit/12-evidence-and-verification-log.md": {
+    "mtime": 1793005684.2125514,
+    "seen": 1793005922.0486221,
+    "ast_hash": "3b0ac46218cf4691f9c8cebfc9013a81",
+    "semantic_hash": "3b0ac46218cf4691f9c8cebfc9013a81"
+  },
+  "docs/audit/baseline/v0-plan.md": {
+    "mtime": 1793004822.437509,
+    "seen": 1793005922.048623,
+    "ast_hash": "5e29910c286cd94ef25ac2ed61281638",
+    "semantic_hash": "5e29910c286cd94ef25ac2ed61281638"
+  },
+  "docs/audit/baseline/v1-audit.md": {
+    "mtime": 1793004822.4164815,
+    "seen": 1793005922.048624,
+    "ast_hash": "4b4e891f35ed955cfcac511c8a95583b",
+    "semantic_hash": "4b4e891f35ed955cfcac511c8a95583b"
+  },
+  "docs/audit/revisions/v1.1-corrections.md": {
+    "mtime": 1793004822.407444,
+    "seen": 1793005922.048625,
+    "ast_hash": "7a924a319813211925f681bf97ca81e4",
+    "semantic_hash": "7a924a319813211925f681bf97ca81e4"
+  },
+  "GEMS ERP Rebuild Specification.pdf": {
+    "mtime": 1792041223.4400268,
+    "seen": 1793005922.0486257,
+    "ast_hash": "0e7916468eb8626adf192319d2f68b29",
+    "semantic_hash": "0e7916468eb8626adf192319d2f68b29"
+  },
+  "GEMS Workflows for Manager Review.pdf": {
+    "mtime": 1792042736.3236132,
+    "seen": 1793005922.0486264,
+    "ast_hash": "f9349edf1d771516706c0f22a7760e58",
+    "semantic_hash": "f9349edf1d771516706c0f22a7760e58"
+  }
+}

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+	<testsuite name="NP-3 mode GAPLESS" time="83.505302" disabled="0" errors="0" tests="10" failures="0" skipped="0" timestamp="2026-10-27T06:56:12.217Z" hostname="Blahhh">
+		<testcase name="T-NUM-001 200 concurrent allocations via PgBouncer" time="36.666948" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-002 every 5th business tx rolled back after allocation" time="10.482507" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-003 lock timeout then retry: failed attempt leaves no trace" time="3.756414" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-004 idempotent retry returns the original number (sequential and concurrent)" time="4.555467" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-005 connection killed between allocation and commit" time="3.790584" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-006 series isolation across centres and doc types in parallel" time="12.785503" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start" time="3.617028" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-008 cancelled number stays assigned and is never reissued" time="3.436534" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-009 format and length are parameters of NP-5 (unapproved)" time="1.693629" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-010 migrated counter continues from legacy current + 1" time="2.718625" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+	</testsuite>
+	<testsuite name="NP-3 mode UNIQUE" time="81.812908" disabled="0" errors="0" tests="10" failures="0" skipped="0" timestamp="2026-10-27T06:57:35.726Z" hostname="Blahhh">
+		<testcase name="T-NUM-001 200 concurrent allocations via PgBouncer" time="34.652234" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-002 every 5th business tx rolled back after allocation" time="9.903562" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-003 lock timeout then retry: failed attempt leaves no trace" time="3.790036" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-004 idempotent retry returns the original number (sequential and concurrent)" time="4.907317" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-005 connection killed between allocation and commit" time="3.996401" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-006 series isolation across centres and doc types in parallel" time="12.256160" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start" time="3.958795" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-008 cancelled number stays assigned and is never reissued" time="3.771553" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-009 format and length are parameters of NP-5 (unapproved)" time="2.006906" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+		<testcase name="T-NUM-010 migrated counter continues from legacy current + 1" time="2.568921" classname="test" file="D:\GEMS OMNIX\poc\test\num.test.js"/>
+	</testsuite>
+	<testcase name="T-RLS-017 RLS overhead on paged lists is measured" time="73.395557" classname="test" file="D:\GEMS OMNIX\poc\test\perf.test.js"/>
+	<testcase name="T-RLS-001 app roles have no superuser/bypass/owner/DDL/SET ROLE" time="4.639199" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-002 every table with centre_id has ENABLE+FORCE RLS and SELECT/INSERT/UPDATE/DELETE policies" time="0.435309" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-003 every view is security_invoker and filters by scope" time="1.161473" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-004 materialized view not readable by app roles; aggregate table is RLS-scoped" time="1.521739" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-005 SECURITY DEFINER inventory, fixed search_path, scope function truth table" time="2.634147" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-006 missing scope: 0 rows, writes fail, app guard raises" time="0.731127" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-007 forged/expired/revoked sessions and other GUCs grant nothing" time="2.211679" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-008 cross-centre writes under an A session are rejected or affect 0 rows" time="3.235396" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-009 PgBouncer transaction pooling: 2,000 interleaved txs, aborted txs, 0 leaks" time="22.047870" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js" failure="read ECONNRESET">
+		<failure type="testCodeFailure" message="read ECONNRESET">
+[Error [ERR_TEST_FAILURE]: read ECONNRESET] {
+  code: 'ERR_TEST_FAILURE',
+  failureType: 'testCodeFailure',
+  cause: Error: read ECONNRESET
+      at D:\GEMS OMNIX\poc\node_modules\pg-pool\index.js:45:11
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async one (file:///D:/GEMS%20OMNIX/poc/test/rls.test.js:161:15)
+      at async file:///D:/GEMS%20OMNIX/poc/test/rls.test.js:182:83
+      at async Promise.all (index 5)
+      at async TestContext.&lt;anonymous> (file:///D:/GEMS%20OMNIX/poc/test/rls.test.js:182:3)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    errno: -4077,
+    code: 'ECONNRESET',
+    syscall: 'read'
+  }
+}
+		</failure>
+	</testcase>
+	<testcase name="T-RLS-010 query outside the transaction throws before reaching the DB" time="0.494865" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-011 streamed export with tampered filters returns only in-scope rows and audits actual scope" time="0.972141" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-012 job as gems_job limited to declared centre list; undeclared scope fails loudly" time="0.556386" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-013 raw SQL via the app client and via a direct gems_app connection is under RLS" time="0.873671" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-014 region scope follows centre moves on the next transaction" time="1.425338" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-015 no unexpected BYPASSRLS role; platform API roles cannot reach the app schema" time="0.790449" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-016 gems_report_ro is under the same policies and cannot write (no replica in POC)" time="0.795810" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="T-RLS-018 denied action consumes no number and writes only a denial audit row" time="1.991624" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<testcase name="audit_log is append-only for app roles and the owner" time="1.249985" classname="test" file="D:\GEMS OMNIX\poc\test\rls.test.js"/>
+	<!-- tests 39 -->
+	<!-- suites 2 -->
+	<!-- pass 38 -->
+	<!-- fail 1 -->
+	<!-- cancelled 0 -->
+	<!-- skipped 0 -->
+	<!-- todo 0 -->
+	<!-- duration_ms 302620.23 -->
+</testsuites>
