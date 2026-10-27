@@ -93,6 +93,11 @@ try {
     && /^attachment; filename="centres-/.test(exp.headers.get("content-disposition") ?? "") && exp.headers.get("cache-control") === "no-store"
     && csv.includes("SMK-A") && !csv.includes("SMK-B"), `${exp.status} ${csv.trimEnd().split(/\r?\n/).length - 1} data rows`);
 
+  // T-AUD-001 over HTTP: the request id the user sees is the one on the audit row (support can trace a report)
+  const rid = exp.headers.get("x-request-id");
+  const auditRow = (await db.query(`select request_id from app.audit_log where action = 'export.centres' and outcome = 'OK' order by id desc limit 1`)).rows[0];
+  check("T-AUD-001 response X-Request-Id equals the audit row's request_id", !!rid && /^[0-9a-f-]{36}$/.test(rid) && auditRow?.request_id === rid, `${rid} vs ${auditRow?.request_id}`);
+
   // unauthenticated access to scoped pages
   const anon = await get(`/centres/${ids.A}`);
   check("no session: scoped page redirects to /login", [303, 307, 308].includes(anon.status) && (anon.headers.get("location") ?? "").includes("/login"), String(anon.status));

@@ -250,6 +250,16 @@ model AuditLog {
   targetType     String?      @map("target_type")
   targetId       String?      @map("target_id")
   detail         Json         @default("{}")
+  // T-AUD-001 field set, filled by app.audit() from the session, never by the caller
+  actorKind      String       @default("user") @map("actor_kind") // user | system:<job> | migration:<run>
+  actorRoles     String[]     @map("actor_roles")
+  actorScope     Int[]        @map("actor_scope")
+  sessionHash    Bytes?       @map("session_hash")
+  requestId      String?      @map("request_id")
+  clientIp       String?      @map("client_ip")
+  reason         String?
+  before         Json?
+  after          Json?
 
   @@index([at])
   @@map("audit_log")

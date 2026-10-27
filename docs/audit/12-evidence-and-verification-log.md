@@ -697,3 +697,75 @@ The real-server smoke gained 2 export checks (15 in total).
 | evidence/exports-2026-10-27T185028.txt | e7f7c432695acbb6da509bf8e0ee2c1741973dd67ffb5d57ebe4af70f1763b24 |
 
 **E-021 correction (same day):** `evidence/exports-2026-10-27T184726.txt` was *not* deleted, contrary to the line above (its `rm` was skipped by a failed `&&`). It is kept as the record of a failed run: 74/74 tests passed, but the security smoke failed with a SyntaxError in `scripts/smoke-security.mjs` (the CRLF defect, item 6). Deleted: `exports-.txt` and `exports-2026-10-27T184937.txt` (the wrong smoke filter).
+
+## E-022 Audit trail: T-AUD-001…005 and 009 (2026-10-27)
+- **Request:** the user said "push it and continue with the audit tests".
+- **Push:** `b1c5962..857b51a`. GitHub run 40511940652 for `857b51a`: `completed / success`.
+
+**Migration `0008_audit_fields`**
+- New `audit_log` columns: `actor_kind`, `actor_roles`, `actor_scope`, `session_hash`, `request_id`, `client_ip`, `reason`, `before`, `after`.
+- `app.redact(jsonb)`: masks values under Aadhaar, PAN, bank/account, IFSC, password, secret, token, TOTP/OTP, salt, API-key and recovery-code keys, recursively.
+- `app.audit(…)`, a security-definer function that is **the only way app code writes audit rows**. Actor, session hash, roles, scope, request id and client ip come from the session and transaction settings, never from the caller. Direct `INSERT` is revoked from `gems_app` and `gems_job`, so the actor can no longer be forged by app code. `gems_auth` keeps its own inserts, because it runs before any session exists.
+
+**App**
+- `proxy.ts` gives every request an `x-request-id` (request and response headers).
+- `src/server/request-context.ts` carries the request id and ip in `AsyncLocalStorage`, filled by `safeRoute` and `pageRead`.
+- `withScope` sets `app.request_id` and `app.client_ip` transaction-locally.
+- `scopedAction` audit extras: `before`, `after` and `reason` go to their own columns.
+- RBAC: user status change records before/after status and a reason (now a required field on the form); role permission change records the before/after permission sets.
+- `safeRoute` logs pass through `redactText` (Aadhaar, PAN, long numbers, credentials in DB URLs).
+- Audit action names are now literals everywhere, so the gate can read them.
+
+**Tests** (`tests/audit.test.ts`, 6):
+- T-AUD-001: field set and one row per action; streamed export read outside the request context.
+- T-AUD-004: `gems_app`, `gems_job` and `gems_auth` cannot UPDATE/DELETE/TRUNCATE; app/job cannot insert directly; the owner is stopped by the trigger.
+- T-AUD-005: redaction in DB rows and logs.
+- T-AUD-009: every catalogued action is written by its real event, plus the coverage gate (`tests/audit-catalogue.ts`, 28 actions: code ⇔ catalogue ⇔ tests).
+
+T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/007/008/010 are pending (STATUS §4b).
+
+**Gaps found by the new gate**
+- First run: 12 catalogued actions had no test asserting them (`auth.login.locked`, `auth.password.rehash`, `auth.totp.failure`, `auth.recovery.failure`, `auth.recovery.regenerate`, `auth.reset.complete`, `auth.stepup`, `auth.stepup.failure`, `auth.sessions.revoked`, `rbac.user.enable`, `rbac.assignment.delete`, `rbac.role.create`).
+- All are now exercised by triggering the real event.
+
+**Defect found by the real-server smoke (fixed)**
+- A streamed export's audit row had `request_id = null` over HTTP.
+- Cause: Next reads the response body after the handler returns, outside its `AsyncLocalStorage` context.
+- Fix: `exportCsv` captures the context at creation and restores it when the transaction starts.
+- The failing run (`evidence/audit-2026-10-27T190239.txt`) showed `X-Request-Id 64686377-e037-46aa-8c92-c8c2093411c2 vs null`. That file was deleted before the rerun; this entry is its record.
+- A regression test (export created in context, read outside it) was added; it fails when the capture is removed.
+
+**Mutation checks** (all restored):
+1. `app.redact` as identity: T-AUD-005 failed.
+2. An audit action renamed in code without a catalogue entry: T-AUD-009 failed.
+3. Request id not passed to the transaction: T-AUD-001 failed.
+4. Context capture removed from exports: the stream regression test failed.
+
+**My defects:**
+- Test-design faults: changing a role the acting admin holds signed the admin out mid-test (correct product behaviour), so the test was reordered.
+- The gate first picked up permission keys and a bootstrap SQL literal; it was narrowed.
+- Inline Python edits failed twice on escaping and were replaced by exact edits.
+
+**Final run** `evidence/audit-2026-10-27T190404.txt` (`bash scripts/ci.sh`, fresh DB, set-up token redacted):
+- exit 0; ERRORS (0); no drift; no unsafe SQL; tsc 0 errors;
+- **8 files, 80 tests passed**;
+- build compiled; no client secrets;
+- admin journey 10/10; security smoke **16/16**, including X-Request-Id = audit `request_id`.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0008_audit_fields/migration.sql | f07c744c6dec4992998462b7b72e640bf6338cc54b666a2b2a49774a2a1724c5 |
+| src/server/action.ts | c6cad1342f8d09bfe9c73012f801269920f3f838f44165c4e3f6c6e2f55f04b9 |
+| src/server/request-context.ts | 9c3cfea223679ebcdbf6a8751caaef783bb30eff32d5e5f0b671fc74c6816f3e |
+| src/server/db.ts | 7bb0ccd98e58a75750fd53951421612ae39b55f8ccb8cad8b36665c059d2999d |
+| src/server/safe-route.ts | 5dafa84ac1313ef39e73d0a7116c2740a09bd6f51d54f760a1bad79f0cb7e49e |
+| src/server/page-read.ts | 2400d73aa410f0faabf6addcb9cd3e03746926ffe36f9ed7208a6dba4f960e36 |
+| src/server/exports.ts | 730e05b4aaadbc211676d03ff8e7ad2abc49bcf1c298e0f2be55aa5e99d38b7e |
+| src/server/rbac.ts | 9139a44f7be5a7ead3a21dcdbe32742b72021f8f5b600f771722418e8d810235 |
+| proxy.ts | 1e6b3b37be8a3d61a93aa1f31c63e77a2d2ed82422b16103a10c71c773142e91 |
+| tests/audit.test.ts | 19b7d968e9fed8bad38f634d0caf84fa750e93e8d4291c84ddd490105ffb1aa8 |
+| tests/audit-catalogue.ts | 3e91aefff312ff6459a73b2ea6c022d0a1edf8af656beb35dc5c69d70a2351cc |
+| scripts/smoke-security.mjs | 4211b7066e3af15ca0c5c9470ae94b040dcd93e1a6bd77e8c6c3f73feab095b1 |
+| evidence/audit-2026-10-27T190404.txt | 5e92225d012be6f6da092fd38d4c9db1a89920837bfdea176983fc6b78137a24 |

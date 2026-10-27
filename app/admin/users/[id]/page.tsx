@@ -19,6 +19,7 @@ export default async function UserDetail({ params, searchParams }: { params: Pro
       <p>Status: {user.status} · Two-step verification required: {user.requiresTotp ? "Yes" : "No"}</p>
       <form method="post" action={`${self}/status`}>
         <input type="hidden" name="status" value={user.status === "ACTIVE" ? "DISABLED" : "ACTIVE"} />
+        <label>Reason (recorded in the audit log) <input name="reason" required maxLength={500} /></label>
         <button type="submit">{user.status === "ACTIVE" ? "Disable user (signs them out)" : "Enable user"}</button>
       </form>
       <form method="post" action={`${self}/setup-link`}>

@@ -6,6 +6,7 @@
 // - CSV cells that a spreadsheet would execute (= + - @) are neutralised.
 import { Forbidden } from "./action";
 import { withScope, type Tx } from "./db";
+import { requestContext, withRequestContext } from "./request-context";
 import { Prisma } from "../../generated/prisma/client";
 
 export const EXPORT_POLICY = { perWindow: 10, windowMinutes: 10, batch: 500, timeoutMs: 120_000 } as const; // PMC (D-OPS-1)
@@ -67,8 +68,8 @@ export function csvCell(v: unknown): string {
 }
 
 async function denied(session: string, key: string, filters: ExportFilters) {
-  await withScope(session, (tx) => tx.$executeRaw`insert into app.audit_log (user_id, action, outcome, detail)
-    values (app.session_user_id(), ${`export.${key}`}, 'DENIED', ${JSON.stringify({ requested: filters })}::jsonb)`);
+  await withScope(session, (tx) => tx.$executeRaw`select app.audit(${`export.${key}`}, 'DENIED', null, 'export', ${key},
+    null, null, null, ${JSON.stringify({ requested: filters })}::jsonb)`);
 }
 
 /**
@@ -97,7 +98,10 @@ export async function exportCsv(session: string | undefined, key: string, filter
   let started = false;
   const demand = () => new Promise<void>((r) => { resume = r; });
 
-  const run = () => withScope(session, async (tx) => {
+  // The body is read after the route handler has returned, outside its async context: capture the request
+  // context now and restore it when the transaction starts, or the audit row loses its request id.
+  const rc = requestContext();
+  const run = () => (rc ? (f: () => Promise<void>) => withRequestContext(rc, f) : (f: () => Promise<void>) => f())(() => withScope(session, async (tx) => {
     await tx.$executeRaw(Prisma.sql`declare export_cur no scroll cursor for ${ds.query(filters)}`);
     // after a cancel the stream is closed: enqueueing would throw, roll back the transaction and lose the audit row
     const send = (text: string) => { if (!cancelled) controller.enqueue(encoder.encode(text)); };
@@ -113,12 +117,11 @@ export async function exportCsv(session: string | undefined, key: string, filter
       send(page.map((r) => columns.map((c) => csvCell(r[c.key])).join(",")).join("\r\n") + "\r\n");
     }
     await tx.$executeRaw`close export_cur`;
-    await tx.$executeRaw`insert into app.audit_log (user_id, action, outcome, detail)
-      values (app.session_user_id(), ${`export.${key}`}, 'OK', jsonb_build_object(
+    await tx.$executeRaw`select app.audit(${`export.${key}`}, 'OK', null, 'export', ${key}, null, null, null, jsonb_build_object(
         'requested', ${JSON.stringify(filters)}::jsonb, 'scope', to_jsonb(app.visible_centre_ids()),
         'rows', ${rows}::int, 'columns', ${JSON.stringify(columns.map((c) => c.key))}::jsonb,
         'piiOmitted', ${JSON.stringify(omitted)}::jsonb, 'cancelled', ${cancelled}::boolean))`;
-  }, { timeoutMs: EXPORT_POLICY.timeoutMs, retries: 0 });
+  }, { timeoutMs: EXPORT_POLICY.timeoutMs, retries: 0 }));
 
   const stream = new ReadableStream<Uint8Array>({
     start(c) {

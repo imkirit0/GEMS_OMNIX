@@ -104,10 +104,10 @@ export function createAuth() {
 
   // Second-factor guesses count per user across challenges, so re-entering the password cannot reset them.
   const SF_LOCKED: SignIn = { kind: "locked", message: "Too many attempts. Try again later." };
-  async function secondFactorFailed(c: Client, userId: string, what: string): Promise<SignIn> {
+  async function secondFactorFailed(c: Client, userId: string, action: "auth.totp.failure" | "auth.recovery.failure"): Promise<SignIn> {
     const { rows } = await c.query(`update app.app_user set second_factor_failures = second_factor_failures + 1
       where id = $1 returning second_factor_failures`, [userId]);
-    await audit(c, userId, `auth.${what}.failure`, "DENIED");
+    await audit(c, userId, action, "DENIED");
     if (rows[0].second_factor_failures < POLICY.secondFactorMaxFailures) return { kind: "invalid", message: "Code not accepted." };
     await c.query(`update app.app_user set second_factor_failures = 0, second_factor_locked_until = now() + make_interval(mins => $2) where id = $1`,
       [userId, POLICY.lockoutMinutes]);
@@ -210,7 +210,7 @@ export function createAuth() {
         if (!ch?.pending_secret_enc) return { result: { kind: "invalid", message: GENERIC_INVALID }, recoveryCodes: [] };
         if (ch.sf_locked) return { result: SF_LOCKED, recoveryCodes: [] };
         const step = matchTotp(decrypt(ch.pending_secret_enc), code, null);
-        if (step == null) return { result: await secondFactorFailed(c, ch.user_id, "totp"), recoveryCodes: [] };
+        if (step == null) return { result: await secondFactorFailed(c, ch.user_id, "auth.totp.failure"), recoveryCodes: [] };
         await secondFactorOk(c, ch.user_id);
         await c.query(`update app.app_user set totp_secret_enc = $2, totp_last_step = $3 where id = $1`, [ch.user_id, ch.pending_secret_enc, step.toString()]);
         await useChallenge(c, challenge);
@@ -227,7 +227,7 @@ export function createAuth() {
         if (!ch?.totp_secret_enc) return { kind: "invalid", message: GENERIC_INVALID };
         if (ch.sf_locked) return SF_LOCKED;
         const step = matchTotp(decrypt(ch.totp_secret_enc), code, ch.totp_last_step == null ? null : BigInt(ch.totp_last_step));
-        if (step == null) return secondFactorFailed(c, ch.user_id, "totp");
+        if (step == null) return secondFactorFailed(c, ch.user_id, "auth.totp.failure");
         await secondFactorOk(c, ch.user_id);
         await c.query(`update app.app_user set totp_last_step = $2 where id = $1`, [ch.user_id, step.toString()]);
         await useChallenge(c, challenge);
@@ -242,7 +242,7 @@ export function createAuth() {
         if (!ch) return { kind: "invalid", message: GENERIC_INVALID };
         if (ch.sf_locked) return SF_LOCKED;
         const used = await c.query(`update app.auth_recovery_code set used_at = now() where user_id = $1 and code_hash = $2 and used_at is null`, [ch.user_id, sha256(code)]);
-        if (used.rowCount !== 1) return secondFactorFailed(c, ch.user_id, "recovery");
+        if (used.rowCount !== 1) return secondFactorFailed(c, ch.user_id, "auth.recovery.failure");
         await secondFactorOk(c, ch.user_id);
         await useChallenge(c, challenge);
         const s = await createSession(c, ch.user_id);

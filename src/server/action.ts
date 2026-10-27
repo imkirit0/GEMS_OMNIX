@@ -12,6 +12,7 @@ export type ActionMeta = {
   centreId?: number; // omit for network-wide actions (then only ALL-scope grants count)
   targetType?: string;
   targetId?: string;
+  reason?: string; // why (required by policy for some sensitive actions)
 };
 
 export async function authorize(tx: Tx, permission: string, centreId?: number): Promise<void> {
@@ -20,18 +21,23 @@ export async function authorize(tx: Tx, permission: string, centreId?: number): 
   if (!row?.ok) throw new Forbidden(`${permission} denied${centreId == null ? "" : ` for centre ${centreId}`}`);
 }
 
-async function audit(tx: Tx, meta: ActionMeta, outcome: "OK" | "DENIED", detail: object) {
-  await tx.$executeRaw`
-    insert into app.audit_log (user_id, action, outcome, target_centre_id, target_type, target_id, detail)
-    values (app.session_user_id(), ${meta.action}, ${outcome}::app."AuditOutcome", ${meta.centreId ?? null}::int,
-            ${meta.targetType ?? null}, ${meta.targetId ?? null}, ${JSON.stringify(detail)}::jsonb)`;
+/** What an action may add to its audit row. `before`/`after` and `reason` get their own columns (T-AUD-001). */
+export type AuditExtra = { before?: unknown; after?: unknown; reason?: string; [k: string]: unknown };
+
+// All app audit rows go through app.audit(): actor, session, roles, scope, request id and ip are filled by the DB.
+async function audit(tx: Tx, meta: ActionMeta, outcome: "OK" | "DENIED", extra: AuditExtra) {
+  const { before, after, reason, ...detail } = extra;
+  await tx.$executeRaw`select app.audit(${meta.action}, ${outcome}::app."AuditOutcome", ${meta.centreId ?? null}::int,
+    ${meta.targetType ?? null}::text, ${meta.targetId ?? null}::text, ${reason ?? meta.reason ?? null}::text,
+    ${before === undefined ? null : JSON.stringify(before)}::jsonb, ${after === undefined ? null : JSON.stringify(after)}::jsonb,
+    ${JSON.stringify(detail)}::jsonb)`;
 }
 
 export async function scopedAction<T>(
   session: string | undefined,
   meta: ActionMeta,
   fn: (tx: Tx, ctx: Ctx) => Promise<T>,
-  auditDetail: (result: T) => object = () => ({}),
+  auditDetail: (result: T) => AuditExtra = () => ({}),
 ): Promise<T> {
   try {
     return await withScope(session, async (tx, ctx) => {

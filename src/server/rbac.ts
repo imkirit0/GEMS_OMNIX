@@ -1,7 +1,7 @@
 // User and role administration (WF-X13). Every write goes through scopedAction (authorize + audit, one transaction)
 // AND a SECURITY DEFINER function that re-checks permission and the no-over-grant rule in the database (0005_rbac).
 import { createHash, randomBytes } from "node:crypto";
-import { authorize, Forbidden, scopedAction } from "./action";
+import { authorize, Forbidden, scopedAction, type AuditExtra } from "./action";
 import { withScope, type Tx } from "./db";
 import { Prisma } from "../../generated/prisma/client";
 import { POLICY } from "./auth/policy";
@@ -39,8 +39,8 @@ async function requireFreshStepUp(tx: Tx) {
 }
 
 // Admin write = permission check + fresh step-up + the DB function, audited in the same transaction.
-function adminWrite<T>(session: string | undefined, meta: { action: string; permission: string; targetType: string; targetId?: string },
-  fn: (tx: Tx) => Promise<T>, detail: (r: T) => object = () => ({})) {
+function adminWrite<T>(session: string | undefined, meta: { action: string; permission: string; targetType: string; targetId?: string; reason?: string },
+  fn: (tx: Tx) => Promise<T>, detail: (r: T) => AuditExtra = () => ({})) {
   return scopedAction(session, meta, async (tx) => {
     await requireFreshStepUp(tx);
     return db(() => fn(tx));
@@ -52,9 +52,14 @@ export const createUser = (session: string | undefined, u: { login: string; disp
     async (tx) => (await tx.$queryRaw<{ id: string }[]>`select app.rbac_create_user(${u.login}, ${u.displayName})::text as id`)[0]!.id,
     (id) => ({ userId: id, login: u.login.trim().toLowerCase() }));
 
-export const setUserStatus = (session: string | undefined, userId: string, status: "ACTIVE" | "DISABLED") =>
-  adminWrite(session, { action: `rbac.user.${status === "ACTIVE" ? "enable" : "disable"}`, permission: "rbac.user.manage", targetType: "app_user", targetId: userId },
-    (tx) => tx.$executeRaw`select app.rbac_set_user_status(${userId}::uuid, ${status}::app."UserStatus")`);
+export const setUserStatus = (session: string | undefined, userId: string, status: "ACTIVE" | "DISABLED", reason?: string) =>
+  adminWrite(session, { action: status === "ACTIVE" ? "rbac.user.enable" : "rbac.user.disable", permission: "rbac.user.manage", targetType: "app_user", targetId: userId, reason },
+    async (tx) => {
+      const [prev] = await tx.$queryRaw<{ status: string }[]>`select status::text from app.app_user where id = ${userId}::uuid`;
+      await tx.$executeRaw`select app.rbac_set_user_status(${userId}::uuid, ${status}::app."UserStatus")`;
+      return prev?.status ?? null;
+    },
+    (before) => ({ before: { status: before }, after: { status } }));
 
 export const assignRole = (session: string | undefined, a: { userId: string; roleId: number; scope: ScopeInput }) =>
   adminWrite(session, { action: "rbac.assignment.create", permission: "rbac.user.manage", targetType: "app_user", targetId: a.userId },
@@ -73,8 +78,12 @@ export const createRole = (session: string | undefined, r: { key: string; name: 
 
 export const setRolePermissions = (session: string | undefined, roleId: number, permissions: string[]) =>
   adminWrite(session, { action: "rbac.role.permissions", permission: "rbac.role.manage", targetType: "role", targetId: String(roleId) },
-    (tx) => tx.$executeRaw`select app.rbac_set_role_permissions(${roleId}::int, ${permissions}::text[])`,
-    () => ({ permissions }));
+    async (tx) => {
+      const before = (await tx.$queryRaw<{ k: string }[]>`select permission_key as k from app.role_permission where role_id = ${roleId}::int order by 1`).map((r) => r.k);
+      await tx.$executeRaw`select app.rbac_set_role_permissions(${roleId}::int, ${permissions}::text[])`;
+      return before;
+    },
+    (before) => ({ before: { permissions: before }, after: { permissions: [...new Set(permissions)].sort() } }));
 
 /** One-time set-up link token (PR-12). Only its hash is stored; the caller shows the link once. */
 export async function issueSetupToken(session: string | undefined, userId: string): Promise<string> {

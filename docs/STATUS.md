@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-27, after exports (evidence E-021).
+**Last updated:** 2026-10-27, after the audit-trail tests (evidence E-022).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -12,13 +12,13 @@
 | Measure | Value | Source |
 |---|---|---|
 | Requirements (traceability matrix) | 290 | audit 02, T-DOC-001 |
-| Requirements verified (VER) | **0** | E-021 |
+| Requirements verified (VER) | **0** | E-022 |
 | Open business decisions | **115** (107 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
-| Automated tests | **74 passing** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports), plus real-server checks in CI: admin journey (10 steps) and security smoke (15 checks) | `evidence/exports-2026-10-27T185028.txt` |
-| CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
+| Automated tests | **80 passing** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD), plus real-server checks in CI: admin journey (10 steps) and security smoke (16 checks) | `evidence/audit-2026-10-27T190404.txt` |
+| CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `b1c5962`; later commits are local until you approve a push | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) up to `857b51a`; later commits are local until you approve a push | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -39,6 +39,7 @@
 | 13 | Auth follow-ups: second-factor lockout across challenges (T-AUTH-006b); idle timeout and account rules enforced in the DB (T-AUTH-013b); centre deactivation (T-AUTH-012); **timing oracle found and fixed** (ratio 2.62 → 0.99, T-AUTH-002b); password minimum in the module | 2026-10-27 | E-017 |
 | 14 | Sign-in screens and route handlers: login, two-step verify, TOTP enrolment (recovery codes shown once), logout, password reset; same-origin check on every POST (T-AUTH-016); verified on a real `next start` server | 2026-10-27 | E-017, commit `6e1d30b` |
 | 15 | User and role administration (WF-X13; FR-009/093/228): create/disable users, assign/remove scoped roles, roles and permissions, one-time set-up links; **no over-grant**, step-up, audit, sessions revoked, TOTP requirement automatic; enforced in the app **and** the DB; screens `/admin/*` and `/stepup`; first-admin bootstrap script | 2026-10-27 | E-018, commit `9e93ce2` |
+| 19 | Audit trail (T-AUD): complete field set (actor, session, roles, scope, request id, ip, target, before/after, reason) written only via `app.audit()` (actor cannot be forged); redaction of personal identifiers and secrets in audit data and logs; request id on every response and audit row; coverage gate: every audited action catalogued and asserted | 2026-10-27 | E-022 |
 | 18 | Exports (Stage 1 P7): one generic, permissioned, PII-gated, streamed (cursor + backpressure, transaction opens only on first read), audited, rate-limited CSV export with formula-injection guard; datasets centres and users; download buttons; real-server check | 2026-10-27 | E-021 |
 | 17 | T-SEC suite for existing surfaces: centre list/view (first centre-scoped pages, FR-022/022.02) with 404 parity; crafted filters; masters immutable for the app role; generic errors with reference ids on every route and page; no impersonation; per-request CSP nonce + security headers; client-bundle secret scan; real-server smoke in CI | 2026-10-27 | E-020 |
 | 16 | Continuous integration: `scripts/ci.sh` (docs consistency, generated-file sync, fresh DB + migrations, schema-drift gate, no unsafe SQL, typecheck, all tests, build) run by GitHub Actions on every push/PR; LF line endings fixed via `.gitattributes` | 2026-10-27 | E-019, commit `b77d262`, run 40501900222 |
@@ -50,7 +51,7 @@
 | POC P2/P3 on Supabase (C-17) | Each test passed in ≥ 1 full run | No fully green run: 38/39 twice, intermittent connection drops, **cause unknown** (C-26) | E-010, rev. v1.4 |
 | BRD / FRD | Drafts written | Your review; named owners (BRD §5, §18) | E-013 |
 | ADR-001 approval | Project owner approved B | Named IT / Sponsor countersignature (or a note that yours suffices) | ADR §7 |
-| Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, part of P4 (audit atomicity, step-up), **P7 exports**, T-SEC for every surface that exists (see the T-SEC table below) | P4 rest (T-AUD-003…010); the T-SEC items waiting on features; P2 on Supabase (C-26) | E-014–E-021 |
+| Stage 1 security POC (audit 11) | P0 auth choice, P1 login (module + screens), P2 isolation (local), P3 numbering, **P4 audit** (T-AUD 001–005, 009), **P7 exports**, T-SEC for every surface that exists (see the tables below) | T-AUD 006/007 (need imports and jobs), 008 (needs D-FIN-8), 010 (needs an audit viewer and a PMC decision); T-SEC items waiting on features; P2 on Supabase (C-26) | E-014–E-022 |
 
 ## 4. To do (in roadmap order)
 
@@ -103,6 +104,21 @@
 | 017 client bundle secret scan | **done** (CI gate) | scripts/scan-client-bundle.mjs |
 | 018 cron endpoint without secret → 401 | waits on jobs | Stage 6/7 |
 | 019 legacy-API shim key scope | waits on the API shim | Stage 7 |
+
+## 4b. T-AUD coverage (audit 09 §T-AUD)
+
+| Test | Status | Where |
+|---|---|---|
+| 001 complete field set, one row per action, same transaction | **done** | tests/audit.test.ts, smoke-security (request id over HTTP) |
+| 002 rollback leaves no row | **done** | tests/foundation.test.ts, tests/rbac.test.ts |
+| 003 denied attempt leaves a denial row only | **done** | tests/foundation.test.ts (T-RLS-018), tests/rbac.test.ts, tests/exports.test.ts |
+| 004 no UPDATE/DELETE/TRUNCATE (and no forged inserts) by runtime roles | **done** | tests/audit.test.ts, tests/foundation.test.ts |
+| 005 redaction in audit data and logs | **done** | tests/audit.test.ts |
+| 006 bulk import audit | waits on imports | Stage 3+ |
+| 007 job actor `system:<job>` with run id | waits on jobs (column `actor_kind` is ready) | Stage 6/7 |
+| 008 hash chain | waits on decision D-FIN-8 (Accounts) | G-FIN |
+| 009 coverage gate | **done** (CI fails on an uncatalogued or untested action) | tests/audit.test.ts, tests/audit-catalogue.ts |
+| 010 audit read scope | waits on an audit viewer and the PMC decision on who may read what | Stage 7 |
 
 ## 5. Waiting on you or others
 

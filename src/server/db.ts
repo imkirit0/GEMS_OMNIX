@@ -3,6 +3,7 @@
 // row-level security derives the scope from it. The raw client is deliberately not exported.
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "../../generated/prisma/client";
+import { requestContext } from "./request-context";
 
 export type Tx = Prisma.TransactionClient;
 export type Ctx = { userId: string };
@@ -35,7 +36,10 @@ export async function withScope<T>(
   for (let attempt = 0; ; attempt++) {
     try {
       return await appDb().$transaction(async (tx) => {
-        await tx.$queryRaw`select set_config('app.session_id', ${sessionToken}, true)`;
+        const rc = requestContext();
+        // transaction-local: the session drives RLS; request id and ip are read by app.audit()
+        await tx.$queryRaw`select set_config('app.session_id', ${sessionToken}, true),
+          set_config('app.request_id', ${rc?.requestId ?? ""}, true), set_config('app.client_ip', ${rc?.ip ?? ""}, true)`;
         const [row] = await tx.$queryRaw<{ uid: string | null }[]>`select app.session_user_id()::text as uid`;
         // fail loudly rather than render an empty page (T-RLS-006/007)
         if (!row?.uid) throw new ScopeError("invalid, expired or revoked session");
