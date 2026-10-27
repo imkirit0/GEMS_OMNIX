@@ -1,0 +1,59 @@
+## migrate
+Applying migration `0001_foundation`
+Applying migration `0002_security`
+Applying migration `0003_auth`
+The following migration(s) have been applied:
+All migrations have been successfully applied.
+## schema vs database drift (empty = in sync)
+Loaded Prisma config from prisma7.config.ts.
+## typecheck
+tsc: 0 errors
+## tests
+ RUN  v4.1.12 D:/GEMS OMNIX
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-001 runtime roles: not superuser, no BYPASSRLS, own nothing, no DDL 78ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-002 every table with centre_id (and centre itself) has ENABLE+FORCE RLS and per-command policies 51ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-005 definer functions: inventory, fixed search_path, owner bypasses RLS; scope truth table 139ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-006/007 missing, forged, expired, revoked or disabled-user sessions fail loudly 56ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-008 cross-centre writes under a centre-A session affect nothing 64ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-009 pooled transactions never inherit another session's scope 334ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-010 the transaction handle is dead after withScope returns 43ms
+ ✓ tests/foundation.test.ts > authorization and audit > permission must be held over a scope that covers the centre 76ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-RLS-018 denied action: no number consumed, one DENIED audit row, no OK row 60ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: change and audit commit together; a failure leaves neither 66ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: audit log is append-only for the app and for the owner 59ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 274ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 104ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-006 series are independent per centre and document type 96ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 241ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 99ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-006 series are independent per centre and document type 94ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-007 FY boundary in Asia/Kolkata 0ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-009 format and length are NP-5 parameters; over-length is rejected 0ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-001 valid login: DB session, hardened cookie, token hashed at rest, audited, trusted by RLS 235ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-002 wrong password and unknown login look identical; failure audited 143ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window 266ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-004 per-IP rate limit 249ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-005 HO user without TOTP: forced enrolment, zero data access before it 167ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-006 TOTP wrong or replayed is rejected 213ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-007 recovery codes: single use; regenerating invalidates old ones 253ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-008 password reset: single use, 30 min, identical response for unknown login 182ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-009 password change revokes all other sessions 174ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-010 role/scope change: revocation hook kills sessions at the app and RLS layers 125ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-011 deactivated user rejected on the next request 142ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-013 idle and absolute timeouts 175ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-014 session id rotated on login and on privilege change (step-up) 157ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-015 step-up re-auth must be at most 5 minutes old 161ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-018 legacy password hash: accepted once, rehashed to argon2id 162ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-019 argon2id with at least OWASP minimum cost 107ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-020 audit coverage, and the audit row is in the same transaction as the auth event 171ms
+ Test Files  2 passed (2)
+      Tests  36 passed (36)
+   Start at  16:27:10
+   Duration  5.40s (transform 76ms, setup 0ms, import 188ms, tests 5.04s, environment 0ms)
+## build
+✓ Running next.config.ts took 15ms
+✓ Compiled successfully in 141ms
+✓ Generating static pages using 4 workers (3/3) in 279ms
+Route (app)
+┌ ○ /
+└ ○ /_not-found

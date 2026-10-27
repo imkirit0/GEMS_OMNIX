@@ -1,13 +1,14 @@
-// ADR-001: the single T-AUTH suite (audit 09 §T-AUTH), run unchanged against every candidate.
-// Candidate-neutral tests not run here (they do not differ between candidates) are listed in PLATFORM_TESTS.
+// T-AUTH suite (audit 09 §T-AUTH). Born in the ADR-001 bake-off; now the permanent acceptance suite for auth.
+// Tests not in this suite (platform-level, still to be written) are listed in PLATFORM_TESTS and docs/STATUS.md.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import { decodeBase32IgnorePadding } from "@oslojs/encoding";
 import { generateHOTP } from "@oslojs/otp";
-import { ScopeError, withScope } from "../src/server/db";
-import { asAdmin, C, reset as resetFixtures } from "../tests/fixtures";
-import { GENERIC_INVALID, POLICY, type Candidate, type SignIn } from "./contract";
+import { ScopeError, withScope } from "../../src/server/db";
+import { asAdmin, C, reset as resetFixtures } from "../fixtures";
+import { GENERIC_INVALID, POLICY, type SignIn } from "../../src/server/auth/policy";
+import type { Candidate } from "./contract";
 
 export const PLATFORM_TESTS = {
   "T-AUTH-012": "centre deactivation: scope function (platform), identical for every candidate",
@@ -46,18 +47,13 @@ function session(r: SignIn): string {
 
 export function defineSuite(make: () => Candidate) {
   const c = make();
-  const results: Record<string, "pass" | "fail"> = {};
-  const evidence = new URL(`./evidence/${c.name}-results.json`, import.meta.url);
 
-  describe(`ADR-001 candidate ${c.name}`, () => {
+  describe(`authentication (${c.name})`, () => {
     beforeAll(async () => {
-      await asAdmin((db) => db.query(fs.readFileSync(new URL("./sql/shared.sql", import.meta.url), "utf8")));
+      await asAdmin((db) => db.query(fs.readFileSync(new URL("../sql/audit-fault.sql", import.meta.url), "utf8")));
       await c.setup();
     });
-    afterAll(async () => {
-      fs.writeFileSync(evidence, JSON.stringify({ candidate: c.name, at: new Date().toISOString(), results, platformTests: PLATFORM_TESTS }, null, 2));
-      await c.close();
-    });
+    afterAll(() => c.close());
     beforeEach(async () => {
       await resetFixtures();
       await asAdmin(async (db) => {
@@ -71,9 +67,7 @@ export function defineSuite(make: () => Candidate) {
     });
 
     const t = (id: string, name: string, fn: () => Promise<void>) =>
-      test(`${id} ${name}`, async () => {
-        try { await fn(); results[id] = results[id] === "fail" ? "fail" : "pass"; } catch (e) { results[id] = "fail"; throw e; }
-      });
+      test(`${id} ${name}`, fn);
 
     // HO user end to end: password, then enrol TOTP. Returns the secret and a live session.
     async function enrolHo(): Promise<{ secret: string; token: string; recoveryCodes: string[] }> {

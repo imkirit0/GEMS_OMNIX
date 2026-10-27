@@ -1,17 +1,18 @@
-// ADR-001 candidate B: first-party authentication module.
+// Authentication (ADR-001, accepted 2026-10-27): first-party module, carried over from bake-off candidate B.
 // argon2id (@node-rs/argon2), TOTP (@oslojs/otp) with replay protection, opaque sessions stored as SHA-256
 // in app.app_session (the table RLS trusts). Each auth event and its audit row commit in one transaction.
-import fs from "node:fs";
 import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
 import { decodeBase32IgnorePadding, encodeBase32NoPadding } from "@oslojs/encoding";
 import { generateHOTP } from "@oslojs/otp";
-import { GENERIC_INVALID, POLICY, type Candidate, type NewUser, type SignIn } from "../contract";
+import { GENERIC_INVALID, POLICY, type SignIn } from "./policy";
 
 const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest();
 const newToken = () => randomBytes(32).toString("base64url");
 const ARGON = { algorithm: 2 as const, memoryCost: 19_456, timeCost: 2, parallelism: 1 }; // argon2id, OWASP minimum
+
+export const hashPassword = (password: string) => argonHash(password, ARGON);
 const COOKIE = (t: string) => `__Host-gems_session=${t}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 const RESET_RESPONSE = { ok: true, message: "If the account exists, a reset link has been sent." };
 
@@ -46,9 +47,12 @@ function matchTotp(secret: Buffer, code: string, lastStep: bigint | null): bigin
 
 type Client = pg.PoolClient;
 
-export function firstParty(): Candidate {
+export type AuthService = ReturnType<typeof createAuth>;
+
+export function createAuth() {
   const pool = new pg.Pool({ connectionString: process.env["AUTH_DATABASE_URL"], max: 10 });
   const dummyHash = argonHash(randomBytes(16).toString("hex"), ARGON); // equalises timing for unknown logins
+  // ponytail: reset links are collected here until the e-mail adapter exists (D-COMM-1); swap for the adapter then
   const outbox: { to: string; resetToken: string }[] = [];
 
   async function tx<T>(fn: (c: Client) => Promise<T>): Promise<T> {
@@ -129,30 +133,10 @@ export function firstParty(): Candidate {
   }
 
   return {
-    name: "B-first-party",
-    async setup() {
-      const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-      await admin.connect();
-      try { await admin.query(fs.readFileSync(new URL("./schema.sql", import.meta.url), "utf8")); } finally { await admin.end(); }
-    },
-    async reset() {
-      outbox.length = 0;
-      const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-      await admin.connect();
-      try { await admin.query(`truncate app.auth_throttle, app.auth_ip_attempt, app.auth_challenge, app.auth_recovery_code, app.auth_reset`); }
-      finally { await admin.end(); }
-    },
     close: () => pool.end(),
-    async createUser(u: NewUser) {
-      const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-      await admin.connect();
-      try {
-        await admin.query(`update app.app_user set password_hash = $2, requires_totp = $3, totp_secret_enc = null, totp_last_step = null where id = $1`,
-          [u.id, await argonHash(u.password, ARGON), u.requiresTotp]);
-      } finally { await admin.end(); }
-    },
+    outbox,
 
-    async signIn(login, password, ip) {
+    async signIn(login: string, password: string, ip: string): Promise<SignIn> {
       const limited = await tx(async (c) => {
         const { rows } = await c.query(`select count(*)::int n from app.auth_ip_attempt where ip = $1 and at > now() - make_interval(mins => $2)`, [ip, POLICY.ipWindowMinutes]);
         await c.query(`insert into app.auth_ip_attempt (ip) values ($1)`, [ip]);
@@ -185,7 +169,7 @@ export function firstParty(): Candidate {
       });
     },
 
-    async startTotpEnrolment(challenge, password) {
+    async startTotpEnrolment(challenge: string, password: string) {
       return tx(async (c) => {
         const ch = await takeChallenge(c, challenge, "enrol");
         const stored = ch && (await c.query(`select password_hash from app.app_user where id = $1`, [ch.user_id])).rows[0]?.password_hash;
@@ -195,7 +179,7 @@ export function firstParty(): Candidate {
         return { secret: encodeBase32NoPadding(secret) };
       });
     },
-    async confirmTotpEnrolment(challenge, code) {
+    async confirmTotpEnrolment(challenge: string, code: string): Promise<{ result: SignIn; recoveryCodes: string[] }> {
       return tx(async (c) => {
         const ch = await takeChallenge(c, challenge, "enrol");
         if (!ch?.pending_secret_enc) return { result: { kind: "invalid", message: GENERIC_INVALID }, recoveryCodes: [] };
@@ -210,7 +194,7 @@ export function firstParty(): Candidate {
         return { result, recoveryCodes };
       });
     },
-    async verifyTotp(challenge, code) {
+    async verifyTotp(challenge: string, code: string): Promise<SignIn> {
       return tx(async (c) => {
         const ch = await takeChallenge(c, challenge, "totp");
         if (!ch?.totp_secret_enc) return { kind: "invalid", message: GENERIC_INVALID };
@@ -226,7 +210,7 @@ export function firstParty(): Candidate {
         return s;
       });
     },
-    async useRecoveryCode(challenge, code) {
+    async useRecoveryCode(challenge: string, code: string): Promise<SignIn> {
       return tx(async (c) => {
         const ch = await takeChallenge(c, challenge, "totp");
         if (!ch) return { kind: "invalid", message: GENERIC_INVALID };
@@ -238,7 +222,7 @@ export function firstParty(): Candidate {
         return s;
       });
     },
-    async regenerateRecoveryCodes(token, password) {
+    async regenerateRecoveryCodes(token: string, password: string) {
       return tx(async (c) => {
         const s = await sessionUser(c, token);
         const stored = s && (await c.query(`select password_hash from app.app_user where id = $1`, [s.user_id])).rows[0]?.password_hash;
@@ -249,20 +233,20 @@ export function firstParty(): Candidate {
       });
     },
 
-    async resolve(token) {
+    async resolve(token: string): Promise<{ userId: string } | null> {
       return tx(async (c) => {
         const s = await sessionUser(c, token);
         return s ? { userId: s.user_id } : null;
       });
     },
-    async signOut(token) {
+    async signOut(token: string) {
       await tx(async (c) => {
         const s = await sessionUser(c, token, { touch: false });
         await c.query(`update app.app_session set revoked_at = now() where token_hash = $1 and revoked_at is null`, [sha256(token)]);
         if (s) await audit(c, s.user_id, "auth.logout", "OK");
       });
     },
-    async changePassword(token, oldPassword, newPassword) {
+    async changePassword(token: string, oldPassword: string, newPassword: string) {
       return tx(async (c) => {
         const s = await sessionUser(c, token);
         const stored = s && (await c.query(`select password_hash from app.app_user where id = $1`, [s.user_id])).rows[0]?.password_hash;
@@ -274,7 +258,7 @@ export function firstParty(): Candidate {
         return { token: (fresh as { token: string }).token };
       });
     },
-    async requestReset(login) {
+    async requestReset(login: string) {
       await tx(async (c) => {
         const user = (await c.query(`select id, login from app.app_user where lower(login) = $1 and status = 'ACTIVE'`, [login.trim().toLowerCase()])).rows[0];
         await audit(c, user?.id ?? null, "auth.reset.request", "OK", { login: login.trim().toLowerCase() });
@@ -286,7 +270,7 @@ export function firstParty(): Candidate {
       });
       return { response: RESET_RESPONSE };
     },
-    async confirmReset(resetToken, newPassword) {
+    async confirmReset(resetToken: string, newPassword: string) {
       return tx(async (c) => {
         const { rows } = await c.query(`update app.auth_reset set used_at = now() where token_hash = $1 and used_at is null and expires_at > now() returning user_id`, [sha256(resetToken)]);
         const userId = rows[0]?.user_id as string | undefined;
@@ -297,7 +281,7 @@ export function firstParty(): Candidate {
         return true;
       });
     },
-    async stepUp(token, password) {
+    async stepUp(token: string, password: string) {
       const r = await tx(async (c) => {
         const s = await sessionUser(c, token);
         const stored = s && (await c.query(`select password_hash from app.app_user where id = $1`, [s.user_id])).rows[0]?.password_hash;
@@ -314,61 +298,18 @@ export function firstParty(): Candidate {
       if (!r) throw new Error("re-authentication failed");
       return r;
     },
-    async hasFreshStepUp(token, maxAgeSeconds) {
+    async hasFreshStepUp(token: string, maxAgeSeconds: number) {
       return tx(async (c) => {
         const s = await sessionUser(c, token, { touch: false });
         return !!s?.step_up_at && Date.now() - s.step_up_at.getTime() <= maxAgeSeconds * 1000;
       });
     },
-    async revokeUserSessions(userId) {
+    async revokeUserSessions(userId: string) {
       await tx(async (c) => {
         await revokeAll(c, userId);
         await audit(c, userId, "auth.sessions.revoked", "OK");
       });
     },
 
-    test: {
-      outbox,
-      async ageSession(token, { idleSeconds = 0, absoluteSeconds = 0, stepUpSeconds = 0 }) {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try {
-          await admin.query(`update app.app_session set last_seen_at = last_seen_at - make_interval(secs => $2),
-            created_at = created_at - make_interval(secs => $3), expires_at = expires_at - make_interval(secs => $3),
-            step_up_at = step_up_at - make_interval(secs => $4) where token_hash = $1`, [sha256(token), idleSeconds, absoluteSeconds, stepUpSeconds]);
-        } finally { await admin.end(); }
-      },
-      async setLegacyPassword(userId, md5Hex) {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try { await admin.query(`update app.app_user set password_hash = $2 where id = $1`, [userId, `legacy-md5:${md5Hex}`]); } finally { await admin.end(); }
-      },
-      async storedHash(userId) {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try { return (await admin.query(`select password_hash from app.app_user where id = $1`, [userId])).rows[0].password_hash; } finally { await admin.end(); }
-      },
-      async expireLockouts() {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try { await admin.query(`update app.auth_throttle set locked_until = now() - interval '1 second'`); } finally { await admin.end(); }
-      },
-      async ageResetTokens(seconds) {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try { await admin.query(`update app.auth_reset set expires_at = expires_at - make_interval(secs => $1)`, [seconds]); } finally { await admin.end(); }
-      },
-      async clearRateLimits() {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try { await admin.query(`truncate app.auth_ip_attempt`); } finally { await admin.end(); }
-      },
-      async liveSessionCount(userId) {
-        const admin = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
-        await admin.connect();
-        try { return (await admin.query(`select count(*)::int n from app.app_session where user_id = $1 and revoked_at is null and expires_at > now()`, [userId])).rows[0].n; }
-        finally { await admin.end(); }
-      },
-    },
   };
 }

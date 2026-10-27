@@ -76,8 +76,16 @@ model AppUser {
   displayName String           @map("display_name")
   status      UserStatus       @default(ACTIVE)
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  assignments RoleAssignment[]
-  sessions    AppSession[]
+  // Authentication (ADR-001, candidate B). Hash is argon2id; TOTP secret is AES-256-GCM (AUTH_ENC_KEY).
+  passwordHash  String?  @map("password_hash")
+  requiresTotp  Boolean  @default(false) @map("requires_totp")
+  totpSecretEnc String?  @map("totp_secret_enc")
+  totpLastStep  BigInt?  @map("totp_last_step") // last accepted 30 s step: replay protection
+  assignments   RoleAssignment[]
+  sessions      AppSession[]
+  challenges    AuthChallenge[]
+  recoveryCodes AuthRecoveryCode[]
+  resets        AuthReset[]
 
   @@map("app_user")
   @@schema("app")
@@ -152,11 +160,70 @@ model AppSession {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
   expiresAt DateTime  @map("expires_at") @db.Timestamptz
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz
-  stepUpAt  DateTime? @map("step_up_at") @db.Timestamptz
-  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stepUpAt   DateTime? @map("step_up_at") @db.Timestamptz
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz // idle timeout
+  user       AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("app_session")
+  @@schema("app")
+}
+
+// ---------- Authentication support (ADR-001) ----------
+
+// Failure counter per login string (existing or not, so lockout cannot enumerate accounts)
+model AuthThrottle {
+  loginKey    String    @id @map("login_key")
+  failures    Int       @default(0)
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz
+
+  @@map("auth_throttle")
+  @@schema("app")
+}
+
+model AuthIpAttempt {
+  id BigInt   @id @default(autoincrement())
+  ip String
+  at DateTime @default(now()) @db.Timestamptz
+
+  @@index([ip, at])
+  @@map("auth_ip_attempt")
+  @@schema("app")
+}
+
+// Short-lived second-factor step between password and session (kind: enrol | totp)
+model AuthChallenge {
+  tokenHash        Bytes     @id @map("token_hash")
+  userId           String    @map("user_id") @db.Uuid
+  kind             String
+  pendingSecretEnc String?   @map("pending_secret_enc")
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz
+  usedAt           DateTime? @map("used_at") @db.Timestamptz
+  user             AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_challenge")
+  @@schema("app")
+}
+
+model AuthRecoveryCode {
+  userId   String    @map("user_id") @db.Uuid
+  codeHash Bytes     @map("code_hash")
+  usedAt   DateTime? @map("used_at") @db.Timestamptz
+  user     AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, codeHash])
+  @@map("auth_recovery_code")
+  @@schema("app")
+}
+
+model AuthReset {
+  tokenHash Bytes     @id @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_reset")
   @@schema("app")
 }
 

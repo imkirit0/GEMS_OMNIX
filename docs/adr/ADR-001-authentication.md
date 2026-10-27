@@ -142,3 +142,12 @@ C-05 fixed the method:
 | Sponsor | | | |
 
 Named IT/Sponsor signatures are still blank. Countersign, or record that the project owner's approval suffices.
+
+## 8. Implementation status (updated 2026-10-27, E-016)
+| Consequence | Status |
+|---|---|
+| Port B into `src/server/auth/` with migration `0003_auth` | **Done**. `prisma migrate diff` shows no drift |
+| Delete A's and C's code and the `better-auth` dependency | **Done** (kept in history at `cc4766f`; results in `bakeoff/evidence/`) |
+| T-AUTH suite permanent (`tests/auth/`) | **Done**: 17/17 against the production module |
+| Gap 3: `gems_auth` through the pooler | **Done** (local PgBouncer) |
+| Gaps 1, 2, 4; independent security review | Open; tracked in `docs/STATUS.md` §4 |

@@ -6,3 +6,5 @@ create role gems_report_ro login password 'dev_ro_pw' nosuperuser nocreatedb noc
 revoke all on database gems from public;
 grant connect on database gems to gems_app, gems_job, gems_report_ro;
 revoke all on schema public from public;
+create role gems_auth login password 'dev_auth_pw' nosuperuser nocreatedb nocreaterole nobypassrls noinherit;
+grant connect on database gems to gems_auth;
