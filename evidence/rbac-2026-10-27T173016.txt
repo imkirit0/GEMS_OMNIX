@@ -1,0 +1,94 @@
+## migrate
+Applying migration `0001_foundation`
+Applying migration `0002_security`
+Applying migration `0003_auth`
+Applying migration `0004_auth_hardening`
+Applying migration `0005_rbac`
+The following migration(s) have been applied:
+All migrations have been successfully applied.
+## drift
+-- This is an empty migration.
+## unsafe raw SQL in src/ app/ (must be none)
+none
+## typecheck
+tsc: 0 errors
+## tests
+ RUN  v4.1.12 D:/GEMS OMNIX
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-001 valid login: DB session, hardened cookie, token hashed at rest, audited, trusted by RLS 261ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-002 wrong password and unknown login look identical; failure audited 161ms
+stdout | tests/auth.test.ts > authentication (first-party) > T-AUTH-002b known and unknown logins take about the same time (no timing oracle)
+T-AUTH-002b median known 17.1 ms, unknown 16.5 ms, ratio 1.04
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-002b known and unknown logins take about the same time (no timing oracle) 764ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window 328ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-004 per-IP rate limit 460ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-005 HO user without TOTP: forced enrolment, zero data access before it 178ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-006 TOTP wrong or replayed is rejected 223ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-006b second-factor guesses lock the second factor across challenges and recovery codes 346ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-007 recovery codes: single use; regenerating invalidates old ones 273ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-008 password reset: single use, 30 min, identical response for unknown login 175ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-009 password change revokes all other sessions 179ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-010 role/scope change: revocation hook kills sessions at the app and RLS layers 133ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-011 deactivated user rejected on the next request 155ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-012 centre deactivated: its staff are rejected; HO with wider scope keeps access 211ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-013b idle timeout is enforced by the database even if the app skips resolve() 151ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-013 idle and absolute timeouts 173ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-014 session id rotated on login and on privilege change (step-up) 173ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-015 step-up re-auth must be at most 5 minutes old 171ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-018 legacy password hash: accepted once, rehashed to argon2id 167ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-019 argon2id with at least OWASP minimum cost 115ms
+ ✓ tests/auth.test.ts > authentication (first-party) > T-AUTH-020 audit coverage, and the audit row is in the same transaction as the auth event 181ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-001 runtime roles: not superuser, no BYPASSRLS, own nothing, no DDL 72ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-002 every table with centre_id (and centre itself) has ENABLE+FORCE RLS and per-command policies 51ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-005 definer functions: inventory, fixed search_path, owner bypasses RLS; scope truth table 134ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-006/007 missing, forged, expired, revoked or disabled-user sessions fail loudly 70ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-008 cross-centre writes under a centre-A session affect nothing 64ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-009 pooled transactions never inherit another session's scope 362ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-010 the transaction handle is dead after withScope returns 45ms
+ ✓ tests/foundation.test.ts > authorization and audit > permission must be held over a scope that covers the centre 80ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-RLS-018 denied action: no number consumed, one DENIED audit row, no OK row 74ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: change and audit commit together; a failure leaves neither 77ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: audit log is append-only for the app and for the owner 70ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 292ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 106ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-006 series are independent per centre and document type 109ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 275ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 106ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-006 series are independent per centre and document type 112ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-007 FY boundary in Asia/Kolkata 0ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-009 format and length are NP-5 parameters; over-length is rejected 0ms
+ ✓ tests/rbac.test.ts > user and role administration > T-E2E-X13: create user, assign, set-up link, sign in; scope change revokes sessions and requires TOTP (T-AUTH-010) 301ms
+ ✓ tests/rbac.test.ts > user and role administration > no over-grant: a role is granted only where the actor holds every one of its permissions 216ms
+ ✓ tests/rbac.test.ts > user and role administration > role editing: only permissions held network-wide; holders are signed out 162ms
+ ✓ tests/rbac.test.ts > user and role administration > step-up older than 5 minutes blocks every admin write, with no side effects 123ms
+ ✓ tests/rbac.test.ts > user and role administration > users without RBAC rights are denied every action and read; denials audited 169ms
+ ✓ tests/rbac.test.ts > user and role administration > database gate alone: functions and row visibility enforce RBAC without the app layer 94ms
+ ✓ tests/rbac.test.ts > user and role administration > guards: no self-disable, unique lowercase logins, disabling signs the user out 127ms
+ ✓ tests/admin-http.test.ts > admin routes > T-AUTH-016 every admin POST rejects foreign and missing Origin with no side effects 93ms
+ ✓ tests/admin-http.test.ts > admin routes > create user and assign through the routes; stale step-up redirects to /stepup and back 243ms
+ ✓ tests/admin-http.test.ts > admin routes > over-grant through the route comes back as a visible error, not a crash 71ms
+ ✓ tests/admin-http.test.ts > admin routes > set-up link is shown once, uncached, and works exactly once 86ms
+ ✓ tests/admin-http.test.ts > admin routes > role permissions form: checkboxes become the role's permission set 81ms
+ ✓ tests/admin-http.test.ts > admin routes > safeNext blocks open redirects 52ms
+ ✓ tests/admin-http.test.ts > first-admin bootstrap > refuses while an administrator exists; otherwise creates a TOTP-required admin with a one-time link 108ms
+ ✓ tests/auth-http.test.ts > auth route handlers > T-AUTH-016 every auth POST rejects a foreign or missing Origin, with no side effects 129ms
+ ✓ tests/auth-http.test.ts > auth route handlers > login sets a __Host- session cookie and redirects home; wrong password sets nothing 136ms
+ ✓ tests/auth-http.test.ts > auth route handlers > HO first login: enrolment via handlers, recovery codes shown once, then TOTP sign-in 190ms
+ ✓ tests/auth-http.test.ts > auth route handlers > logout revokes the session and clears the cookie 107ms
+ ✓ tests/auth-http.test.ts > auth route handlers > reset: identical answer for unknown login; password policy enforced in the route and in the module 103ms
+ Test Files  5 passed (5)
+      Tests  59 passed (59)
+   Start at  17:30:26
+   Duration  10.62s (transform 165ms, setup 0ms, import 472ms, tests 9.69s, environment 0ms)
+## build
+✓ Compiled successfully in 297ms
+## real-server smoke (scripts/smoke-admin.sh, run on a fresh DB before this run)
+1 set password via one-time link                           303 -> http://localhost:3101/login?reset=ok
+2 sign in (admin requires TOTP)                            303 -> http://localhost:3101/login/enrol
+3 confirm password to start enrolment                      303 -> http://localhost:3101/login/enrol
+4 enrolment page shows a key                               yes (32 chars)
+5 confirm code: recovery codes shown once                  10 codes
+6 home links to administration                             1 link(s)
+7 GET /admin/users                                         200
+8 create user (step-up fresh from sign-in)                 303 -> http://localhost:3101/admin/users/<id>?created=1
+9 GET /admin/users lists the new user                      1 match(es)
+10 GET /admin/users without a session                      307 -> http://localhost:3101/login

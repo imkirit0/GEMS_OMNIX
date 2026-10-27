@@ -14,8 +14,8 @@ import { hashPassword, PasswordPolicyError } from "../src/server/auth";
 import { asAdmin, reset } from "./fixtures";
 
 const ORIGIN = "https://gems.test";
-const UA = { id: "00000000-0000-0000-0000-00000000000a", login: "uA", password: "centre-pass-1234" };
-const HO = { id: "00000000-0000-0000-0000-0000000000ff", login: "hoAll", password: "ho-pass-12345678" };
+const UA = { id: "00000000-0000-0000-0000-00000000000a", login: "ua", password: "centre-pass-1234" };
+const HO = { id: "00000000-0000-0000-0000-0000000000ff", login: "hoall", password: "ho-pass-12345678" };
 
 function post(path: string, fields: Record<string, string>, { origin = ORIGIN as string | null, cookie = "" } = {}) {
   const headers = new Headers({ "content-type": "application/x-www-form-urlencoded" });

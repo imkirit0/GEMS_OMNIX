@@ -24,19 +24,20 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
     await db.query(`insert into app.area (id, region_id, name) values (1, 1, 'A1'), (2, 1, 'A2'), (3, 2, 'B1')`);
     await db.query(`insert into app.centre (id, code, name, area_id, status) values
       (1, 'KL2-25', 'Centre A', 1, 'ACTIVE'), (2, 'KL3-07', 'Centre A2', 2, 'ACTIVE'), (3, 'TN1-03', 'Centre B', 3, 'ACTIVE')`);
-    await db.query(`insert into app.permission (key, description) values
-      ('org.centre.view', 'View centre'), ('numbering.series.allocate', 'Allocate a document number'),
-      ('rbac.role.manage', 'Manage roles')`);
+    await db.query(`insert into app.permission (key, description, sensitive) values
+      ('org.centre.view', 'View centre', false), ('numbering.series.allocate', 'Allocate a document number', false),
+      ('rbac.view', 'View users and roles', false), ('rbac.user.manage', 'Manage users', true), ('rbac.role.manage', 'Manage roles', true)`);
     await db.query(`insert into app.role (id, key, name) values (1, 'centre_admin', 'Centre admin'),
       (2, 'ho_viewer', 'HO viewer'), (3, 'rbac_admin', 'RBAC admin')`);
     await db.query(`insert into app.role_permission values
-      (1, 'org.centre.view'), (1, 'numbering.series.allocate'), (2, 'org.centre.view'), (3, 'rbac.role.manage')`);
+      (1, 'org.centre.view'), (1, 'numbering.series.allocate'), (2, 'org.centre.view'),
+      (3, 'rbac.view'), (3, 'rbac.user.manage'), (3, 'rbac.role.manage')`);
     await db.query(`insert into app.app_user (id, login, display_name, status) values
-      ('00000000-0000-0000-0000-00000000000a', 'uA', 'User A', 'ACTIVE'),
-      ('00000000-0000-0000-0000-00000000000b', 'uB', 'User B', 'ACTIVE'),
-      ('00000000-0000-0000-0000-0000000000a1', 'hoR1', 'HO Region 1', 'ACTIVE'),
-      ('00000000-0000-0000-0000-0000000000a2', 'hoArea', 'HO Area A1', 'ACTIVE'),
-      ('00000000-0000-0000-0000-0000000000ff', 'hoAll', 'HO All', 'ACTIVE'),
+      ('00000000-0000-0000-0000-00000000000a', 'ua', 'User A', 'ACTIVE'),
+      ('00000000-0000-0000-0000-00000000000b', 'ub', 'User B', 'ACTIVE'),
+      ('00000000-0000-0000-0000-0000000000a1', 'hor1', 'HO Region 1', 'ACTIVE'),
+      ('00000000-0000-0000-0000-0000000000a2', 'hoarea', 'HO Area A1', 'ACTIVE'),
+      ('00000000-0000-0000-0000-0000000000ff', 'hoall', 'HO All', 'ACTIVE'),
       ('00000000-0000-0000-0000-0000000000d0', 'disabled', 'Disabled user', 'DISABLED')`);
     await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, region_id, area_id, scope_centre_id) values
       ('00000000-0000-0000-0000-00000000000a', 1, 'CENTRE', null, null, 1),
@@ -56,6 +57,8 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
         ('tok-expired', '00000000-0000-0000-0000-00000000000a', '-1 minute', null),
         ('tok-revoked', '00000000-0000-0000-0000-00000000000a', '8 hours', now()),
         ('tok-disabled', '00000000-0000-0000-0000-0000000000d0', '8 hours', null)) v(t, u, e, r)`);
+    // explicit ids above do not advance the identity sequences; later inserts must not collide with them
+    for (const t of ["region", "area", "centre", "role"]) await db.query(`select setval('app.${t}_id_seq', (select max(id) from app.${t}))`);
     await db.query(`insert into app.number_series (centre_id, doc_type, period, gap_rule, current)
       select c, d, $1, $2::app."GapRule", 0 from unnest(array[1, 2, 3]) c, unnest(array['FEEREC', 'INV']) d`, [PERIOD, gapRule]);
   });

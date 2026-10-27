@@ -15,8 +15,8 @@ export const PLATFORM_TESTS = {
   "T-AUTH-017": "API bearer tokens: separate machine-auth module, not a mandatory criterion",
 };
 
-const CENTRE_USER = { id: "00000000-0000-0000-0000-00000000000a", login: "uA", password: "centre-pass-1234", requiresTotp: false };
-const HO_USER = { id: "00000000-0000-0000-0000-0000000000ff", login: "hoAll", password: "ho-pass-12345678", requiresTotp: true };
+const CENTRE_USER = { id: "00000000-0000-0000-0000-00000000000a", login: "ua", password: "centre-pass-1234", requiresTotp: false };
+const HO_USER = { id: "00000000-0000-0000-0000-0000000000ff", login: "hoall", password: "ho-pass-12345678", requiresTotp: true };
 
 // TOTP code for the current 30 s step plus an offset (codes are single use, so tests move forward in steps)
 export function totp(secret: string, offsetSteps = 0): string {

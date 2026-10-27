@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-27, after the auth follow-ups (evidence E-017).
+**Last updated:** 2026-10-27, after user and role administration (evidence E-018).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -12,13 +12,13 @@
 | Measure | Value | Source |
 |---|---|---|
 | Requirements (traceability matrix) | 290 | audit 02, T-DOC-001 |
-| Requirements verified (VER) | **0** | E-017 |
+| Requirements verified (VER) | **0** | E-018 |
 | Open business decisions | **115** (107 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
-| Automated tests | **45 passing** locally (19 foundation + 21 T-AUTH + 5 auth HTTP), 0 failing | `evidence/auth-followups-2026-10-27T163706.txt` |
+| Automated tests | **59 passing** locally (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap), 0 failing | `evidence/rbac-2026-10-27T173016.txt` |
 | CI | **none yet** | — |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `4558768`; later commits are local until you approve a push | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) up to `6e1d30b`; later commits are local until you approve a push | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -37,7 +37,8 @@
 | 11 | ADR-001 bake-off: Auth.js eliminated, Better Auth 15/17, first-party 17/17; **B approved** | 2026-10-27 | E-015, commit `cc4766f` |
 | 12 | Auth module ported into the app (`src/server/auth`, migration `0003_auth`, permanent T-AUTH suite); Better Auth/Auth.js code and packages removed; `gems_auth` routed through the pooler | 2026-10-27 | E-016, commit `4558768` |
 | 13 | Auth follow-ups: second-factor lockout across challenges (T-AUTH-006b); idle timeout and account rules enforced in the DB (T-AUTH-013b); centre deactivation (T-AUTH-012); **timing oracle found and fixed** (ratio 2.62 → 0.99, T-AUTH-002b); password minimum in the module | 2026-10-27 | E-017 |
-| 14 | Sign-in screens and route handlers: login, two-step verify, TOTP enrolment (recovery codes shown once), logout, password reset; same-origin check on every POST (T-AUTH-016); verified on a real `next start` server | 2026-10-27 | E-017 |
+| 14 | Sign-in screens and route handlers: login, two-step verify, TOTP enrolment (recovery codes shown once), logout, password reset; same-origin check on every POST (T-AUTH-016); verified on a real `next start` server | 2026-10-27 | E-017, commit `6e1d30b` |
+| 15 | User and role administration (WF-X13; FR-009/093/228): create/disable users, assign/remove scoped roles, roles and permissions, one-time set-up links; **no over-grant**, step-up, audit, sessions revoked, TOTP requirement automatic; enforced in the app **and** the DB; screens `/admin/*` and `/stepup`; first-admin bootstrap script | 2026-10-27 | E-018 |
 
 ## 3. Partly done
 
@@ -54,9 +55,13 @@
 - [ ] E-mail adapter for reset links. Needs a provider decision (D-COMM-1); today links go to an in-memory outbox, so **reset does not reach users yet**
 - [ ] Independent security review of the auth module (required before production)
 - [ ] Set `TRUST_PROXY_HEADERS=1` on the hosting platform (otherwise every client shares one rate-limit bucket)
-- [ ] User and role administration (WF-X13): today users and passwords can only be created by SQL
 - [ ] T-AUTH-017 API bearer tokens: only when an API consumer needs them (D-API-1)
 - [ ] Visual design of the screens. They are unstyled on purpose; needs a design system decision
+
+**Administration (remaining):**
+- [ ] Delegated administration (regional admins managing only their region): today RBAC actions need network-wide rights, the safe default
+- [ ] Map the 43 legacy roles into roles and permissions (D-SEC-1, business decision)
+- [ ] Permission keys for the business modules are added as each module is built
 
 **Platform:**
 - [ ] CI pipeline running migrate + tests on every push

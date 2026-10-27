@@ -29,9 +29,14 @@ describe("database isolation (T-RLS)", () => {
     try {
       for (const sql of ["create table app.x (i int)", "alter table app.centre disable row level security",
         "drop policy scope_select on app.centre", "update app.app_session set revoked_at = null",
-        "select * from app.role_assignment", "select * from app.app_user"]) {
+        "select * from app.app_user", "select password_hash from app.app_user", "select totp_secret_enc from app.app_user",
+        "insert into app.role_assignment (user_id, role_id, scope_kind) values ('00000000-0000-0000-0000-00000000000a', 3, 'ALL')",
+        "update app.app_user set status = 'ACTIVE'"]) {
         await expect(app.query(sql), sql).rejects.toMatchObject({ code: "42501" });
       }
+      // admin reads are granted but filtered by RLS: without a session nothing is visible
+      expect((await app.query("select count(*)::int n from app.role_assignment")).rows[0].n).toBe(0);
+      expect((await app.query("select count(*)::int n from app.app_user")).rows[0].n).toBe(0);
     } finally { await app.end(); }
   });
 
@@ -57,7 +62,11 @@ describe("database isolation (T-RLS)", () => {
              (select rolsuper or rolbypassrls from pg_roles where oid = p.proowner) owner_bypasses
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.prosecdef order by 1`).then((r) => r.rows));
-    expect(fns.map((f) => f.proname)).toEqual(["account_usable", "has_permission", "scoped_centre_ids", "session_user_id", "visible_centre_ids"]);
+    // every privileged function is listed on purpose: a new one must be reviewed and added here
+    expect(fns.map((f) => f.proname)).toEqual(["account_usable", "assert_can_grant_role", "can_grant_permission", "has_permission",
+      "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
+      "rbac_set_user_status", "rbac_unassign", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
+      "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids", "visible_centre_ids"]);
     for (const f of fns) expect(f, f.proname).toMatchObject({ fixed: true, owner_bypasses: true });
 
     expect(await visibleCentres(T.uA)).toEqual([C.A]);

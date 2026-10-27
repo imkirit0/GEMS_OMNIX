@@ -109,6 +109,7 @@ model Role {
 model Permission {
   key         String           @id
   description String
+  sensitive   Boolean          @default(false) // holding it makes TOTP mandatory (06 §3)
   roles       RolePermission[]
 
   @@map("permission")

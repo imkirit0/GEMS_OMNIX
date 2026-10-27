@@ -457,3 +457,77 @@ File SHA-256 at run time:
 | tests/auth-http.test.ts | 90528a6d85a7871ef0010d6e545f408143431816f38cc8b9db38c2374529f66e |
 | tests/auth/suite.ts | 11ea7753980b3b9b1c95853c30e015a067e0a8494a37e182c31d55af48f1d8d9 |
 | evidence/auth-followups-2026-10-27T163706.txt | 6e6ff0ced3263fcd2d7e90beb8d97e8424a572037824f45ac0d0eca7b780a702 |
+
+## E-018 User and role administration (2026-10-27)
+- **Request:** the user said "push it and continue with user and role administration".
+- **Push:** `4558768..6e1d30b` to `origin/main`.
+
+**Migration `0005_rbac`**
+- `permission.sensitive` column.
+- Logins stored lowercase (CHECK).
+- Admin permission catalogue: `rbac.view`, `rbac.user.manage` (sensitive), `rbac.role.manage` (sensitive).
+- Security-definer API:
+  - `rbac_create_user`, `rbac_set_user_status` (no self-disable; disabling revokes sessions);
+  - `rbac_assign` and `rbac_unassign` (no over-grant via `can_grant_permission`; removal is symmetric; target sessions revoked; `requires_totp` recomputed);
+  - `rbac_create_role`, `rbac_set_role_permissions` (only permissions held network-wide; all holders signed out);
+  - `rbac_issue_setup_token`;
+  - `session_step_up_fresh`.
+- `gems_app` reads only identity columns of `app_user` and `role_assignment`, under RLS (rbac.view or own row). `gems_auth` keeps full access by policy.
+
+**App**
+- `src/server/rbac.ts`: every write = scopedAction (authorize + audit) + fresh step-up + DB function. DB errors are mapped by SQLSTATE: 42501 → Forbidden (audited DENIED); 23505 → duplicate; P0002 → not found.
+- Pages: `/admin/users`, `/admin/users/[id]`, `/admin/roles`, `/admin/roles/[id]` (404 for non-admins), `/stepup`.
+- POST routes under `/admin/*` and `/auth/stepup` (same-origin, `safeNext` against open redirects).
+- One-time set-up link page (`no-store`, `no-referrer`).
+- `scripts/bootstrap-admin.mjs`: first admin only; refuses when one exists; no password; TOTP required; audited.
+- `scripts/smoke-admin.sh`: real-server journey.
+
+**Defects found and fixed while building** (none shipped):
+1. Prisma's adapter cannot decode `void` results, so void functions are now called with `$executeRaw`.
+2. Unique violations carry `originalCode`, not `code`.
+3. Fixtures inserted explicit ids without advancing sequences, so `createRole` collided.
+4. `adminPost` consumed the body before the permissions route re-read it.
+5. `$queryRawUnsafe` replaced by `Prisma.raw` (rule T-RLS-013).
+
+**Test changes**
+- Inventory tests updated deliberately: T-RLS-005 now pins 19 definer functions; T-RLS-001 asserts admin reads are RLS-filtered and that hash/secret columns stay unreadable.
+- Fixture logins are lowercase.
+
+**Mutation checks** (DB rebuilt afterwards):
+1. `can_grant_permission` → true: the over-grant test failed.
+2. `revoke_user_sessions_internal` no-op: T-E2E-X13 and the role-editing test failed.
+3. `session_step_up_fresh` → true: the step-up test failed.
+
+**Real-server smoke** (`scripts/smoke-admin.sh` on a fresh DB, `next start -p 3101`):
+1. Set-up link: 303 to /login?reset=ok.
+2. Sign-in: 303 to /login/enrol.
+3. Enrolment start: 303.
+4. Enrolment page shows a 32-character key.
+5. Confirm: 10 recovery codes.
+6. Home shows the admin link.
+7. `/admin/users`: 200.
+8. Create user: 303 to /admin/users/<id>?created=1.
+9. The new user is listed.
+10. No session: 307 to /login.
+
+**Final run** (`evidence/rbac-2026-10-27T173016.txt`, fresh DB):
+- migrations 0001–0005 applied;
+- drift: empty;
+- no `RawUnsafe` in src/ or app/;
+- `tsc`: 0 errors;
+- **Vitest: 5 files, 59 passed, 0 failed**;
+- `next build` compiled.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0005_rbac/migration.sql | 29f1ab7183d88f5607afa401a5ea0372913ab54a6dddfc2eb4b85ff86ec97806 |
+| src/server/rbac.ts | 4eb6570cc5ee2a96a6a237022fb2e58d7f32318111e5b2578c95c3d13ccdaf01 |
+| src/server/admin-http.ts | 898c0805555da6914df11a3afe3cee20fbca67ee2cafa508251a132c5ba457ae |
+| src/server/admin-page.ts | e887edae45fd263c267bfc917280933015aa0c1b3842f0cefc7412fe9e336aa0 |
+| scripts/bootstrap-admin.mjs | e8b42d3d6f594af212d2a3f35f47ef619e833e3349147afc70c8dbf8122b87e4 |
+| scripts/smoke-admin.sh | d3d15c003dc8d2d6e9deec67f58751307280cddc35a74ae7fac7fcb99249cc9e |
+| tests/rbac.test.ts | a5da586656a1efc58eacd3630f2f8d7b64f7f50616f991cda8aaae1ca523a799 |
+| tests/admin-http.test.ts | 0e522d0dd5e568fd874792bafc7ba95cbec758b0d7130f7d987069b90fb5a633 |
+| evidence/rbac-2026-10-27T173016.txt | 6661f148595ab6d6ba8d9a25ae65e53a1313f7c933c0ff5987459dd5ed976e6e |
