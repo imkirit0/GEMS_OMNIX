@@ -1,0 +1,28 @@
+{
+  "candidate": "A-better-auth",
+  "at": "2026-10-27T10:52:13.897Z",
+  "results": {
+    "T-AUTH-001": "fail",
+    "T-AUTH-002": "pass",
+    "T-AUTH-003": "pass",
+    "T-AUTH-004": "pass",
+    "T-AUTH-005": "pass",
+    "T-AUTH-006": "fail",
+    "T-AUTH-007": "pass",
+    "T-AUTH-008": "pass",
+    "T-AUTH-009": "pass",
+    "T-AUTH-010": "pass",
+    "T-AUTH-011": "pass",
+    "T-AUTH-013": "pass",
+    "T-AUTH-014": "pass",
+    "T-AUTH-015": "pass",
+    "T-AUTH-018": "pass",
+    "T-AUTH-019": "pass",
+    "T-AUTH-020": "pass"
+  },
+  "platformTests": {
+    "T-AUTH-012": "centre deactivation: scope function (platform), identical for every candidate",
+    "T-AUTH-016": "foreign Origin on server actions: enforced by Next.js itself",
+    "T-AUTH-017": "API bearer tokens: separate machine-auth module, not a mandatory criterion"
+  }
+}

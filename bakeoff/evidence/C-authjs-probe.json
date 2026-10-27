@@ -1,0 +1,11 @@
+{
+ "authCoreVersion": "0.41.3",
+ "status": 500,
+ "location": null,
+ "setCookies": [],
+ "adapterCalls": [],
+ "errors": [
+  "UnsupportedStrategy: Signing in with credentials only supported if JWT strategy is enabled. Read more at https://errors.authjs.dev#unsupportedstrategy",
+  "UnsupportedStrategy: Signing in with credentials only supported if JWT strategy is enabled. Read more at https://errors.authjs.dev#unsupportedstrategy"
+ ]
+}

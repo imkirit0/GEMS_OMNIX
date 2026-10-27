@@ -285,3 +285,68 @@ File SHA-256 at run time:
 | tests/fixtures.ts | f53a4f6fe5fd2d232c2b72fa7da19c98a34e2efe2a46374fdfdb055e600da442 |
 | tests/foundation.test.ts | 1bd95832261e775b5f4a2525bd6a7c22e4065622571f46fae18e7c71a3631115 |
 | evidence/foundation-2026-10-27T154926.txt | 1dc5e1bb21f0d984f15ad82c37aef7c4e9d0d45306a0f38b52e8f8b8f3a2bd20 |
+
+## E-015 ADR-001 authentication bake-off (2026-10-27, branch `adr-001-bakeoff`)
+- **Request:** the user said "start the ADR-001 auth bake-off".
+- **Branch:** all work is on the throwaway branch `adr-001-bakeoff`. **No auth code is on `main`.**
+
+**Candidate C (Auth.js v5)**
+- `next-auth@5.0.0-beta.32` depends only on `@auth/core@0.41.3`.
+- Probe: `bakeoff/probes/authjs-credentials-db-session.mjs`, run in an isolated scratch install.
+- Result: Credentials + `session.strategy "database"` gave HTTP 500, `UnsupportedStrategy: Signing in with credentials only supported if JWT strategy is enabled`, and 0 adapter calls.
+- **DR-14 closed: C fails the mandatory DB-session/revocation criterion.**
+
+**Candidates A and B**
+- **A:** Better Auth 1.7.12 (pinned a week behind 1.7.14).
+- **B:** first-party module on `@node-rs/argon2` 2.2.2, `@oslojs/otp` 1.1.0 and `@oslojs/encoding` 1.1.0.
+- Both use one contract and one suite (T-AUTH-001…011, 013–015, 018–020). T-AUTH-012/016/017 are platform tests and are not compared.
+
+**Final run** (`bakeoff/evidence/run-2026-10-27T162143.txt`, fresh DB):
+- `tsc`: 0 errors.
+- **53 tests: 51 passed, 2 failed.**
+  - Foundation: 19/19.
+  - B: 17/17.
+  - A: 15/17, failing T-AUTH-001 (raw session token at rest) and T-AUTH-006 (TOTP replay accepted).
+- A alone, first, on another fresh DB: 15/17 again.
+
+**Suite validity** (mutations on B, restored afterwards):
+- No replay check: T-AUTH-006 failed.
+- Login audit not awaited: T-AUTH-020 failed.
+
+**My own defects found and fixed during the bake-off** (none changed a candidate's capabilities):
+1. Fixture sessions counted as live (suite).
+2. Better Auth username minimum length 3 versus the 2-character fixture login (set `minUsernameLength: 1`).
+3. Reset outbox mapped to lowercase e-mail.
+4. Wrong internal API (`deleteSessions` instead of `deleteUserSessions`).
+5. In-memory rate limits carried across tests (switched A to database storage).
+6. The first Set-Cookie taken instead of the last.
+7. Backup codes read from the wrong call.
+8. Better Auth instance built before its tables existed (now lazy).
+9. A depended on a column created only by B's setup.
+
+**Discarded run:** `run-2026-10-27T162044` showed A at 2/17 due to defect 9. It was deleted and replaced by the run above.
+
+**Surface**
+- Own code: B 372 lines; A 295 lines of glue at 19 sites.
+- Added packages: A 20 (~7.5 MB), plus argon2; B 6 (~0.2 MB), plus the argon2 binary (~0.6 MB, shared).
+
+**Better Auth source findings A1–A8:** see the ADR §4.
+
+**Proposed decision:** B (`docs/adr/ADR-001-authentication.md`, status **Proposed**, approval blank).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| bakeoff/contract.ts | 04c50b7aa3f86c6e9b1f9c95bd85298cd239e4612437db9b21ff8d7c989266b3 |
+| bakeoff/suite.ts | 5558b6d6c362d34a99b46526cf9c6c730e671493b826979c68d9e269e2aca0dd |
+| bakeoff/a-better-auth/index.ts | a2560050591a065cf347aaed8993b23f115a3f24844225df498bef8cb6064ce0 |
+| bakeoff/b-firstparty/index.ts | 14f806e8ee4146f799597ac2e1b139a1eca1b499929d7c4b52a1fc3337a76490 |
+| bakeoff/b-firstparty/schema.sql | c85db6a22ddfd4547337f1cd540415a4ca7538d86bf78bd11590281330d1c3a2 |
+| bakeoff/sql/shared.sql | 79f220a67aaea3397a717730fdb6e6987f49d96132589d2bf474cdf1e2189b1a |
+| bakeoff/probes/authjs-credentials-db-session.mjs | 2064ba67eefba8fb20d27fa2e44794bb1868381d0d7377715cc7dbb2b2d7f2e2 |
+| bakeoff/evidence/A-better-auth-results.json | 997bda8448d2223da5deb3fed489e5d9b1497b55e27b26992802977b5e8e7abe |
+| bakeoff/evidence/B-first-party-results.json | cd59000c7f1004066b978d37d6f9f592ce8f87428e742012d0ad789086fa1e24 |
+| bakeoff/evidence/C-authjs-probe.json | 4a3a7cc47457c259d615720a5d5b33eeb3e9b3eeae93a88dd5bce3205f50acc1 |
+| bakeoff/evidence/run-2026-10-27T162143.txt | 6dc3b5b1dc83d3b32217b1a0ff51ef0f9da7af77b0e7ad3f9f5dc61d0b403b1f |
+| docs/adr/ADR-001-authentication.md | aee81ff5a33e22148ee4c57201e1bd7984a7d41594aaa7107d501e604ef29a86 |

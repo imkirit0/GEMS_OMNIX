@@ -5,7 +5,7 @@ config({ path: ".env.local", quiet: true });
 
 export default defineConfig({
   test: {
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "bakeoff/tests/**/*.test.ts"],
     environment: "node",
     fileParallelism: false, // tests share one database and reset fixtures
     testTimeout: 120_000,

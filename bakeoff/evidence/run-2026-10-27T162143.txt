@@ -1,0 +1,264 @@
+tsc: 0 errors
+
+ RUN  v4.1.12 D:/GEMS OMNIX
+
+ × bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-001 valid login: DB session, hardened cookie, token hashed at rest, audited, trusted by RLS 203ms
+   → expected [ 'ba.session' ] to deeply equal []
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-002 wrong password and unknown login look identical; failure audited
+[2m2026-10-27T10:51:52.982Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-002 wrong password and unknown login look identical; failure audited 143ms
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.131Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.149Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.168Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.191Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.210Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.238Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.259Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.278Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.299Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window
+[2m2026-10-27T10:51:53.321Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window 368ms
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.497Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.517Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.535Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.553Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.571Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.589Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.606Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.623Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.641Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.660Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.679Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.695Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.712Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.728Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.746Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.764Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.781Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.799Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.816Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit
+[2m2026-10-27T10:51:53.833Z[0m [33mWARN[0m [1m[Better Auth]:[0m User not found
+
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-004 per-IP rate limit 488ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-005 HO user without TOTP: forced enrolment, zero data access before it 258ms
+ × bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-006 TOTP wrong or replayed is rejected 229ms
+   → expected 'session' not to be 'session' // Object.is equality
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-007 recovery codes: single use; regenerating invalidates old ones 376ms
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-008 password reset: single use, 30 min, identical response for unknown login
+[2m2026-10-27T10:51:54.839Z[0m [33mWARN[0m [1m[Better Auth]:[0m Reset Password: User not found
+
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-008 password reset: single use, 30 min, identical response for unknown login 184ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-009 password change revokes all other sessions 214ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-010 role/scope change: revocation hook kills sessions at the app and RLS layers 137ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-011 deactivated user rejected on the next request 153ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-013 idle and absolute timeouts 202ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-014 session id rotated on login and on privilege change (step-up) 183ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-015 step-up re-auth must be at most 5 minutes old 175ms
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-018 legacy password hash: accepted once, rehashed to argon2id
+[2m2026-10-27T10:51:56.089Z[0m [33mWARN[0m [1m[Better Auth]:[0m Invalid password
+
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-018 legacy password hash: accepted once, rehashed to argon2id 173ms
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-019 argon2id with at least OWASP minimum cost 119ms
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-020 audit coverage, and the audit row is in the same transaction as the auth event
+[2m2026-10-27T10:51:56.431Z[0m [31mERROR[0m [1m[Better Auth]:[0m error error: injected audit failure
+    at D:\GEMS OMNIX\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at before (D:/GEMS OMNIX/bakeoff/a-better-auth/index.ts:81:54)
+    at async createWithHooks (file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/db/with-hooks.mjs:13:20)
+    at async Object.createSession (file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/db/internal-adapter.mjs:320:11)
+    at async file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/plugins/username/index.mjs:210:21
+    at async file:///D:/GEMS%20OMNIX/node_modules/@better-auth/core/dist/api/index.mjs:56:11
+    at async internalHandler (file:///D:/GEMS%20OMNIX/node_modules/better-call/dist/endpoint.mjs:29:20)
+    at async file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/api/dispatch.mjs:231:18
+    at async processRequest (file:///D:/GEMS%20OMNIX/node_modules/better-call/dist/router.mjs:82:11) {
+  length: 151,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function app.bakeoff_audit_fault_check() line 3 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3897',
+  routine: 'exec_stmt_raise'
+}
+
+stderr | bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-020 audit coverage, and the audit row is in the same transaction as the auth event
+# SERVER_ERROR:  error: injected audit failure
+    at D:\GEMS OMNIX\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at before (D:/GEMS OMNIX/bakeoff/a-better-auth/index.ts:81:54)
+    at async createWithHooks (file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/db/with-hooks.mjs:13:20)
+    at async Object.createSession (file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/db/internal-adapter.mjs:320:11)
+    at async file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/plugins/username/index.mjs:210:21
+    at async file:///D:/GEMS%20OMNIX/node_modules/@better-auth/core/dist/api/index.mjs:56:11
+    at async internalHandler (file:///D:/GEMS%20OMNIX/node_modules/better-call/dist/endpoint.mjs:29:20)
+    at async file:///D:/GEMS%20OMNIX/node_modules/better-auth/dist/api/dispatch.mjs:231:18
+    at async processRequest (file:///D:/GEMS%20OMNIX/node_modules/better-call/dist/router.mjs:82:11) {
+  length: 151,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function app.bakeoff_audit_fault_check() line 3 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3897',
+  routine: 'exec_stmt_raise'
+}
+
+ ✓ bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-020 audit coverage, and the audit row is in the same transaction as the auth event 184ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-001 valid login: DB session, hardened cookie, token hashed at rest, audited, trusted by RLS 221ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-002 wrong password and unknown login look identical; failure audited 135ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-003 lockout after N failures across IPs, same for unknown logins, unlocks after the window 265ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-004 per-IP rate limit 226ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-005 HO user without TOTP: forced enrolment, zero data access before it 153ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-006 TOTP wrong or replayed is rejected 220ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-007 recovery codes: single use; regenerating invalidates old ones 258ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-008 password reset: single use, 30 min, identical response for unknown login 159ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-009 password change revokes all other sessions 166ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-010 role/scope change: revocation hook kills sessions at the app and RLS layers 120ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-011 deactivated user rejected on the next request 133ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-013 idle and absolute timeouts 170ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-014 session id rotated on login and on privilege change (step-up) 148ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-015 step-up re-auth must be at most 5 minutes old 161ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-018 legacy password hash: accepted once, rehashed to argon2id 153ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-019 argon2id with at least OWASP minimum cost 104ms
+ ✓ bakeoff/tests/b.test.ts > ADR-001 candidate B-first-party > T-AUTH-020 audit coverage, and the audit row is in the same transaction as the auth event 171ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-001 runtime roles: not superuser, no BYPASSRLS, own nothing, no DDL 65ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-002 every table with centre_id (and centre itself) has ENABLE+FORCE RLS and per-command policies 50ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-005 definer functions: inventory, fixed search_path, owner bypasses RLS; scope truth table 114ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-006/007 missing, forged, expired, revoked or disabled-user sessions fail loudly 58ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-008 cross-centre writes under a centre-A session affect nothing 57ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-009 pooled transactions never inherit another session's scope 321ms
+ ✓ tests/foundation.test.ts > database isolation (T-RLS) > T-RLS-010 the transaction handle is dead after withScope returns 40ms
+ ✓ tests/foundation.test.ts > authorization and audit > permission must be held over a scope that covers the centre 75ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-RLS-018 denied action: no number consumed, one DENIED audit row, no OK row 60ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: change and audit commit together; a failure leaves neither 69ms
+ ✓ tests/foundation.test.ts > authorization and audit > T-AUD: audit log is append-only for the app and for the owner 60ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 268ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 110ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode GAPLESS (T-NUM) > T-NUM-006 series are independent per centre and document type 112ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-001 100 concurrent allocations through the pooler 247ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-002 rolled-back allocations release their numbers 101ms
+ ✓ tests/foundation.test.ts > numbering, NP-3 mode UNIQUE (T-NUM) > T-NUM-006 series are independent per centre and document type 96ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-007 FY boundary in Asia/Kolkata 0ms
+ ✓ tests/foundation.test.ts > numbering pure functions > T-NUM-009 format and length are NP-5 parameters; over-length is rejected 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-001 valid login: DB session, hardened cookie, token hashed at rest, audited, trusted by RLS
+AssertionError: expected [ 'ba.session' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ba.session",
++ ]
+
+ ❯ bakeoff/suite.ts:95:51
+     93|       for (const flag of [/;\s*HttpOnly/i, /;\s*Secure/i, /;\s*SameSit…
+     94|       expect(cookie).not.toMatch(/;\s*Domain=/i);
+     95|       expect(await tokenStoredInPlaintext(token)).toEqual([]);
+       |                                                   ^
+     96|       expect(await c.resolve(token)).toEqual({ userId: CENTRE_USER.id …
+     97|       expect(await withScope(token, async (tx) => (await tx.$queryRaw<…
+ ❯ bakeoff/suite.ts:75:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  bakeoff/tests/a.test.ts > ADR-001 candidate A-better-auth > T-AUTH-006 TOTP wrong or replayed is rejected
+AssertionError: expected 'session' not to be 'session' // Object.is equality
+ ❯ bakeoff/suite.ts:144:63
+    142|       const ch = (r as { challenge: string }).challenge;
+    143|       expect((await c.verifyTotp(ch, "000000")).kind).not.toBe("sessio…
+    144|       expect((await c.verifyTotp(ch, totp(secret))).kind).not.toBe("se…
+       |                                                               ^
+    145|       const r2 = await c.signIn(HO_USER.login, HO_USER.password, "10.0…
+    146|       const ch2 = (r2 as { challenge: string }).challenge;
+ ❯ bakeoff/suite.ts:75:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 51 passed (53)
+   Start at  16:21:52
+   Duration  9.56s (transform 79ms, setup 0ms, import 502ms, tests 8.79s, environment 0ms)
+
