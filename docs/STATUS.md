@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-28, ticket-engine core complete, incl. real-browser check (last evidence: E-028).
+**Last updated:** 2026-10-28, async large exports deferred by the owner (last evidence: E-028).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -71,7 +71,10 @@
 - [ ] Visual design of the screens. They are unstyled on purpose; needs a design system decision
 
 **Exports (remaining):**
-- [ ] Async export of very large files to private storage with a 5-minute signed link, re-authorised on download (06 §3). Needs a storage decision (e.g. Vercel Blob)
+- [ ] Async export of very large files to private storage with a 5-minute signed link, re-authorised on download (06 §3). **Deferred by the owner (2026-10-28)** until both exist:
+  - the first large dataset (students, fees or receipts; Stages 3–4), whose real size sets the threshold;
+  - the job runner (Stage 6/7: cron or queue, system principal, T-SEC-011/018, T-AUD-007).
+  Why now is too early: today's datasets are small. Centres has 386 legacy rows (about 40 KB CSV) and users is well under 1 MB, both far below the Vercel 4.5 MB response cap and the 120 s export timeout. The storage decision itself is settled: the private Supabase bucket (ADR-002).
 - [ ] PII per centre for centre-scoped PII datasets (today `pii.export` must be held for all centres)
 - [ ] Search rate limit (T-SEC-015, search part)
 
