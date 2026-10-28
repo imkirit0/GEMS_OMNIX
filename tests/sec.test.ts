@@ -9,6 +9,9 @@ import { scopedAction } from "../src/server/action";
 import { allocate } from "../src/server/numbering";
 import { safeRoute } from "../src/server/safe-route";
 import { buildCsp } from "../src/server/csp";
+import { RateLimited } from "../src/server/exports";
+import { SEARCH_POLICY } from "../src/server/rate-limit";
+import { withScope } from "../src/server/db";
 import { asAdmin, audits, C, PERIOD, reset, T } from "./fixtures";
 
 const codes = (rows: { code: string }[]) => rows.map((r) => r.code);
@@ -79,6 +82,20 @@ describe("T-SEC application-level isolation", () => {
     } finally { spy.mockRestore(); }
     // every route handler goes through safeRoute
     for (const f of routeFiles("app")) expect(fs.readFileSync(f, "utf8"), f).toMatch(/export const POST = safeRoute\(/);
+  });
+
+  test("T-SEC-015 search rate limit: per user, per minute; a plain list does not count; the window frees it", async () => {
+    for (let i = 0; i < SEARCH_POLICY.perWindow; i++) expect(await listCentres(T.uA, { q: "KL" })).toHaveLength(1);
+    await expect(listCentres(T.uA, { q: "KL" })).rejects.toBeInstanceOf(RateLimited);
+    await expect(listCentres(T.uA, { q: "KL" })).rejects.toMatchObject({ retryAfterSeconds: 60 });
+    expect(await listCentres(T.uA)).toHaveLength(1); // listing without a search term is not a search
+    expect(await listCentres(T.uB, { q: "TN" })).toHaveLength(1); // another user has their own budget
+    await asAdmin((db) => db.query(`update app.rate_hit set at = now() - interval '2 minutes'`));
+    expect(await listCentres(T.uA, { q: "KL" })).toHaveLength(1); // the window has passed
+    const hits = await asAdmin((db) => db.query(`select count(*)::int n from app.rate_hit where user_id = '00000000-0000-0000-0000-00000000000a'`));
+    expect(hits.rows[0].n).toBe(1); // old hits pruned on the way
+    // the app role cannot read or reset the counter itself; only app.rate_take() can
+    await expect(withScope(T.uA, (tx) => tx.$executeRaw`delete from app.rate_hit`)).rejects.toThrow();
   });
 
   test("T-SEC-014 CSP: the storage origin is allowed only for uploads and the download redirect (ADR-002)", () => {

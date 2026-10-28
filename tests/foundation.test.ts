@@ -65,7 +65,7 @@ describe("database isolation (T-RLS)", () => {
       where n.nspname = 'app' and p.prosecdef order by 1`).then((r) => r.rows));
     // every privileged function is listed on purpose: a new one must be reviewed and added here
     expect(fns.map((f) => f.proname)).toEqual(["account_usable", "assert_can_grant_role", "audit", "can_grant_permission", "has_permission",
-      "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
+      "rate_take", "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
       "rbac_set_user_status", "rbac_unassign", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
       "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids",
       "ticket_forward_candidates", "ticket_may_act", "ticket_may_receive", "ticket_may_view", "ticket_people", "ticket_type_lock",

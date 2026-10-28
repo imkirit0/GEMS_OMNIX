@@ -76,7 +76,7 @@
   - the job runner (Stage 6/7: cron or queue, system principal, T-SEC-011/018, T-AUD-007).
   Why now is too early: today's datasets are small. Centres has 386 legacy rows (about 40 KB CSV) and users is well under 1 MB, both far below the Vercel 4.5 MB response cap and the 120 s export timeout. The storage decision itself is settled: the private Supabase bucket (ADR-002).
 - [ ] PII per centre for centre-scoped PII datasets (today `pii.export` must be held for all centres)
-- [ ] Search rate limit (T-SEC-015, search part)
+- [x] Search rate limit (T-SEC-015, search part): done 2026-10-28 (migration 0010, `app.rate_take`, 30 searches per minute per user, PMC)
 
 **Administration (remaining):**
 - [ ] Delegated administration (regional admins managing only their region): today RBAC actions need network-wide rights, the safe default
@@ -110,7 +110,7 @@
 | 012 forced error → generic message + reference | **done** (all routes and pages) | tests/sec.test.ts, smoke-security |
 | 013 HO "act as centre" impossible | **done** | tests/sec.test.ts |
 | 014 XSS inert; CSP blocks inline script | **done** (escaping + nonce CSP); template rendering still to come (certificates/ID cards) | smoke-security |
-| 015 rate limit on exports and search | **exports done**; search rate limit still to do (search is cheap and scoped today) | tests/exports.test.ts |
+| 015 rate limit on exports and search | **done**: exports (audit-row count) and search (`app.rate_take`, 30 per minute per user, PMC). Exports answer 429; the search page shows a message, because a page cannot set its own status | tests/exports.test.ts, tests/sec.test.ts |
 | 016 uploads: magic bytes, size, zip bomb | waits on uploads | Stage 3 |
 | 017 client bundle secret scan | **done** (CI gate) | scripts/scan-client-bundle.mjs |
 | 018 cron endpoint without secret → 401 | waits on jobs | Stage 6/7 |

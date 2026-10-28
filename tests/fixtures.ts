@@ -36,7 +36,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
     await db.query(`truncate app.audit_log, app.number_series, app.app_session, app.role_assignment, app.role_permission,
       app.role, app.permission, app.app_user, app.centre, app.area, app.region,
       app.ticket_document, app.ticket_upload, app.ticket_event, app.ticket_level, app.ticket, app.ticket_number_series,
-      app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category restart identity cascade`);
+      app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category, app.rate_hit restart identity cascade`);
     if ((await db.query(`select to_regclass('app.test_ticket_counter') t`)).rows[0].t) await db.query(`truncate app.test_ticket_counter`);
     await db.query("set session_replication_role = origin");
     await db.query(`insert into app.region (id, code, name) values (1, 'R1', 'Region 1'), (2, 'R2', 'Region 2')`);
