@@ -101,4 +101,32 @@ None.
 
 ## Resolution
 
-Pending the author's choice at the Stage 6 checkpoint.
+Owner chose "update doc first" and asked Claude to make the edits and propose the decisions (2026-10-28). All 23 findings were addressed in `ticket-engine.md`:
+
+| Finding | Resolution |
+|---|---|
+| C1 | Queue calls `app.ticket_may_act(id)`, one argument, session user |
+| C2 | One audit action `ticket.approve` with `final`/`level` in detail (`ticket.approve.final` dropped); targetType/targetId and before/after table per action; raise id generated up front |
+| C3 | Errors table: each failure → `Forbidden` / `TicketError` reason / `ApplyFailed`, form and upload responses, audit row; `notallowed` dropped, `inactive` added; `InvalidRequest`/`StaleRequest` replaced by `TicketError` |
+| C4 | **DD-9 (proposed):** re-raise by raiser only, once, same type and centre, payload pre-filled, documents re-attached |
+| C5 | Handler `fields`, `p.<name>` inputs, payload as `Record<string,string>`; `TicketRow<P>` fields; `test.counter` payload; form field names |
+| C6 | **DD-10 (proposed):** `number` text, pad 0, max 30, prefix fixed text; `TK-26` meaning left unknown |
+| C7 | "No gaps" enforced by `setTypeLevels` and at activation, not a row check |
+| C8 | **DD-11 (proposed):** `updateType` + `ticket.type.update`; `handler_key` only while inactive |
+| C9 | `ticket_may_view` spelled out, including past forward targets and role-over-centre viewers |
+| C10 | New internal helper `app.user_centre_ids(user, permission, role)` |
+| C11 | "Stage N" = roadmap stage; review called zoom-out review with link to `zoom_out_report.md` |
+| C12 | Supabase headers and three call shapes; `scripts/storage-setup.mjs` (item 9a) with limits; signed URLs contain bucket/key, accepted |
+| C13 | Pages always deployed; no type activatable without a handler |
+| C14 | **DD-12 (proposed):** deactivation blocks raise and final approval; reject/forward/non-final approve continue |
+| C15 | `ApplyFailed` wrapper; precedence (Forbidden → DENIED, no hook); hook after retries; FAILED row `{level, error: cause.name}` |
+| C16–C18 | "Terms and references" table with meanings and file paths; ⛔ prod-gate explained |
+| C19 | Column types, FKs `on delete restrict`, `version` starts at 1, `closed_at` on both closes, `ticket_event` contents |
+| C20 | Magic bytes listed; `content_type` from detected signature; `maxFilesPerTicket: 5` (PMC) |
+| C21 | Filters, sort order, 50 per page keyset |
+| C22 | employee = user = `app.app_user` |
+| C23 | `.env.local` is git-ignored, local step |
+
+Also found while fixing: the design called the yearly reset "NP-3", but in `docs/audit/revisions/v1.1-corrections.md` §C-02.1 reset is **NP-2** and NP-3 is the gap rule. Corrected throughout.
+
+DD-9…DD-12 await the owner's approval. Then the one allowed Stage 6 re-audit runs.
