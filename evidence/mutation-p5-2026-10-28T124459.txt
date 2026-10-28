@@ -1,0 +1,12 @@
+POC P5 mutation checks (ticket engine), 2026-10-28, local Docker database, commit 3ec391e working tree.
+Each mutation was applied, the named test run alone, then the code restored byte-for-byte (cmp) and re-checked.
+
+1. Exactly once: removed `for update` from lockTicket, the OPEN/version check in act step 1, and the
+   version condition in bump(). Ran T-TKT-006 -> FAILED: the second approver got a database error
+   (guard trigger: "ticket ... is closed") instead of a conflict. The database guard still refused
+   the second change, so the domain change was not applied twice. Restored.
+2. All or nothing: replaced `throw new ApplyFailed(level, e)` with swallowing the error.
+   Ran T-TKT-007 -> FAILED ("promise resolved undefined instead of rejecting"). Restored; cmp equal.
+3. No self-approval: replaced app.ticket_may_act in the local database without `t.raised_by <> me.id`.
+   Ran T-TKT-010 -> FAILED ("promise resolved undefined instead of rejecting"). Restored the original
+   function from migration 0009; T-TKT-010 passed again. (ci.sh later rebuilt the database from migrations.)

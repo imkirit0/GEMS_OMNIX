@@ -834,3 +834,47 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | tests/foundation.test.ts | 5ce18f6f63cb306f8314943400003bbfe8b25717a71e8b244a11890e6a28e24c |
 | tests/sql/ticket-test-handler.sql | 641be5d44197631a08142afba2e530713a67113da96a61374b1dd4c6981e6264 |
 | evidence/ci-p2-2026-10-28T123134.txt | 9907f2c96183968a552f12b6d0c091ec4700fcc22c1eb67034b6d2370832cf1c |
+
+## E-025 Ticket engine build phase P3: server modules and tests (2026-10-28)
+- **Request:** "do next step", which started P3 of the approved design.
+- **Commit `3ec391e`:**
+  - `src/server/tickets/engine.ts` (requestUpload, raise, act, reassign, the reads, documentLink, ticketDb)
+  - `src/server/tickets/setup.ts`, `handlers.ts`, `test-handler.ts`, `policy.ts`
+  - `src/server/storage.ts`, `storage-fake.ts`
+  - `action.ts`: the onFailure hook (FAILED); a failed audit write no longer masks the original error
+  - `rbac.ts`: `adminWrite` exported; the `RbacError` message key
+  - `numbering.ts`: ticket number allocation and format
+  - `tests/tickets.test.ts`
+  - the audit catalogue (+15 actions) and the gate scan of the ticket modules
+  - `STORAGE_DRIVER=fake` in CI, required by `ci.sh`
+- **Tests:** `tests/tickets.test.ts` has 30 passing tests and 3 `todo`:
+  - T-TKT-001…015 and 019…022;
+  - the guard triggers, idempotent raise, the upload gate, deactivation, setup refusals and message keys, the handler change with open tickets, the failure hook (DENIED vs FAILED, an exhausted P2034 writes no FAILED row, an audit fault does not mask Forbidden), 404 parity, the eligibility property (queue ⇔ approve succeeds, exactly {l1, both}), no leaks across centres, and the load guards;
+  - `todo`: T-TKT-016/017/018 (Stage 5 and the domain modules).
+- **First run:** 4 failures, all in the tests or the API shape, none in the engine logic, all fixed:
+  - an update matching no rows fires no row trigger;
+  - a "lying browser" case declared the true size;
+  - an assertion on the first audit row (DENIED) instead of the OK row;
+  - synchronous validation throws in `setup.ts`, now `async`.
+- **Mutation checks (POC P5):** all three caught; record `evidence/mutation-p5-2026-10-28T124459.txt`.
+  - Exactly once: T-TKT-006 failed, and the guard trigger still refused the second change.
+  - All or nothing: T-TKT-007 failed.
+  - Self-approval: T-TKT-010 failed.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: T-DOC-001 0 errors; no drift; typecheck; **110 passed + 3 todo** (9 files); build; no client secrets; real-server smoke passed.
+- **Not yet:** routes, screens, CSP and the HTTP-level checks (P4); the manual Supabase run (P5).
+
+**Requirements VER: still 0.** These are engine-level tests on synthetic data; marking R-094 rows VER waits for the routes (P4) and for a handler from a domain module.
+
+| File | SHA-256 |
+|---|---|
+| src/server/tickets/engine.ts | f0b82a1dfab9700f45fda30c5ae5e69a8c686d0d8ac4e56920b390affae7af91 |
+| src/server/tickets/handlers.ts | 920e2b61224a223ef91e92625d52fafdcee0eee0fea461c3bb5a27543da7978f |
+| src/server/tickets/policy.ts | 30b9d2e34579bd617128c663fbbc21969bfc872702d6d39eba1bb46cce9f2338 |
+| src/server/tickets/setup.ts | 2f1e7d97335e5c2d238d9beb0462761755dd9c10201952d5a0f4952747138096 |
+| src/server/tickets/test-handler.ts | 975f4a92113a9cd90e6a25533cfa6cbca2f900abccac7a3eef39066e925969e7 |
+| src/server/storage.ts | de2bc610373dba35fa2ac27ccd743ae509c573f5f940c58d94ea9c5fa7f04802 |
+| src/server/storage-fake.ts | 7ca76f66de8b11635e3045e0ea5ad76448e4a3b489a042b60d1d5830a0326bb4 |
+| src/server/action.ts | 1ea134a5383e478605f0c84c336fdd5ca97de579c804abdba10473b3d0842210 |
+| tests/tickets.test.ts | fc90aa139b31fd5289a10f92338adcf91a0830cf67eefbbb3efe49c07e5c1bb6 |
+| evidence/ci-p3-2026-10-28T124459.txt | 84abc47fa30b121db8255c7ac2906e4fcb0f46f8c7a6b2b4509bcb6cb4525798 |
+| evidence/mutation-p5-2026-10-28T124459.txt | 38d969cd5f0464a8a45f316bf4838f380df69993549990fffb6f4e7037679463 |
