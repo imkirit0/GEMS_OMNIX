@@ -85,6 +85,7 @@
 - [ ] Permission keys for the business modules are added as each module is built
 
 **Platform:**
+- [x] Dev server reachable from any IPv4 address (`allowedDevOrigins: ["*.*.*.*"]` in `next.config.ts`, owner request 2026-10-28; `next dev` only, no effect on production)
 - [ ] Root-cause the Supabase connection drops (C-26), from inside the region
 
 **Stage 0 (discovery):** ⛔ blocked on legacy MySQL read-only access.

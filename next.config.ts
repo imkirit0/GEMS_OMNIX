@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
   // the pg driver and Prisma's adapter are server-only and must not be bundled
   serverExternalPackages: ["pg", "@prisma/adapter-pg"],
   poweredByHeader: false,
+  // `next dev` only: let the dev server be opened from any IPv4 address (LAN, WSL, VM). Next refuses a bare "*",
+  // so four single-label wildcards are the widest pattern; they also match any four-label host name.
+  // No effect on `next build` / `next start`.
+  allowedDevOrigins: ["*.*.*.*"],
   headers: async () => [{ source: "/:path*", headers: securityHeaders }],
 };
 
