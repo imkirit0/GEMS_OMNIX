@@ -79,6 +79,8 @@ Expected results that depend on an unapproved decision (PMC) are written **param
 ### T-RLS: database isolation (18 tests, defined in 01 §C-04; same IDs T-RLS-001…T-RLS-018)
 Pass condition: all 18 pass against the production role set, **through PgBouncer in transaction mode and through the Neon pooled URL**. Until then, no RLS security claim is made.
 
+T-RLS-015 (defined in v1.1 C-04): `gems_etl` is created only by `scripts/etl/setup.mjs` in a migration environment and dropped at go-live, followed by the queries in `docs/designs/migration-framework/migration-framework.md`. Schemas `raw` and `migration` have no RLS: they have no `centre_id` and are revoked from every role except the schema owner and `gems_etl`.
+
 ### T-NUM: numbering mechanism (10 tests, defined in 01 §C-02.3; T-NUM-001…T-NUM-010)
 Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts sign-off of NP-1…NP-8.
 
@@ -222,19 +224,19 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 ### T-MIG: migration reconciliation (K1–K11 of 01 §C-03.3)
 Each test runs on every dry run and rehearsal. Exit criteria are in 08.
 
-| ID | Check |
-|---|---|
-| T-MIG-001 | K1 source coverage |
-| T-MIG-002 | K2 disposition balance |
-| T-MIG-003 | K3 target provenance |
-| T-MIG-004 | K4 merge integrity |
-| T-MIG-005 | K5 split integrity |
-| T-MIG-006 | K6 referential integrity |
-| T-MIG-007 | K7 amount control totals |
-| T-MIG-008 | K8 ledger |
-| T-MIG-009 | K9 determinism |
-| T-MIG-010 | K10 report parity |
-| T-MIG-011 | K11 sampled field fidelity |
+| ID | Check | Stage 2 |
+|---|---|---|
+| T-MIG-001 | K1 source coverage | P8 on synthetic data |
+| T-MIG-002 | K2 disposition balance | P8 on synthetic data |
+| T-MIG-003 | K3 target provenance | P8 on synthetic data |
+| T-MIG-004 | K4 merge integrity | P8 on synthetic data |
+| T-MIG-005 | K5 split integrity | P8 on synthetic data (unit test of `k5`) |
+| T-MIG-006 | K6 referential integrity | P8 on synthetic data |
+| T-MIG-007 | K7 amount control totals | Stage 4 (migration-framework DD-4) |
+| T-MIG-008 | K8 ledger | Stage 4 (migration-framework DD-4) |
+| T-MIG-009 | K9 determinism | P8 on synthetic data |
+| T-MIG-010 | K10 report parity | needs legacy data |
+| T-MIG-011 | K11 sampled field fidelity | needs legacy data |
 
 ### T-XM: cross-module scenarios
 | ID | Scenario |
