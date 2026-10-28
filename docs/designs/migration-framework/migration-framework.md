@@ -1,7 +1,7 @@
 # Migration framework: ETL foundation and P8 (Stage 2)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner accepted every section on 2026-10-28; build approval follows the EGM review (steps 5–9). Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8).
+*   **Status:** Proposed. The design owner accepted every section on 2026-10-28; build approval follows the EGM review (steps 5–9). Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8), [`implementation_readiness_report.md`](implementation_readiness_report.md) (step 9).
 *   **Date:** 2026-10-28
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -101,7 +101,7 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`; 
    │                   cutover: approvals → refused: RunRefused thrown, nothing kept
    │  1. load raw      etl/fixture.ts fills raw.legacy_* (the only source in Stage 2); input_hash
    │  2. start run     migration.run row (RUNNING); audit migration.run.start
-   │  3. prepare       identity() on every admission row; match keys of the valid ones in one query
+   │  3. prepare       identityField() per field of every admission row; match keys of the valid ones
    │  4. apply rules   centre → admission (person + admission) → registration
    │  5. write         ONE transaction: person, admission, registration rows; key_map and
    │                   exception rows of all entities; counters (DD-6, DD-9)
@@ -120,22 +120,31 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`; 
     *   `seedYears: string[]` (default `["2026-27"]`, a fixed value, PMC under NP-8);
     *   `legacyCurrent?: { REGISTER?: bigint; ADMISSION?: Record<string, bigint> }`: the legacy counters read at the freeze;
     *   `artifactDir` (default `evidence/`).
-*   **Result:** `{ runId, status: "PASSED" | "FAILED", digest, checks, artifactPaths }`. A refused run throws `RunRefused(reasons: string[])`; it keeps no row anywhere and writes no audit or artifact.
+*   **Result:** `{ runId, status: "PASSED" | "FAILED", digest, checks, artifactPaths, errors }`. A refused run throws `RunRefused(reasons: string[])`; it keeps no row anywhere and writes no audit or artifact.
 *   **Reset (Z18):** `scripts/etl/reset.sql`, run as the schema owner, truncates the three `raw.legacy_*` tables, `migration.key_map`, `migration.exception`, `migration.reconciliation`, `migration.run`, `app.registration`, `app.admission`, `app.person`, and deletes the `REGISTER` and `ADMISSION` counters. It **keeps `migration.rule`** and its approvals. Operators use it between rehearsal runs on the same database, after a crash, and on the production database before go-live; P8 uses it between its runs. The usual sequence is: dry run (registers the mapping rules) → review and approve → reset → cutover run.
 
 ### Where It Runs (DD-1)
 
 *   **Schemas** `raw` and `migration` in the GEMS database. No `stage` schema (DD-5); no `archive` schema (DD-8).
-*   **Created by a setup script, not a Prisma migration.** `scripts/etl/setup.mjs` runs `scripts/etl/setup.sql` as the **schema owner** (`MIGRATE_URL`), once, on a fresh database, in a migration environment. The schema owner owns every object (Prisma migration 0002: runtime roles never own objects). The operator runs setup on the new production database before go-live only; the go-live checklist then revokes `gems_etl`'s privileges, drops the role, and runs the T-RLS-015 query below. The schemas and the key map stay as evidence; whether `raw` is kept is D-SEC-5. The Prisma datasource lists only `app`, so the drift gate is unaffected.
-*   **Lock-down:** `setup.sql` revokes all on schemas `raw` and `migration` from `public` (and from `anon` and `authenticated` where those Supabase roles exist), as Prisma migration 0002 does for `app`.
-*   **`gems_etl`:** `setup.mjs` creates it if missing, then always runs `alter role gems_etl login bypassrls nosuperuser nocreatedb nocreaterole noinherit`, then sets the password: it computes `select format('alter role gems_etl password %L', $1)` with `ETL_DB_PASSWORD` and executes the result. The role owns nothing and holds only:
+*   **Created by a setup script, not a Prisma migration.** `scripts/etl/setup.mjs` connects as the **schema owner** (`MIGRATE_URL`, loaded from `.env.local` with `dotenv` and never from `.env`, as `prisma7.config.ts` and `scripts/bootstrap-admin.mjs` do), once, on a fresh database, in a migration environment. The schema owner owns every object (Prisma migration 0002: runtime roles never own objects). The operator runs setup on the new production database before go-live only; the go-live checklist then runs `drop owned by gems_etl; drop role gems_etl` as the schema owner (this removes every privilege, including CONNECT) and the T-RLS-015 query below. The schemas and the key map stay as evidence; whether `raw` is kept is D-SEC-5. The Prisma datasource lists only `app`, so the drift gate is unaffected.
+*   **Lock-down:** `setup.sql` revokes all on schemas `raw` and `migration` and on all their tables from `public` (and from `anon` and `authenticated` where those Supabase roles exist), mirroring both revokes Prisma migration 0002 makes for `app`.
+*   **No RLS on these tables** (roadmap row 2 asks for an RLS coverage test on every new table): `raw` and `migration` have no `centre_id`, are reachable only by the schema owner and `gems_etl`, and are revoked from every other role; T-RLS-002 covers schema `app` only. This exemption is stated in audit 09 (item 1).
+*   **`gems_etl`.** `setup.mjs` works in this order:
+    1.  if missing, `create role gems_etl login bypassrls noinherit` (a role created by a non-superuser cannot be superuser, create databases or create roles, and those are the defaults; naming `nosuperuser` would itself need superuser on Supabase);
+    2.  check `pg_roles`: `rolcanlogin` and `rolbypassrls` true, `rolsuper`, `rolcreatedb`, `rolcreaterole`, `rolinherit` false; otherwise stop with an error;
+    3.  set the password: `select format('alter role gems_etl password %L', $1::text)` with `ETL_DB_PASSWORD`, then execute the result;
+    4.  run `setup.sql` (extension-free DDL, revokes, grants), then `select format('grant connect on database %I to gems_etl', current_database())` and execute it (Docker revokes CONNECT from public in `docker/initdb`).
+
+    The role owns nothing and holds only:
     *   `usage` on `raw`, `migration`, `app`;
     *   `select, insert` on the three `raw.legacy_*` tables, `migration.exception` and `migration.reconciliation`;
     *   `select, insert` on `migration.run` and `update (finished_at, status, digest)` on it;
     *   `select` and `insert (rule_id, version, source_table, entity_list, description, owner, dispositions, code_hash)` on `migration.rule`: it can register a mapping rule but neither approve nor change one;
-    *   `select` and `insert` on every `migration.key_map` column except `approved_by` and `approved_at`;
+    *   `select` on `migration.key_map` and `insert (run_id, entity, source_system, source_table, source_key, source_row_hash, disposition, rule_id, rule_version, target_table, target_id, survivor_target_id, reason)` on it;
     *   `select` on `app.centre`; `select, insert` on `app.person`, `app.admission`, `app.registration`, `app.global_number_series`;
-    *   `insert` on `app.audit_log`, `usage` on `app.audit_log_id_seq`.
+    *   `insert` on `app.audit_log`, `usage` on `app.audit_log_id_seq`;
+    *   `execute` on `app.person_match_key(text, text, date, text)` and `app.redact(jsonb)`, granted explicitly so a later `revoke … from public` cannot break the runner;
+    *   `connect` on the database (step 4).
 
     No update (other than the three `migration.run` columns) and no delete anywhere.
 *   **Go-live check (T-RLS-015)**, which the schema owner runs after the drop and records in the evidence log:
@@ -147,8 +156,11 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`; 
     The result must equal the platform's pinned list (`poc/test/rls.test.js`: on Supabase `service_role`, `supabase_admin`, `supabase_etl_admin`, `supabase_read_only_user`). The schema owner also runs, and records, the reach check for the Supabase API roles on the two new schemas:
 
     ```sql
-    select r, s, has_schema_privilege(r, s, 'USAGE') from unnest(array['anon', 'authenticated']) r,
-      unnest(array['raw', 'migration']) s;   -- every row false
+    -- same shape as poc/test/rls.test.js, with raw and migration in place of app; both counts must be 0
+    select (select count(*) from pg_roles r cross join unnest(array['raw', 'migration']) s
+             where r.rolname in ('anon', 'authenticated') and has_schema_privilege(r.rolname, s, 'USAGE')) schema_usage,
+           (select count(*) from information_schema.role_table_grants
+             where grantee in ('anon', 'authenticated') and table_schema in ('raw', 'migration')) table_grants;
     ```
 
 ### Data Model (`scripts/etl/setup.sql`, DDL in Substance)
@@ -253,38 +265,38 @@ type Rule = {
 ```
 
 *   **Row order:** rows reach `map` ordered by `source_key collate "C"`. Applied to rows, "earlier" and "later" always mean this order.
-*   **Strictness:** a result for an undeclared entity, a disposition outside the entity's `dispositions`, or a missing result for a row makes the run FAILED. ARCHIVED is excluded by the type and by the `key_map` check constraint, so a rule that returns it anyway fails the write transaction.
+*   **Strictness:** `validateResults(rule, rows, results)` in `etl/checks.ts`, a pure function, returns the violations: a result for an undeclared entity, a disposition outside the entity's `dispositions`, or a missing result for a row. Any violation is *fatal*: the run takes the failure path of [Writing Targets](#writing-targets-dd-3) before anything is written, and the artifact lists the violations under `errors`. ARCHIVED is excluded by the type and by the `key_map` check constraint, so a rule that returns it anyway fails the write transaction.
 *   **One parent resolver.** `map()` finds a row's parent only through the rule's own `parent` function, so K6 checks the same link the rule used.
 *   **No I/O in mapping rules.** Everything a rule reads is in `ctx`, so rules are unit-tested with plain objects and `app.person_match_key` is never reimplemented.
-*   **One validation path.** Mapping rules validate with the person core's functions in `src/server/people.ts`: `academicYearOk()` (already exported) and `identity()` and `isoDate()` (exported by this design, without behaviour change). A thrown `PersonError` with message `"<field>: <check>"` becomes a `RuleError` whose `field` is the raw column of that identity field and whose `message` is `<check>`:
+*   **One validation path.** Mapping rules validate with the person core's functions in `src/server/people.ts`: `academicYearOk()` (already exported) and `identityField()`, `isoDate()` and the message constant `ACADEMIC_YEAR_RULE` (`"YYYY-YY, consecutive years"`, which `people.ts` then uses in its own two places), all exported by this design without behaviour change. Step 3 calls `identityField()` once per identity field, so **every** failing field yields its own error; the rules likewise run every check of a row and collect every failure. A thrown `PersonError` with message `"<field>: <check>"` becomes a `RuleError` whose `field` is the raw column of that identity field and whose `message` is `<check>`:
 
     | Identity field / input | Raw column | Mapping |
     |---|---|---|
-    | `givenName` | `first_name` | as is (`identity()` trims) |
+    | `givenName` | `first_name` | as is (`identityField()` trims) |
     | `familyName` | `last_name` | empty → null |
-    | `dateOfBirth` | `dob` | empty → null; must be `YYYY-MM-DD` and before today (a limit, see Risks) |
-    | `mobile` | `mobile` | empty → null; `identity()` normalises `+91`, `0`, spaces, `-` |
+    | `dateOfBirth` | `dob` | empty → null; must be `YYYY-MM-DD`, a real date, and before today in Asia/Kolkata (a limit, see Risks) |
+    | `mobile` | `mobile` | empty → null; `identityField()` normalises `+91`, `0`, spaces, `-` |
     | `gender`, `email` | — | null (not in the source) |
-    | `academicYear` | `academic_year` | `academicYearOk()` |
-    | `admittedOn` | `admitted_on` | `isoDate()`; not after `asOf` |
-    | `joinDate` | `join_date` | `isoDate()` |
-    | `courseCode` | `course_code` | trimmed, non-empty, at most 50 characters |
+    | `academicYear` | `academic_year` | `academicYearOk()`; message `ACADEMIC_YEAR_RULE` |
+    | `admittedOn` | `admitted_on` | `isoDate()` (`YYYY-MM-DD` or `not a date`); not after `asOf` |
+    | `joinDate` | `join_date` | `isoDate()` (`YYYY-MM-DD` or `not a date`) |
+    | `courseCode` | `course_code` | trimmed, non-empty (as `admit()` requires; no length limit) |
     | `registerNo` | `register_no` | trimmed, `^\d+$` |
     | `admissionNo` | `admission_no` | trimmed, non-empty |
 
-*   **Registration, versions and approval (DD-10).** In preflight the runner computes `code_hash` = lowercase hex sha256 over the rule's own file plus the fixed list `src/server/people.ts`, `etl/ids.ts` (the code a rule reaches), sorted by path, each as `"<path>\n"` followed by its bytes. It inserts each rule's row if `(id, version)` is new; if the row exists with a different `code_hash`, the run is refused in every mode, because changed logic needs a new version (the rule's declarations are in its file, so they are covered). The approver approves as the schema owner, with the hash computed from the commit they reviewed, and records the statement and its row count (which must be 1) in the evidence log:
+*   **Registration, versions and approval (DD-10).** `etl/run.ts` holds a fixed registry `RULES = [{ rule: centre, file: "etl/rules/centre.ts" }, …]`. In preflight the runner computes `code_hash = codeHash(file)` (`etl/canonical.ts`): lowercase hex sha256 over that file plus the fixed list `src/server/people.ts`, `etl/ids.ts` (the code a rule reaches), sorted by path, each as `"<path>\n"` followed by its bytes, where paths are repo-relative with `/` separators and files are read relative to the repository root (`process.cwd()`). It inserts each rule's row if `(id, version)` is new; if the row exists with a different `code_hash`, the run is refused in every mode, because changed logic needs a new version (the rule's declarations are in its file, so they are covered). The approver approves as the schema owner, with the hash computed from the commit they reviewed, and records the statement and its row count (which must be 1) in the evidence log:
 
     ```sql
     update migration.rule set approved_by = '<name>', approved_at = now()
     where rule_id = '<id>' and version = <v> and code_hash = '<hash of the reviewed commit>';
     ```
 
-    `gems_etl` cannot run it (column grants). Tests run it as the schema owner.
+    `gems_etl` cannot run it (column grants). Tests run it through `asAdmin()` (`tests/fixtures.ts`), which is the schema owner because `ADMIN_DATABASE_URL` equals `MIGRATE_URL` in Docker and CI.
 *   **Dry and cutover mode.** A dry run runs every mapping rule and lists the unapproved ones in its artifact. A cutover run is refused in preflight unless every rule it would run is approved (`approved_at` not null) (G5). Since `gems_etl` cannot change a rule row and a changed hash refuses the run, an approved row always matches the reviewed code. Since C-03.1 requires an approver for each exclusion, the cutover approval check therefore also covers every rule that can return EXCLUDED.
 
 ### Deterministic Ids and Order (G3)
 
-*   **Ids:** UUIDv5 (RFC 9562 §5.5, SHA-1 via `node:crypto`), namespace `4f6d0b2e-9c1a-5e7b-8d3f-2a6c4e8b1d90` (a constant in `etl/ids.ts`, never changed), name = UTF-8 of `${source_system}/${source_table}/${encodeURIComponent(source_key)}/${target_table}`, with `/${n}` appended for the n-th target of a SPLIT (n from 1). Examples: `fixture/legacy_admission/1042/app.person`, `fixture/legacy_course_row/77/app.registration`.
+*   **Ids:** `uuidv5(name, namespace = ETL_NAMESPACE)` (RFC 9562 §5.5, SHA-1 via `node:crypto`), with `ETL_NAMESPACE = 4f6d0b2e-9c1a-5e7b-8d3f-2a6c4e8b1d90` (a constant in `etl/ids.ts`, never changed), name = UTF-8 of `${source_system}/${source_table}/${encodeURIComponent(source_key)}/${target_table}`, with `/${n}` appended for the n-th target of a SPLIT (n from 1). Examples: `fixture/legacy_admission/1042/app.person`, `fixture/legacy_course_row/77/app.registration`.
 *   **A merged group's person** has the survivor row's id.
 *   **`created_at`** of migrated rows comes from legacy dates: a person's from its survivor admission's `admitted_on`, an admission's from its `admitted_on`, a registration's from its `join_date`, each as `(d::timestamp at time zone 'Asia/Kolkata')`.
 *   **Registration `centre_id`** is its admission's centre (required by the composite foreign key); `end_date` is null; `status` comes from the status map.
@@ -318,7 +330,7 @@ Used for `source_row_hash`, `input_hash` and the run digest.
 ### Writing Targets (DD-3)
 
 *   **One transaction.** Step 5 writes everything in one transaction, as `gems_etl`: target rows in the order person, admission, registration, by `insert … select … from json_to_recordset($1)` in batches of 1,000; then the key-map and exception rows of all four entities; then the counters. A run therefore leaves either all of its target rows or none.
-*   **Failure.** The database enforces the person core's constraints (the `match_key` trigger, the academic-year check, the composite foreign key, unique numbers). Mapping rules return REJECTED for every row these constraints would refuse, so a constraint error means a mapping rule has a bug: the transaction rolls back, the runner sets the run FAILED with `finished_at` in a new transaction, writes the finish audit row, and stops. A crash leaves the run RUNNING, and a RUNNING run is never PASSED; the next run is refused in preflight until the operator runs `scripts/etl/reset.sql` (raw and run rows remain until then).
+*   **Failure.** The database refuses rows through the person core's constraints: `given_name` not null, the `Gender` and `RegistrationStatus` enum casts, the academic-year check, the centre and composite foreign keys, and the unique Admission and Register Nos. Mapping rules return REJECTED for every row these would refuse, so a constraint error means a mapping rule has a bug. On it, or on a fatal strictness violation, the transaction rolls back (or never starts), the runner sets the run FAILED with `finished_at` in a new transaction, writes the finish audit row and the artifact (with `errors`), and stops; no checks are written. A crash leaves the run RUNNING, and a RUNNING run is never PASSED; the next run is refused in preflight until the operator runs `scripts/etl/reset.sql` (raw and run rows remain until then).
 *   **Exclusive and clean.** Preflight takes `pg_advisory_lock(hashtext('gems.etl.run'))` for the whole run (released at the end or when the connection drops) and refuses unless `migration.run`, the three `raw.legacy_*` tables, `app.person`, `app.admission` and `app.registration` are all empty.
 *   **Audit:** the runner inserts two rows directly, so `app.audit()`'s session fields do not apply:
 
@@ -327,12 +339,13 @@ Used for `source_row_hash`, `input_hash` and the run digest.
     | `action` | `migration.run.start` | `migration.run.finish` |
     | `outcome` | `OK` | `OK` if PASSED, `FAILED` otherwise |
     | `actor_kind` | `migration:<run_id>` | same |
-    | `user_id`, `target_centre_id`, `session_hash`, `request_id`, `client_ip` | null | null |
+    | `user_id`, `target_centre_id`, `session_hash`, `request_id`, `client_ip`, `reason`, `before`, `after` | null | null |
+    | `at` | default (now) | default (now) |
     | `actor_roles`, `actor_scope` | `{}` | `{}` |
     | `target_type`, `target_id` | `migration.run`, the run id | same |
     | `detail` | `app.redact({ mode, source, as_of, input_hash })` | `app.redact({ status, digest, counts })` |
 
-    Per-row provenance is the key map, which keeps millions of rows out of `audit_log`.
+    The action names are passed as TypeScript `"…"` parameters, never written inside SQL text, so the T-AUD-009 scan finds them. Per-row provenance is the key map, which keeps millions of rows out of `audit_log`.
 
 ### Entities in P8
 
@@ -343,7 +356,7 @@ Reason strings are written in backticks.
 | Outcome | Condition | Reason |
 |---|---|---|
 | IMPORTED (existing) | the normalised code equals an `app.centre.code`, and no earlier row has the same normalised code | — |
-| EXCLUDED | the normalised code is in the approved test list `GDEMO`, `KL-01-TEST3`, `KL-01-TEST6` | `test centre` |
+| EXCLUDED | the normalised code is in the test-centre list of X14 (`GDEMO`, `KL-01-TEST3`, `KL-01-TEST6`; approval pending, covered by the cutover approval of the centre rule) | `test centre` |
 | REJECTED | an earlier row has the same normalised code | `code: duplicate centre code` |
 | REJECTED | no `app.centre` has the normalised code | `code: no such centre` |
 
@@ -363,11 +376,11 @@ Reason strings are written in backticks.
 
 No person is written without an admission (G2):
 
-1.  For each row, in order, check:
+1.  For each row, in order, run every check below and collect every failure:
     *   the identity from step 3 (errors as in the mapping table);
     *   the centre: the parent centre key must be IMPORTED; otherwise `centre_code: centre excluded` (EXCLUDED parent) or `centre_code: centre not imported` (any other case);
     *   the academic year (`academic_year: YYYY-YY, consecutive years`);
-    *   `admitted_on` (`admitted_on: YYYY-MM-DD`, or `admitted_on: after the run date`);
+    *   `admitted_on` (`admitted_on: YYYY-MM-DD`, `admitted_on: not a date`, or `admitted_on: after the run date`);
     *   the Admission No is not used by an earlier usable row (`admission_no: duplicate`).
 2.  Group usable rows by match key; a null key is its own group. The survivor is the earliest row of the group.
 3.  **person:** the survivor IMPORTED; other usable rows of the group MERGED into it; rows that are not usable REJECTED with their errors.
@@ -381,7 +394,7 @@ No person is written without an admission (G2):
 
 ### The Synthetic Fixture and Its Defects (G4)
 
-`etl/fixture.ts` fills the raw tables from `fixtureSeed` with a mulberry32 generator: about 2,000 admissions and 3,000 course rows over centres A, A2 and B. Raw centre rows: `' kl2-25 '` (spaces, lower case), `KL3-07`, `TN1-03`, `GDEMO`, `XX9-99`, and a second `KL3-07`. Generated Admission Nos follow `GTEC<yy><yy><seq>`; generated Register Nos continue from 2,000,001. Planted defects and the outcome P8 asserts:
+`etl/fixture.ts` fills the raw tables from the seed `20261028` with a mulberry32 generator: about 2,000 admissions and 3,000 course rows over centres A, A2 and B. Source keys are zero-padded six-digit numbers (`000001`…), so `collate "C"` order is numeric order. Generated academic years are `2025-26` and `2026-27` (plus the single 2027-28 defect); `admitted_on` and `join_date` fall within the row's academic year (June to May) and before `asOf` = `2026-10-28`; dates of birth fall in 1990–2010. Raw centre rows: `' kl2-25 '` (spaces, lower case), `KL3-07`, `TN1-03`, `GDEMO`, `XX9-99`, and a second `KL3-07`. Generated Admission Nos follow `GTEC<yy><yy><seq>`; generated Register Nos continue from 2,000,001. Planted defects and the outcome P8 asserts:
 
 | Defect | Outcome |
 |---|---|
@@ -416,7 +429,7 @@ No person is written without an admission (G2):
 | K7, K8, K10, K11 | — | — | — | null; `detail.reason` = `not applicable in Stage 2` |
 
 *   **Scope values:** `centre` is the normalised raw centre code (a registration inherits its admission row's); `academic_year` is the raw value. Centre rows have no year.
-*   **Run status** is a pure function of the checks, the REJECTED count and the two number lists, unit-tested per gate. A dry run's status is PASSED when every check with non-null `passed` is true. A cutover run's status is PASSED only when K1–K11 are all true (none null), REJECTED = 0, and `unparsedNumbers` and `laterYearNumbers` are empty. In Stage 2 a cutover run therefore cannot pass, which is intended: K7, K8, K10 and K11 do not exist yet.
+*   **Run status** is `runStatus({ mode, fatal, checks, rejected, unparsedNumbers, laterYearNumbers })` in `etl/checks.ts`, a pure function unit-tested per gate (including a cutover case where only K7, K8, K10 and K11 are null and every other input passes). A dry run's status is PASSED when every check with non-null `passed` is true. A cutover run's status is PASSED only when K1–K11 are all true (none null), REJECTED = 0, and `unparsedNumbers` and `laterYearNumbers` are empty. In Stage 2 a cutover run therefore cannot pass, which is intended: K7, K8, K10 and K11 do not exist yet.
 *   **Artifacts** in `artifactDir` (P8 passes a temporary directory; the evidence run writes to `evidence/`, which is committed). They are the P8 evidence that v1 audit §A.8 names `poc/evidence/P8-<date>.json`; Stage 2 evidence lives in `evidence/`:
     *   `etl-<run_id>.json`: `{ run: { runId, mode, source, asOf, inputHash, lcCtype, startedAt, finishedAt, status, digest }, rules: [{ id, version, codeHash, approved }], dispositions: { <entity>: { <disposition>: n } }, checks: [{ check, scope, expected, actual, passed, detail }], seeds: [{ series, period, value }], unparsedNumbers: [{ table, sourceKey, column }], laterYearNumbers: [{ sourceKey, year }] }`;
     *   `etl-<run_id>-exceptions.csv`: header `entity,source_table,source_key,rule_id,field,value_fingerprint,message`, rows ordered as in the digest, RFC 4180 quoting; no raw values.
@@ -513,10 +526,11 @@ The design owner accepted these on 2026-10-28; each stays PRO until the design i
 | Raw tables hold PII in rehearsals | Exposure beyond the app's controls | Synthetic data only in Stage 2; `raw` revoked from `public`; retention and access are D-SEC-4/5 before any real run | n/a |
 | `ETL_SALT` leaks | Fingerprints of low-entropy values (mobiles, dates of birth) can be reversed | A different secret per migration environment, never stored or committed | n/a |
 | `ETL_DB_PASSWORD` in database logs | The role password visible to log readers | **Accepted:** setup sends one `alter role … password` statement, in a migration environment, and the role is dropped at go-live | n/a |
+| `setup.mjs` on Supabase's non-superuser `postgres` | Setup fails on the production database before go-live | Role created with defaults and checked rather than altered; the first rehearsal runs setup on Supabase and records it | first rehearsal |
 | In-memory rules on 1.2M rows | Slow or out of memory: `map()` holds a whole table, and the write transaction holds every row | Timed at the first rehearsal; the DD-5 set-based fallback for a slow entity (batching only caps statement size) | timed at the first rehearsal |
 | Merge by match key on real data | Different people with equal name, dob and mobile merged | **Accepted for P8 only:** real merges need D-MIG-4/D-STU-5 maps | n/a (accepted) |
 | A legacy number issued after extraction | Reissued by the app | Freeze before the final run (audit 08 §7); the `legacyCurrent` option set from the frozen counter; NP-8 sign-off | P8, continuity case |
-| Date of birth checked against today | A row whose date of birth is the run day is REJECTED on that day and accepted on later days, so its digest differs | **Accepted:** `identity()` keeps the app's behaviour; the artifact records `asOf`, and such a date of birth is implausible for an admission | n/a |
+| Date of birth checked against today (Asia/Kolkata) | A row whose date of birth is the run day is REJECTED on that day and accepted on later days, so its digest differs | **Accepted:** `identityField()` keeps the app's behaviour; the artifact records `asOf`, and such a date of birth is implausible for an admission | n/a |
 | The validation in `people.ts` changes | Migrated and app data validated differently, or an approved rule silently changes | One shared function; `people.ts` is in every rule's code hash, so a change needs a new approval | `tests/people.test.ts`, P8 |
 
 ## Detailed Implementation Plan
@@ -534,30 +548,32 @@ The design owner accepted these on 2026-10-28; each stays PRO until the design i
 
 ### Target Files to Create/Modify
 
-#### 1. `docs/audit/09-…md`, matrix (Modify)
+#### 1. `docs/audit/09-test-strategy-and-acceptance-criteria.md` (Modify)
 
-*   T-MIG-001…006 and 009 gain "Stage 2: P8 on synthetic data"; T-MIG-007/008 "Stage 4 (DD-4)"; T-MIG-010/011 "needs legacy data".
-*   T-RLS-015 notes the setup-script confinement, the go-live drop and the check query.
+*   The T-MIG table gains a third column `Stage 2`: `P8 on synthetic data` for T-MIG-001…006 and 009; `Stage 4 (DD-4)` for 007 and 008; `needs legacy data` for 010 and 011.
+*   Under the T-RLS heading, a note: "T-RLS-015 (defined in v1.1 C-04): `gems_etl` is created only by `scripts/etl/setup.mjs` in a migration environment and dropped at go-live, followed by the query in `docs/designs/migration-framework/migration-framework.md`. Schemas `raw` and `migration` have no RLS: no `centre_id`, revoked from every role except the schema owner and `gems_etl`."
+*   No matrix TSV changes, so the CSV and FRD stay as they are.
 
 #### 2. `scripts/etl/setup.sql`, `setup.mjs`, `reset.sql` (Create)
 
 *   `setup.sql`: the DDL of [Data Model](#data-model-scriptsetlsetupsql-ddl-in-substance), the revokes and the grants of [Where It Runs](#where-it-runs-dd-1).
-*   `setup.mjs`: connects with `pg` to `MIGRATE_URL`, runs `setup.sql`, creates `gems_etl` if missing, re-asserts its attributes and sets its password as described.
+*   `setup.mjs`: the four steps of [Where It Runs](#where-it-runs-dd-1).
 *   `reset.sql`: the reset of [Components](#components).
 
-#### 3. `scripts/ci.sh`, `.github/workflows/ci.yml`, `.env.local` (Modify)
+#### 3. `scripts/ci.sh`, `.github/workflows/ci.yml`, `scripts/scan-client-bundle.mjs`, `.env.local` (Modify)
 
-*   `ci.sh`: `node scripts/etl/setup.mjs` right after the first `npx prisma migrate deploy` (line 34; the "Fresh database" step), since the CI database is a migration environment; `ETL_DATABASE_URL`, `ETL_DB_PASSWORD` and `ETL_SALT` join the required-variable loop.
-*   `ci.yml`: the three variables with throwaway values (`ETL_DATABASE_URL` points at the Docker database directly, not PgBouncer, port 54320).
-*   `.env.local`: the same local values.
+*   `ci.sh`: `node scripts/etl/setup.mjs` after **both** `npx prisma migrate deploy` calls (lines 34 and 62), so the database CI leaves behind is set up; `ETL_DATABASE_URL`, `ETL_DB_PASSWORD` and `ETL_SALT` join the required-variable loop (line 10) and the header comment (line 5) that lists the variables.
+*   `ci.yml` env: `ETL_DATABASE_URL: postgresql://gems_etl:dev_etl_pw@127.0.0.1:54320/gems` (the database directly, not PgBouncer), `ETL_DB_PASSWORD: dev_etl_pw`, `ETL_SALT: dev_etl_salt` (throwaway values).
+*   `scan-client-bundle.mjs`: the three names join `SECRET_ENV` (T-SEC-017).
+*   `.env.local`: the same three local values. This file is git-ignored, so the change is local; other developers add the variables from the `ci.sh` header.
 
 #### 4. `src/server/people.ts` (Modify)
 
-*   Export `identity()`, `isoDate()` and the `StoredIdentity` type; no behaviour change.
+*   Export `identityField()`, `isoDate()`, the `StoredIdentity` type and `ACADEMIC_YEAR_RULE`, and use the constant in the two existing messages; no behaviour change (`tests/people.test.ts` unchanged and green).
 
 #### 5. `etl/ids.ts`, `etl/types.ts`, `etl/canonical.ts` (Create)
 
-*   `uuidv5(name)` under the fixed namespace; the types of [Mapping Rules](#mapping-rules-dd-2); canonical JSON with the code-point comparator, `input_hash`, the digest and the fingerprint.
+*   `uuidv5(name, namespace = ETL_NAMESPACE)`; the types of [Mapping Rules](#mapping-rules-dd-2); canonical JSON with the code-point comparator, `inputHash()`, `digest()`, `fingerprint()` and `codeHash(file)`.
 
 #### 6. `etl/rules/centre.ts`, `admission.ts`, `registration.ts` (Create)
 
@@ -565,22 +581,35 @@ The design owner accepted these on 2026-10-28; each stays PRO until the design i
 
 #### 7. `etl/run.ts`, `etl/checks.ts`, `etl/fixture.ts` (Create)
 
-*   `run()` steps 0–7, connecting with `ETL_DATABASE_URL`; `RunRefused`; the advisory lock and empty-database check; the checks table; the fixture (mulberry32, the centre rows and the defects table).
+*   `run.ts`: `run()` steps 0–7, connecting with `ETL_DATABASE_URL`; `RunRefused`; the `RULES` registry; the advisory lock and empty-database check. When the environment variable `ETL_EVIDENCE=1` is set, `artifactDir` defaults to `evidence/`.
+*   `checks.ts`: K1–K6 queries, the not-applicable rows, `validateResults()`, `k5(keyMapRows, rules)` and `runStatus()`.
+*   `fixture.ts`: the generator, the centre rows and the defects table.
 
 #### 8. Tests (Create/Modify)
 
-*   `tests/etl.test.ts`, with a helper that calls `reset()` and then runs `scripts/etl/reset.sql` as the schema owner (which also removes the fixture counter seeds and keeps `migration.rule`):
-    *   unit: `uuidv5` against the RFC 9562 example; canonical JSON; each rule on hand-written rows; a synthetic SPLIT rule through the runner (K5); an undeclared disposition fails the run; run status per gate (checks, REJECTED, `unparsedNumbers`, `laterYearNumbers`);
-    *   P8: approve the three rules (as the schema owner, with the computed hash), run twice with a fixed `asOf` (resetting in between), assert G1–G5 and G7 and every row of the defects table; equal digests; after the run `admit()` issues the next Register No and 2026-27 Admission No;
-    *   key map: a direct second insert for an existing key and entity fails (23505);
-    *   refusals: cutover with one unapproved rule throws `RunRefused` and keeps no rule or run row; the same version with a changed code hash is refused in dry mode; an existing counter, and a non-empty database, are refused; a cutover run on the clean fixture ends FAILED (K7/K8/K10/K11 null);
-    *   G6: no file under `prisma/migrations` mentions `gems_etl`; it owns no objects; as `gems_etl`, inserting a `migration.rule` or `migration.key_map` row with `approved_by` set, and updating `migration.rule`, fail with 42501;
-    *   audit: the two rows with the column values above.
+*   `tests/etl.test.ts`. Its helper `resetEtl()` calls `reset()`, then through `asAdmin()` runs `scripts/etl/reset.sql` and, **for tests only**, `truncate migration.rule cascade`. Test titles start with their ids, as in the other suites.
+    *   **Unit:** `uuidv5("www.example.com", DNS namespace 6ba7b810-9dad-11d1-80b4-00c04fd430c8)` = `2ed6657d-e927-568b-95e1-2665a8aea6a2`; canonical JSON (key order, nulls, code-point sort); each rule on hand-written rows; `validateResults()` with an undeclared entity, an undeclared disposition and a missing result; `k5()` on synthetic SPLIT key-map rows (one with the declared count, one without); `runStatus()` per gate.
+    *   **P8**, in this order:
+        1.  `resetEtl()`; dry run 1 with `asOf` `2026-10-28`; status PASSED; it registers the three rules.
+        2.  Approve each rule through `asAdmin()` with `codeHash()` of its file; each update reports 1 row.
+        3.  Assert every row of the defects table, G1–G4 and the `unparsedNumbers` and `laterYearNumbers` lists on run 1.
+        4.  `reset.sql` only (rules and approvals kept); dry run 2; digests of run 1 and 2 equal (T-MIG-009).
+        5.  `admit()` issues Register No max + 1 and the next 2026-27 Admission No (G7).
+    *   **Key map:** a direct second insert for an existing key and entity fails with 23505 (T-MIG-002).
+    *   **Refusals:** each starts from `resetEtl()`.
+        *   Cutover with no approved rule: `RunRefused`; `count(*)` of `migration.rule` and `migration.run` is 0 afterwards.
+        *   Changed code: dry run 1, then through `asAdmin()` `update migration.rule set code_hash = 'x' where rule_id = 'centre'`; the next dry run (after `reset.sql`) is refused in dry mode.
+        *   Existing counter: insert a `REGISTER` counter; refused.
+        *   Non-empty database: insert one raw row; refused.
+    *   **G6:** no file under `prisma/migrations` mentions `gems_etl`; it owns no objects; connected as `gems_etl`, inserting a `migration.rule` row or a `migration.key_map` row with `approved_by`, and `update migration.rule`, fail with 42501.
+    *   **Audit:** the two rows with the column values of [Writing Targets](#writing-targets-dd-3).
 *   `tests/audit-catalogue.ts` gains `migration.run.start` and `migration.run.finish`; `tests/audit.test.ts` T-AUD-009 scans the whole of `etl/run.ts` with `/"(migration\.run\.[a-z]+)"/g`, as it scans `auth/index.ts`.
 
-#### 9. `docs/STATUS.md`, evidence log (Modify)
+#### 9. `docs/STATUS.md`, `docs/audit/12-evidence-and-verification-log.md` (Modify)
 
-*   One evidence run into `evidence/` (committed), CI counts and the mutation checks.
+*   Evidence run: `ETL_EVIDENCE=1 npx vitest run tests/etl.test.ts`, which writes `evidence/etl-<run_id>.json` and `evidence/etl-<run_id>-exceptions.csv` for P8 run 2 (committed).
+*   The evidence-log entry: CI counts, both artifact hashes, the approval statements and their row counts, and the mutation checks.
+*   STATUS: the Stage 2 line, the test count and the completed-items table.
 
 ### Verification Plan
 
@@ -592,7 +621,7 @@ The design owner accepted these on 2026-10-28; each stays PRO until the design i
     | Determinism | Use `randomUUID()` in `etl/ids.ts` | T-MIG-009 |
     | No silent drop | Skip writing the key map for REJECTED keys | T-MIG-001 |
     | Provenance | Insert one unmapped person before the checks | T-MIG-003 |
-    | No lost target | Skip one person batch after its key-map rows are written | T-MIG-003 |
+    | No lost target | Skip one registration batch after its key-map rows are written (nothing references registration, so the write commits) | T-MIG-003 |
     | Duplicate disposition | Drop the unique index, then write a second row for one key | T-MIG-002 |
     | Merge integrity | Point a MERGED key at a MERGED survivor | T-MIG-004 |
     | No unreachable person | Import the person of an unusable row | T-MIG-004 |
