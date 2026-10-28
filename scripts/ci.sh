@@ -3,11 +3,13 @@
 #   bash scripts/ci.sh
 # WARNING: it recreates the local Docker database (docker compose down -v) so every run starts from empty migrations.
 # Environment: the variables below must be set (locally they come from .env.local; in CI from the workflow).
+# The migration framework adds ETL_DATABASE_URL (gems_etl, direct to the database), ETL_DB_PASSWORD and ETL_SALT;
+# local values: see .github/workflows/ci.yml.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ -f .env.local ]; then set -a; . ./.env.local; set +a; fi
-for v in MIGRATE_URL ADMIN_DATABASE_URL APP_DATABASE_URL AUTH_DATABASE_URL AUTH_ENC_KEY STORAGE_DRIVER; do
+for v in MIGRATE_URL ADMIN_DATABASE_URL APP_DATABASE_URL AUTH_DATABASE_URL AUTH_ENC_KEY STORAGE_DRIVER ETL_DATABASE_URL ETL_DB_PASSWORD ETL_SALT; do
   [ -n "${!v:-}" ] || { echo "missing environment variable $v" >&2; exit 1; }
 done
 PY=$(command -v python3 || command -v python)
@@ -32,6 +34,7 @@ step "Fresh database"
 docker compose down -v >/dev/null 2>&1 || true
 docker compose up -d --wait
 npx prisma migrate deploy
+node scripts/etl/setup.mjs # the CI database is a migration environment
 
 step "Schema drift: Prisma schema must equal the migrated database"
 npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code --script \
@@ -60,6 +63,7 @@ step "Real server: first-admin journey and security checks on a fresh database"
 docker compose down -v >/dev/null 2>&1 || true
 docker compose up -d --wait
 npx prisma migrate deploy >/dev/null
+node scripts/etl/setup.mjs >/dev/null
 node node_modules/next/dist/bin/next start -p 3101 > .next/ci-server.log 2>&1 &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null || true' EXIT

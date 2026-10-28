@@ -24,6 +24,9 @@ jobs:
       APP_DATABASE_URL: postgresql://gems_app:dev_app_pw@127.0.0.1:64320/gems
       JOB_DATABASE_URL: postgresql://gems_job:dev_job_pw@127.0.0.1:64320/gems
       AUTH_DATABASE_URL: postgresql://gems_auth:dev_auth_pw@127.0.0.1:64320/gems
+      ETL_DATABASE_URL: postgresql://gems_etl:dev_etl_pw@127.0.0.1:54320/gems # direct, not PgBouncer
+      ETL_DB_PASSWORD: dev_etl_pw
+      ETL_SALT: dev_etl_salt
       NEXT_TELEMETRY_DISABLED: "1"
       STORAGE_DRIVER: fake # ticket documents: in-memory fake in CI (ADR-002); no Supabase secrets here
     steps:

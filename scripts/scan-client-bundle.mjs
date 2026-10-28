@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const SECRET_ENV = ["MIGRATE_URL", "ADMIN_DATABASE_URL", "APP_DATABASE_URL", "JOB_DATABASE_URL", "AUTH_DATABASE_URL", "AUTH_ENC_KEY", "DATABASE_URL", "DIRECT_URL", "SUPABASE_SERVICE_KEY"];
+const SECRET_ENV = ["MIGRATE_URL", "ADMIN_DATABASE_URL", "APP_DATABASE_URL", "JOB_DATABASE_URL", "AUTH_DATABASE_URL", "AUTH_ENC_KEY", "DATABASE_URL", "DIRECT_URL", "SUPABASE_SERVICE_KEY", "ETL_DATABASE_URL", "ETL_DB_PASSWORD", "ETL_SALT"];
 const needles = new Set();
 for (const name of SECRET_ENV) {
   const v = process.env[name];
