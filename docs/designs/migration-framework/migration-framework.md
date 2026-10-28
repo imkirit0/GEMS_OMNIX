@@ -1,7 +1,7 @@
 # Migration framework: ETL foundation and P8 (Stage 2)
 
 *   **Author:** gtm
-*   **Status:** Draft, for the owner's section-by-section review. Owner decisions taken before drafting (2026-10-28): DD-1 location, DD-2 rules in TypeScript, DD-3 direct bulk insert, DD-4 K7/K8 deferred to Stage 4.
+*   **Status:** Proposed. The owner accepted every section on 2026-10-28; build approval follows EGM review Stages 5–9. Owner decisions taken before drafting (2026-10-28): DD-1 location, DD-2 rules in TypeScript, DD-3 direct bulk insert, DD-4 K7/K8 deferred to Stage 4.
 *   **Date:** 2026-10-28
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its business owner to sign). Input: [`input-brief.md`](input-brief.md).
