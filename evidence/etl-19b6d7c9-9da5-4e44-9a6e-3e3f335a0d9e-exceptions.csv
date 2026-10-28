@@ -1,0 +1,25 @@
+entity,source_table,source_key,rule_id,field,value_fingerprint,message
+admission,legacy_admission,002001,admission,centre_code,168c8c5f2d79173a,centre excluded
+admission,legacy_admission,002002,admission,centre_code,168c8c5f2d79173a,centre excluded
+admission,legacy_admission,002003,admission,centre_code,9a47048b6281607f,centre not imported
+admission,legacy_admission,002009,admission,admitted_on,16732616cbcb026a,YYYY-MM-DD
+admission,legacy_admission,002010,admission,academic_year,d9194aa84df0e3e9,"YYYY-YY, consecutive years"
+admission,legacy_admission,002012,admission,admission_no,1e5d0f57f715d43b,duplicate
+centre,legacy_centre,000005,centre,code,9a47048b6281607f,no such centre
+centre,legacy_centre,000006,centre,code,e81ba5bf5cbbaad3,duplicate centre code
+person,legacy_admission,002001,admission,centre_code,168c8c5f2d79173a,centre excluded
+person,legacy_admission,002002,admission,centre_code,168c8c5f2d79173a,centre excluded
+person,legacy_admission,002003,admission,centre_code,9a47048b6281607f,centre not imported
+person,legacy_admission,002009,admission,admitted_on,16732616cbcb026a,YYYY-MM-DD
+person,legacy_admission,002010,admission,academic_year,d9194aa84df0e3e9,"YYYY-YY, consecutive years"
+person,legacy_admission,002012,admission,admission_no,1e5d0f57f715d43b,duplicate
+registration,legacy_course_row,002990,registration,admission_key,f7c2494570703b64,admission not imported
+registration,legacy_course_row,002991,registration,admission_key,0c4c0b5f7d922ea8,admission not imported
+registration,legacy_course_row,002992,registration,admission_key,f03b97bff240f51b,admission not imported
+registration,legacy_course_row,002998,registration,admission_key,9c00c5e562b65a9d,admission not imported
+registration,legacy_course_row,002998,registration,join_date,16732616cbcb026a,YYYY-MM-DD
+registration,legacy_course_row,002999,registration,admission_key,b1d6b7a1928be0cd,admission not imported
+registration,legacy_course_row,003001,registration,admission_key,178af8a62269606f,admission not imported
+registration,legacy_course_row,003004,registration,admission_key,64277246427f92bf,admission not imported
+registration,legacy_course_row,003005,registration,register_no,3650524c8ca58700,duplicate
+registration,legacy_course_row,003006,registration,status,4ddf4f271ace1da5,not in the status map

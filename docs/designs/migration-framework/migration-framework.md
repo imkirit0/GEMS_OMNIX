@@ -248,6 +248,7 @@ type Result =
 type Ctx = {
   result(entity: string, sourceKey: string): Result | undefined;   // results of entities processed before this
                                                                     // rule (centre, then admission, then registration)
+  sourceRows(table: string): RawRow[];                               // raw rows of tables loaded in this run (parent lookups)
   centres: { id: number; code: string }[];                          // app.centre, read by the runner
   identity: Map<string, StoredIdentity | RuleError[]>;              // step 3, by admission source key
   matchKey: Map<string, string | null>;                             // step 3, valid identities only
@@ -281,8 +282,8 @@ type Rule = {
     | `admittedOn` | `admitted_on` | `isoDate()` (`YYYY-MM-DD` or `not a date`); not after `asOf` |
     | `joinDate` | `join_date` | `isoDate()` (`YYYY-MM-DD` or `not a date`) |
     | `courseCode` | `course_code` | trimmed, non-empty (as `admit()` requires; no length limit) |
-    | `registerNo` | `register_no` | trimmed, `^\d+$` |
-    | `admissionNo` | `admission_no` | trimmed, non-empty |
+    | `registerNo` | `register_no` | trimmed, `^\d+$` (else `digits only`) |
+    | `admissionNo` | `admission_no` | trimmed, non-empty (else `required`) |
 
 *   **Registration, versions and approval (DD-10).** `etl/run.ts` holds a fixed registry `RULES = [{ rule: centre, file: "etl/rules/centre.ts" }, …]`. In preflight the runner computes `code_hash = codeHash(file)` (`etl/canonical.ts`): lowercase hex sha256 over that file plus the fixed list `src/server/people.ts`, `etl/ids.ts` (the code a rule reaches), sorted by path, each as `"<path>\n"` followed by its bytes, where paths are repo-relative with `/` separators and files are read relative to the repository root (`process.cwd()`). It inserts each rule's row if `(id, version)` is new; if the row exists with a different `code_hash`, the run is refused in every mode, because changed logic needs a new version (the rule's declarations are in its file, so they are covered). The approver approves as the schema owner, with the hash computed from the commit they reviewed, and records the statement and its row count (which must be 1) in the evidence log:
 
@@ -305,7 +306,7 @@ type Rule = {
 
 Used for `source_row_hash`, `input_hash` and the run digest.
 
-*   **A row** is JSON with keys sorted by Unicode code point (an explicit comparator, not `Array.prototype.sort`'s UTF-16 order), no whitespace, `null` for null. Every value is read from the database as `::text`, so dates are `YYYY-MM-DD`, timestamps are `to_char(… at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`, and numbers are decimal strings; no driver-side date parsing is involved.
+*   **A row** is JSON with keys sorted by Unicode code point (an explicit comparator, not `Array.prototype.sort`'s UTF-16 order), no whitespace, `null` for null. Every value is read from the database as text (`jsonb_each_text(to_jsonb(row))` in a session with `timezone = 'UTC'`), so dates are `YYYY-MM-DD`, timestamps are `YYYY-MM-DDTHH:MI:SS+00:00`, and numbers are decimal strings; no driver-side date parsing is involved.
 *   **Every ordering** in this section, in the CSV and in `input_hash` uses `collate "C"`.
 *   **`input_hash`:** sha256 over the three raw tables in the order `legacy_centre`, `legacy_admission`, `legacy_course_row`, each as `"<table>\n"` followed by its rows ordered by `source_key`, one canonical row per line.
 *   **Run digest:** sha256 over these sections in order, each `"<name>\n"` then one canonical row per line, output lowercase hex:
@@ -423,7 +424,7 @@ No person is written without an admission (G2):
 | K2 balance | entity, centre, academic_year | raw keys in scope | key-map rows in scope, counting each SPLIT key once and every other row as one; `detail` holds the count per disposition | equal (a duplicate row makes `actual` larger) |
 | K3 provenance | target table (`app.person`, `app.admission`, `app.registration`) | rows in the table | rows whose id is a `target_id` of the run | equal, and every IMPORTED or SPLIT `target_id` with that `target_table` exists in the table |
 | K4 merge integrity | entity | MERGED keys | MERGED keys whose `survivor_target_id` is the `target_id` of an IMPORTED key of the same entity and run and exists in the target table | equal, and every person has at least one admission |
-| K5 split integrity | rule, entity | SPLIT keys | SPLIT keys with `splitCardinality` targets | equal |
+| K5 split integrity | rule, entity (one row per entity with a declared `splitCardinality`; none in P8) | SPLIT keys | SPLIT keys with `splitCardinality` targets | equal |
 | K6 referential | entity | keys whose `parent` resolves to a key that is not IMPORTED, or to none | those keys REJECTED with a reason | equal, and `pg_constraint.convalidated` is true for every foreign key of the target tables |
 | K9 determinism | run | — | — | null; `detail.digest` (the test compares the runs) |
 | K7, K8, K10, K11 | — | — | — | null; `detail.reason` = `not applicable in Stage 2` |

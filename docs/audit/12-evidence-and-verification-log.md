@@ -1073,3 +1073,47 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/manual-supabase-matchkey.mjs | 5cfed23d066d6228b756a0157cf421322200b0005f4bc6e3872058e7a0c81a03 |
 | evidence/ci-person-core-2026-10-28T165401.txt | e5379e92960a1412eeba582833922eb2b58d4d6391835b5a5c2c7101c0347f1c |
 | evidence/supabase-matchkey-2026-10-28.txt | 5976dc689a159d4cb1a7ae80c36154b406cc825d78207822d6e0d0ae299a9628 |
+
+## E-033 Migration framework (ETL foundation and P8) built (2026-10-28)
+- **Request:** "Approve, start building" (design `docs/designs/migration-framework/migration-framework.md`, Approved after EGM review steps 5–9; reports in the same folder). Built in phases M1–M4, each ending with `bash scripts/ci.sh` exit 0.
+- **M1 (commit `fc37d91`, documents):** audit 09 T-MIG table gains a `Stage 2` column (P8 on synthetic data for 001–006 and 009; Stage 4 for 007/008; legacy data for 010/011); T-RLS-015 note (setup-script confinement, go-live drop, no RLS on `raw`/`migration`). No matrix change.
+- **M2 (commit `45e5225`, setup):** `scripts/etl/setup.mjs` (schema owner via `MIGRATE_URL`; creates `gems_etl` with defaults plus `login bypassrls noinherit`, checks its attributes, sets the password with `format(%L, $1::text)`, runs `setup.sql`, grants CONNECT), `setup.sql` (schemas `raw`, `migration`; the five migration tables; the P8 source tables; revokes from public/anon/authenticated; column-level grants so `gems_etl` can register but never approve a rule), `reset.sql` (keeps `migration.rule`). `ci.sh` runs setup after both `migrate deploy` calls; three new variables in `ci.yml`, the required-variable loop and the bundle scan.
+- **M3 (commit `3d374d9`, runner):** `etl/run.ts` (`run()`, steps 0–7: advisory lock, empty-database and counter preflight, rule registration with code hash, raw load, identities field by field with `identityField()`, match keys from `app.person_match_key`, rules centre → admission/person → registration, one write transaction, counters from the highest number on any raw row, checks, digest, artifacts, two audit rows with `actor_kind = migration:<run>`); `etl/checks.ts` (K1–K6, `validateResults`, `k5`, `runStatus`); `etl/canonical.ts` (code-point canonical rows, `inputHash`, `digest`, `fingerprint`, `codeHash`); `etl/ids.ts` (UUIDv5); three rules; `etl/fixture.ts` (mulberry32, 2,014 admissions, 3,006 course rows, planted defects). `people.ts` exports `identityField`, `isoDate`, `IDENTITY_KEYS`, `StoredIdentity`, `ACADEMIC_YEAR_RULE` (no behaviour change; `tests/people.test.ts` green).
+- **Tests:** `tests/etl.test.ts`, 11 tests: units (RFC 9562 UUIDv5 vector, code-point canonical form, rules on hand-written rows, `k5`, `validateResults`, `runStatus` per gate); P8 (two dry runs, every defect's disposition and reason, no PII in the exceptions CSV, no person without an admission, `unparsedNumbers` and `laterYearNumbers`, equal digests, `admit()` continues at GTEC262743888 / 2064113); T-MIG-002 duplicate key-map row refused (23505); audit rows; refusals (cutover without approvals leaves no rule or run row; same version with changed code refused in dry mode; existing counter; non-empty database); a cutover with approved rules on the fixture ends FAILED; G6 (no Prisma migration mentions `gems_etl`, it owns nothing, it cannot insert an approved rule, approve one, or write `key_map.approved_by`: 42501).
+- **Evidence run** (`ETL_EVIDENCE=1 npx vitest run tests/etl.test.ts`, P8 run 2): status PASSED; digest `3c856639…aee8974f`, equal to run 1; `lc_ctype` en_US.utf8. Dispositions: centre 3 IMPORTED, 1 EXCLUDED, 2 REJECTED; person 2,006 IMPORTED, 2 MERGED, 6 REJECTED; admission 2,008 IMPORTED, 6 REJECTED; registration 2,997 IMPORTED, 9 REJECTED. K1 ×4, K2 ×36, K3 ×3, K4, K6 ×3 passed; K7/K8/K10/K11 not applicable; K9 digest. Counters seeded REGISTER 2,064,112 and ADMISSION 2026-27 43,887 (both from excluded GDEMO rows). 24 exception rows, fingerprints only (the CSV contains none of the planted raw values).
+- **Mutation checks** (`evidence/mutation-etl-2026-10-28.txt`; each file restored afterwards and the suite passed again in CI):
+
+  | Guarantee | Mutation | Test that failed |
+  |---|---|---|
+  | Determinism | `randomUUID()` in `uuidv5` | P8 (T-MIG-001…009), T-MIG-002, audit rows |
+  | No silent drop | no key-map row for REJECTED keys | P8 |
+  | Provenance | an unmapped person inserted before the checks | P8 |
+  | No lost target | the first registration batch skipped | P8 |
+  | Duplicate disposition | unique index dropped | T-MIG-002 |
+  | Merge integrity | MERGED pointing at a non-imported survivor | P8 |
+  | No unreachable person | the person of an unusable row imported | P8 |
+  | Cutover approval | approval check skipped | G5 refusal |
+
+  (The audit-rows test also failed under several mutations because it expects a PASSED finish row.)
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: no drift; **134 passed + 3 todo**; build; bundle scan; real-server smoke passed.
+- **Limits:** synthetic data only (no legacy access until Stage 0); K5 has no case in the Stage 2 targets (unit-tested); K7/K8 wait for Stage 4, K10/K11 for legacy data, so a cutover run cannot pass yet (by design); setup has not run on Supabase (first rehearsal); no command-line launcher (DD-11).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| etl/run.ts | 5a860b5690a031dad5b7057ff8be4ee23c190d88828a01b257f382ea13246f3e |
+| etl/checks.ts | a2a45ef919804179fcf61dcfba9487818119e411b872b5b689da54da8619df6f |
+| etl/canonical.ts | fd87a94cddba2e8dfa0cf143851376510e44d03c02147af316fb31f0838cbe68 |
+| etl/rules/admission.ts | 86efc832912c80ec902e0eabc0816da107e0ec6dd819cfe9897995acb7c0bb81 |
+| etl/rules/centre.ts | 34b4591797494835dafbc6301834ad1f6e18844dc87ebe7e8c917bbcd6b5e6a7 |
+| etl/rules/registration.ts | 6ddbe4fd46d79a4683be930214d700d7977058181458e7601641c346632dedc6 |
+| etl/fixture.ts | cfdbc62a93393e5728a9f4eae905dc88f2333c4dc65f45c36c37729320553c53 |
+| scripts/etl/setup.sql | 069a4c0183fad1a8d8c2d0f448071689dff0a0c6967890b119f35fea5259573b |
+| scripts/etl/setup.mjs | 00a69efc29befbda0e220c2b61bf511e4f7b3df58577d49a148a59977149e0a7 |
+| scripts/etl/reset.sql | f2292499eb2c8f6edb969d6eb71327d82fb24015b20937a9857f491e9808aa22 |
+| tests/etl.test.ts | 8f44fa74cb17a95b39586cdda4322c33c23a80b5de14ceaf90e0d7b54f8c7171 |
+| evidence/etl-19b6d7c9-9da5-4e44-9a6e-3e3f335a0d9e.json | c4349320ef52482d5b925586e790c66da8733a65b74032e6ce1bbfabca182530 |
+| evidence/etl-19b6d7c9-9da5-4e44-9a6e-3e3f335a0d9e-exceptions.csv | e1882ec7450c43441af446e406509adf08477b2cf613bc4ed2d87b8804a5485c |
+| evidence/mutation-etl-2026-10-28.txt | 5059d8ded971b2894d67779f86b0da2298afd041004a61a4de30523efeaafd60 |
+| evidence/ci-migration-framework-2026-10-28T181602.txt | 7b78b3f6179c53bba30f7d68f8d50b470e51508b25e601725d84163f2d8a472a |

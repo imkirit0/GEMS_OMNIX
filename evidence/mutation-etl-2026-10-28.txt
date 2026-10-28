@@ -1,0 +1,24 @@
+== Determinism: Tests  3 failed | 8 passed (11)
+    × T-MIG-001…004, 006, 009: dispositions, defects, reruns identical, numbers continue 370ms
+    × T-MIG-002 the database refuses a second disposition for a key and entity 357ms
+    × audit rows: one start and one finish per run, actor migration:<run> 344ms
+== No silent drop: Tests  2 failed | 9 passed (11)
+    × T-MIG-001…004, 006, 009: dispositions, defects, reruns identical, numbers continue 1002ms
+    × audit rows: one start and one finish per run, actor migration:<run> 945ms
+== Provenance: Tests  2 failed | 9 passed (11)
+    × T-MIG-001…004, 006, 009: dispositions, defects, reruns identical, numbers continue 956ms
+    × audit rows: one start and one finish per run, actor migration:<run> 919ms
+== No lost target: Tests  2 failed | 9 passed (11)
+    × T-MIG-001…004, 006, 009: dispositions, defects, reruns identical, numbers continue 954ms
+    × audit rows: one start and one finish per run, actor migration:<run> 912ms
+== Duplicate disposition: Tests  1 failed | 10 passed (11)
+    × T-MIG-002 the database refuses a second disposition for a key and entity 1021ms
+== Merge integrity: Tests  2 failed | 9 passed (11)
+    × T-MIG-001…004, 006, 009: dispositions, defects, reruns identical, numbers continue 1008ms
+    × audit rows: one start and one finish per run, actor migration:<run> 928ms
+== No unreachable person: Tests  2 failed | 9 passed (11)
+    × T-MIG-001…004, 006, 009: dispositions, defects, reruns identical, numbers continue 1027ms
+    × audit rows: one start and one finish per run, actor migration:<run> 1118ms
+== Cutover approval: Tests  1 failed | 10 passed (11)
+    × G5 cutover refused without approvals, leaving no rule or run row 1038ms
+restored

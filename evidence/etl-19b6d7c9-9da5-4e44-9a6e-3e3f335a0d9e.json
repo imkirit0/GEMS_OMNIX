@@ -1,0 +1,849 @@
+{
+  "run": {
+    "runId": "19b6d7c9-9da5-4e44-9a6e-3e3f335a0d9e",
+    "mode": "dry",
+    "source": "fixture",
+    "asOf": "2026-10-28",
+    "inputHash": "751adb090fdb577b17f63c935a45bcbb3a9eb6121a7d064355c8b4f58e3bc759",
+    "lcCtype": "en_US.utf8",
+    "startedAt": "2026-10-28T12:45:36.451416+00:00",
+    "finishedAt": "2026-10-28T12:45:37.209643+00:00",
+    "status": "PASSED",
+    "digest": "3c856639b48d21323099327634c417a513b6982b53bf4b78aa46d93baee8974f"
+  },
+  "rules": [
+    {
+      "id": "centre",
+      "version": 1,
+      "codeHash": "5ee90c6869bfee9e4d57f9f1b34adf1e00a03bb152c2c885f7947523e8db1936",
+      "approved": true
+    },
+    {
+      "id": "admission",
+      "version": 1,
+      "codeHash": "324ba702f4cbd637bb1627d55ccfd757186a0c782921e179f2bb12d301364de1",
+      "approved": true
+    },
+    {
+      "id": "registration",
+      "version": 1,
+      "codeHash": "8c892c75519f7cf1f87e9dd79e51a50a5bd4498a8efba8c2fdecf50d98c27806",
+      "approved": true
+    }
+  ],
+  "dispositions": {
+    "admission": {
+      "IMPORTED": 2008,
+      "REJECTED": 6
+    },
+    "centre": {
+      "EXCLUDED": 1,
+      "IMPORTED": 3,
+      "REJECTED": 2
+    },
+    "person": {
+      "IMPORTED": 2006,
+      "MERGED": 2,
+      "REJECTED": 6
+    },
+    "registration": {
+      "IMPORTED": 2997,
+      "REJECTED": 9
+    }
+  },
+  "checks": [
+    {
+      "check": "K1",
+      "scope": {
+        "entity": "centre"
+      },
+      "expected": 6,
+      "actual": 6,
+      "passed": true,
+      "detail": {}
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "centre",
+        "centre": "KL2-25",
+        "academic_year": null
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "centre",
+        "centre": "KL3-07",
+        "academic_year": null
+      },
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 1,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "centre",
+        "centre": "TN1-03",
+        "academic_year": null
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "centre",
+        "centre": "GDEMO",
+        "academic_year": null
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "EXCLUDED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "centre",
+        "centre": "XX9-99",
+        "academic_year": null
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K1",
+      "scope": {
+        "entity": "person"
+      },
+      "expected": 2014,
+      "actual": 2014,
+      "passed": true,
+      "detail": {}
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "KL2-25",
+        "academic_year": "2025-26"
+      },
+      "expected": 310,
+      "actual": 310,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 310
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "TN1-03",
+        "academic_year": "2026-27"
+      },
+      "expected": 346,
+      "actual": 346,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 345,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "KL3-07",
+        "academic_year": "2025-26"
+      },
+      "expected": 331,
+      "actual": 331,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 331
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "KL3-07",
+        "academic_year": "2026-27"
+      },
+      "expected": 344,
+      "actual": 344,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 342,
+          "MERGED": 1,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "KL2-25",
+        "academic_year": "2026-27"
+      },
+      "expected": 342,
+      "actual": 342,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 341,
+          "MERGED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "TN1-03",
+        "academic_year": "2025-26"
+      },
+      "expected": 336,
+      "actual": 336,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 336
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "GDEMO",
+        "academic_year": "2026-27"
+      },
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 2
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "XX9-99",
+        "academic_year": "2026-27"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "KL2-25",
+        "academic_year": "2026-2027"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "person",
+        "centre": "KL2-25",
+        "academic_year": "2027-28"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 1
+        }
+      }
+    },
+    {
+      "check": "K1",
+      "scope": {
+        "entity": "admission"
+      },
+      "expected": 2014,
+      "actual": 2014,
+      "passed": true,
+      "detail": {}
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "KL2-25",
+        "academic_year": "2025-26"
+      },
+      "expected": 310,
+      "actual": 310,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 310
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "TN1-03",
+        "academic_year": "2026-27"
+      },
+      "expected": 346,
+      "actual": 346,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 345,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "KL3-07",
+        "academic_year": "2025-26"
+      },
+      "expected": 331,
+      "actual": 331,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 331
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "KL3-07",
+        "academic_year": "2026-27"
+      },
+      "expected": 344,
+      "actual": 344,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 343,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "KL2-25",
+        "academic_year": "2026-27"
+      },
+      "expected": 342,
+      "actual": 342,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 342
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "TN1-03",
+        "academic_year": "2025-26"
+      },
+      "expected": 336,
+      "actual": 336,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 336
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "GDEMO",
+        "academic_year": "2026-27"
+      },
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 2
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "XX9-99",
+        "academic_year": "2026-27"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "KL2-25",
+        "academic_year": "2026-2027"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "admission",
+        "centre": "KL2-25",
+        "academic_year": "2027-28"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 1
+        }
+      }
+    },
+    {
+      "check": "K1",
+      "scope": {
+        "entity": "registration"
+      },
+      "expected": 3006,
+      "actual": 3006,
+      "passed": true,
+      "detail": {}
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "KL2-25",
+        "academic_year": "2025-26"
+      },
+      "expected": 458,
+      "actual": 458,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 458
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "TN1-03",
+        "academic_year": "2026-27"
+      },
+      "expected": 506,
+      "actual": 506,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 505,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "KL3-07",
+        "academic_year": "2025-26"
+      },
+      "expected": 491,
+      "actual": 491,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 491
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "KL3-07",
+        "academic_year": "2026-27"
+      },
+      "expected": 514,
+      "actual": 514,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 513,
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "KL2-25",
+        "academic_year": "2026-27"
+      },
+      "expected": 526,
+      "actual": 526,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 526
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "TN1-03",
+        "academic_year": "2025-26"
+      },
+      "expected": 503,
+      "actual": 503,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 503
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "GDEMO",
+        "academic_year": "2026-27"
+      },
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 2
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "XX9-99",
+        "academic_year": "2026-27"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "KL2-25",
+        "academic_year": "2026-2027"
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": "KL2-25",
+        "academic_year": "2027-28"
+      },
+      "expected": 3,
+      "actual": 3,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "IMPORTED": 1,
+          "REJECTED": 2
+        }
+      }
+    },
+    {
+      "check": "K2",
+      "scope": {
+        "entity": "registration",
+        "centre": null,
+        "academic_year": null
+      },
+      "expected": 1,
+      "actual": 1,
+      "passed": true,
+      "detail": {
+        "dispositions": {
+          "REJECTED": 1
+        }
+      }
+    },
+    {
+      "check": "K3",
+      "scope": {
+        "table": "app.person"
+      },
+      "expected": 2006,
+      "actual": 2006,
+      "passed": true,
+      "detail": {
+        "missing": 0
+      }
+    },
+    {
+      "check": "K3",
+      "scope": {
+        "table": "app.admission"
+      },
+      "expected": 2008,
+      "actual": 2008,
+      "passed": true,
+      "detail": {
+        "missing": 0
+      }
+    },
+    {
+      "check": "K3",
+      "scope": {
+        "table": "app.registration"
+      },
+      "expected": 2997,
+      "actual": 2997,
+      "passed": true,
+      "detail": {
+        "missing": 0
+      }
+    },
+    {
+      "check": "K4",
+      "scope": {
+        "entity": "person"
+      },
+      "expected": 2,
+      "actual": 2,
+      "passed": true,
+      "detail": {
+        "personsWithoutAdmission": 0
+      }
+    },
+    {
+      "check": "K6",
+      "scope": {
+        "entity": "person"
+      },
+      "expected": 3,
+      "actual": 3,
+      "passed": true,
+      "detail": {
+        "unvalidatedForeignKeys": 0
+      }
+    },
+    {
+      "check": "K6",
+      "scope": {
+        "entity": "admission"
+      },
+      "expected": 3,
+      "actual": 3,
+      "passed": true,
+      "detail": {
+        "unvalidatedForeignKeys": 0
+      }
+    },
+    {
+      "check": "K6",
+      "scope": {
+        "entity": "registration"
+      },
+      "expected": 7,
+      "actual": 7,
+      "passed": true,
+      "detail": {
+        "unvalidatedForeignKeys": 0
+      }
+    },
+    {
+      "check": "K7",
+      "scope": {},
+      "expected": null,
+      "actual": null,
+      "passed": null,
+      "detail": {
+        "reason": "not applicable in Stage 2"
+      }
+    },
+    {
+      "check": "K8",
+      "scope": {},
+      "expected": null,
+      "actual": null,
+      "passed": null,
+      "detail": {
+        "reason": "not applicable in Stage 2"
+      }
+    },
+    {
+      "check": "K10",
+      "scope": {},
+      "expected": null,
+      "actual": null,
+      "passed": null,
+      "detail": {
+        "reason": "not applicable in Stage 2"
+      }
+    },
+    {
+      "check": "K11",
+      "scope": {},
+      "expected": null,
+      "actual": null,
+      "passed": null,
+      "detail": {
+        "reason": "not applicable in Stage 2"
+      }
+    },
+    {
+      "check": "K9",
+      "scope": {
+        "run": "19b6d7c9-9da5-4e44-9a6e-3e3f335a0d9e"
+      },
+      "expected": null,
+      "actual": null,
+      "passed": null,
+      "detail": {
+        "digest": "3c856639b48d21323099327634c417a513b6982b53bf4b78aa46d93baee8974f"
+      }
+    }
+  ],
+  "seeds": [
+    {
+      "series": "REGISTER",
+      "period": "ALL",
+      "value": "2064112"
+    },
+    {
+      "series": "ADMISSION",
+      "period": "2026-27",
+      "value": "43887"
+    }
+  ],
+  "unparsedNumbers": [
+    {
+      "table": "legacy_admission",
+      "sourceKey": "002010",
+      "column": "admission_no"
+    },
+    {
+      "table": "legacy_admission",
+      "sourceKey": "002013",
+      "column": "admission_no"
+    }
+  ],
+  "laterYearNumbers": [
+    {
+      "sourceKey": "002014",
+      "year": "2027-28"
+    }
+  ],
+  "errors": []
+}
