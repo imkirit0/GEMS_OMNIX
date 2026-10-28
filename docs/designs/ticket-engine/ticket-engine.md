@@ -865,6 +865,8 @@ block the download's 303 to the signed URL.
 
 ### Numbering
 
+> **Superseded (2026-10-28):** migration 0011 (person-core design) renamed `ticket_number_series` to `global_number_series` (series `TICKET`) and generalised `allocateTicketNumber` into `allocateGlobal(tx, "TICKET", …)`. The text below describes the original build.
+
 One network-wide counter (DD-8). `app.number_series` cannot hold it, because
 `centre_id` is part of its primary key (Alternative K). So tickets get their
 own one-table counter, `ticket_number_series`, and

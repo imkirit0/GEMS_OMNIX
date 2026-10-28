@@ -17,7 +17,8 @@ Column order: ID · decision · owner · evidence · proposed default (UNCONFIRM
 | D-STU-1 | Fields editable freely vs via ticket | PRO | WF p14 | As D-ADM-3 | — | T-TKT-017 |
 | D-STU-2 | Course change: fees paid and old registration ⛔ prod-gate | Accounts/PRO | WF p14 | Old registration = Course Change; paid amounts reversed and reallocated | Revenue double-counted | T-FEE-014, T-XM-03 |
 | D-STU-3 | Mode/scheme change queues separate or merged | PRO | WF p14 | One engine, separate ticket types | Ownership confusion | T-TKT-017 |
-| D-STU-4 | Person vs registration identity; register-number scope | Admissions/PRO | REQ C6; SPEC pp. 14–15, 18 | Person → admission → registration; register number per registration | Cannot count people | T-XM-01, T-MIG-004 |
+| D-STU-4 | Person vs registration identity; register-number scope | Admissions/PRO | REQ C6; SPEC pp. 14–15, 18 | Person → admission → registration; register number per registration. Used as a parameter by the person-core design (PMC, 2026-10-28) | Cannot count people | T-XM-01, T-MIG-004 |
+| D-STU-5 | Merging duplicate person records | Admissions/PRO | person-core design | Duplicates allowed at entry; merged later by a reviewed process (D-MIG-4 maps are an input) | People counted twice | T-PER-001, T-PER-002 |
 
 ## Catalogue and organisation
 | ID | Decision | Owner | Evidence | Default | If wrong | Tests |
@@ -54,7 +55,7 @@ Column order: ID · decision · owner · evidence · proposed default (UNCONFIRM
 | D-FIN-8 | Hash-chained finance audit | — | Yes | Weak tamper evidence | T-AUD-008 |
 | D-FIN-9 | Advances / application fees | SPEC p50 | Unapplied-payment liability | Early revenue | T-FEE-024 |
 | D-CUR-1 | Multi-currency, non-GST centres | SPEC pp. 2, 13 | Currency per centre; GST India only | Wrong tax | T-FEE-005 |
-| NP-1…NP-8 | Numbering policy (owner Accounts + Certification) | see 01 §C-02.1 | Unset. Tickets (PMC, ticket-engine design, 2026-10-28): NP-1 one network-wide ticket counter (DD-8, accepted by the project owner); NP-5 sequence not padded, at most 30 characters, prefix fixed text per type (DD-10) | Duplicates; non-compliant serials | T-NUM-001…010, T-TKT-002 |
+| NP-1…NP-8 | Numbering policy (owner Accounts + Certification) | see 01 §C-02.1 | Unset. Tickets (PMC, ticket-engine design, 2026-10-28): NP-1 one network-wide ticket counter (DD-8, accepted by the project owner); NP-5 sequence not padded, at most 30 characters, prefix fixed text per type (DD-10). Person core (PMC, person-core design, 2026-10-28): Register No one network-wide series (period ALL), Admission No network-wide per academic year with chained years, both seeded from legacy at cutover (DD-2, DD-7) | Duplicates; non-compliant serials | T-NUM-001…010, T-TKT-002 |
 
 ## Tickets, exams, certificates, supply, royalty, year end
 | ID | Decision | Owner | Evidence | Default | If wrong | Tests |

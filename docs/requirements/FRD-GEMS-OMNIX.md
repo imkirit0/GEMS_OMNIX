@@ -666,7 +666,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** IT (14), Operations (3), Accounts (2), Admissions (1), Certification (1), Tech Support (1)
 - **Workflows (05):** WF-X13 User/role/permission administration; WF-X14 Credential issuance / reset; WF1 Enquiry to admission; WF10 Voucher & licence; WF3 Centre onboarding; WF8 Exam lifecycle
 - **Open decisions (04):** D-API-1, D-FEE-2, D-GAP-2, D-MIG-1, D-MIG-6, D-OPS-1, D-ORG-5, D-SEC-1, D-SEC-2, D-SEC-3, D-STU-4, D-YEAR-3, NP-1, NP-2, NP-3, NP-5, NP-6, NP-7, NP-8, PR-01, PR-12
-- **Distinct acceptance tests (09):** 29
+- **Distinct acceptance tests (09):** 34
 
 #### FR-000: GROUP: Platform shape (legacy)
 
@@ -940,7 +940,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-011 |
 | Business owner | Admissions |
 | Open decisions | NP-2, NP-7, NP-8, D-STU-4 |
-| Acceptance tests | T-NUM-007, T-NUM-010 |
+| Acceptance tests | T-NUM-007, T-NUM-010, T-PER-001, T-PER-002, T-PER-003, T-PER-004, T-PER-005 |
 | Workflows | WF1 Enquiry to admission |
 | Data migration | counters continued; X1 conflict |
 | Delivery stage | 2 Data model, numbering, audit, ticket core |
@@ -1308,7 +1308,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Admissions/PRO (6), PRO (1), Academics (1)
 - **Workflows (05):** WF-X15 Bulk imports; WF-X2 ID card generation; WF1 Enquiry to admission; WF7 Student data & course change
 - **Open decisions (04):** D-ADM-1, D-ADM-2, D-ADM-3, D-ADM-4, D-FEE-4, D-SCH-2, D-SEC-4, D-SEC-5, D-STU-1, D-STU-2, D-STU-3, D-STU-4
-- **Distinct acceptance tests (09):** 9
+- **Distinct acceptance tests (09):** 13
 
 #### FR-095: Student correction tickets (FNC, LNC, MNC, GPC, FPC, SMS, GDR, EMC, GNC, NC), CSC, CC
 
@@ -1321,7 +1321,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-094 |
 | Business owner | PRO |
 | Open decisions | D-STU-1, D-STU-2, D-STU-3 |
-| Acceptance tests | T-E2E-007, T-TKT-011 |
+| Acceptance tests | T-E2E-007, T-TKT-011, T-PER-005 |
 | Workflows | WF7 Student data & course change |
 | Data migration | n/a |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -1337,7 +1337,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-029, FR-090, FR-053, FR-059 |
 | Business owner | Admissions/PRO |
 | Open decisions | D-ADM-1, D-ADM-2, D-ADM-3, D-ADM-4, D-STU-4 |
-| Acceptance tests | T-E2E-001, T-NUM-001, T-SEC-002 |
+| Acceptance tests | T-E2E-001, T-NUM-001, T-SEC-002, T-PER-001, T-PER-002, T-PER-004 |
 | Workflows | WF1 Enquiry to admission |
 | Data migration | persons + admissions IMPORTED/MERGED/SPLIT (C-03) |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

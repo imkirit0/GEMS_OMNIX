@@ -122,6 +122,15 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-TKT-021 | Distinct approvers | One user cannot approve two levels of the same ticket (D-TKT-4 PMC) |
 | T-TKT-022 | Administrator reassign | A `ticket.type.manage` holder reassigns a ticket whose named approver was disabled; the new assignee can act |
 
+### T-PER: person, admission and registration core (`docs/designs/person-core/person-core.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-PER-001 | One person, several admissions and registrations | Persons and registrations counted separately (with T-XM-01). An HO user, and a regional user within their region, admit an existing person at a second centre; a single-centre user cannot see or pass them |
+| T-PER-002 | Likely duplicate at entry | Flagged in the caller's scope, never across centres; single-name learners and swapped name order match; concurrent admits of one learner give one person; a bulk insert gets its match key |
+| T-PER-003 | Admission No and Register No | Admission No network-wide per academic year (years chain), Register No network-wide; never clash between centres; allocated in the admission transaction; a rollback releases them; a missing series fails loudly |
+| T-PER-004 | Scope | A centre sees only its own admissions and registrations, and a person only through one of them; another centre's record raises the same error as a missing one |
+| T-PER-005 | Identity changes | Go through one function that returns before and after, only for a person admitted at the given centre |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|
