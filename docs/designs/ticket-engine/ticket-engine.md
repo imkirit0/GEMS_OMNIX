@@ -1,7 +1,7 @@
 # Ticket and approval engine (Stage 2 core)
 
 *   **Author:** gtm
-*   **Status:** Proposed
+*   **Status:** Reviewed (EGM stages 5–9 complete, 2026-10-28), awaiting human approval
 *   **Date:** 2026-10-27
 *   **Last updated:** 2026-10-28
 
