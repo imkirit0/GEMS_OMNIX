@@ -14,10 +14,9 @@ import { createAuth, hashPassword } from "../src/server/auth";
 import { totp } from "./auth/suite";
 import { DATASETS, exportCsv } from "../src/server/exports";
 import { AUDIT_CATALOGUE } from "./audit-catalogue";
-import { asAdmin, C, PERIOD, reset, T } from "./fixtures";
+import { asAdmin, C, PERIOD, reset, rows, T } from "./fixtures";
 
 const HO = "00000000-0000-0000-0000-0000000000ff";
-const rows = (action: string) => asAdmin((db) => db.query(`select * from app.audit_log where action = $1 order by id`, [action]).then((r) => r.rows));
 const ctx = { requestId: "req-aud-001", ip: "10.20.30.40" };
 const files = (dir: string, ext: RegExp): string[] => fs.readdirSync(dir, { withFileTypes: true })
   .flatMap((e) => (e.isDirectory() ? files(path.join(dir, e.name), ext) : ext.test(e.name) ? [path.join(dir, e.name)] : []));

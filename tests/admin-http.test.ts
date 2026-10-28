@@ -13,7 +13,7 @@ import { auth, SESSION_COOKIE } from "../src/server/auth/http";
 import { hashPassword } from "../src/server/auth";
 import { safeNext } from "../src/server/admin-http";
 import { bootstrapAdmin } from "../scripts/bootstrap-admin.mjs";
-import { asAdmin, reset, T } from "./fixtures";
+import { asAdmin, reset, setStepUp, T } from "./fixtures";
 
 const ORIGIN = "https://gems.test";
 const HO_ID = "00000000-0000-0000-0000-0000000000ff";
@@ -24,8 +24,6 @@ function post(path: string, body: URLSearchParams | Record<string, string>, { or
   return new Request(`${ORIGIN}${path}`, { method: "POST", headers, body: body instanceof URLSearchParams ? body : new URLSearchParams(body) });
 }
 const where = (r: Response) => { const u = new URL(r.headers.get("location") ?? "/", ORIGIN); return u.pathname + u.search; };
-const setStepUp = (token: string, age: number) => asAdmin((db) => db.query(
-  `update app.app_session set step_up_at = now() - make_interval(secs => $2) where token_hash = sha256(convert_to($1, 'UTF8'))`, [token, age]));
 
 beforeEach(async () => { await reset(); await setStepUp(T.hoAll, 0); });
 afterAll(() => auth().close());

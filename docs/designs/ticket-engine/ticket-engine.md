@@ -797,8 +797,11 @@ app.user_centre_ids(p_user uuid, p_permission text default null, p_role int defa
     5.  either `assigned_user_id` is the actor, or no one is assigned and
         the actor is the current level's named user or holds its role over
         the ticket's centre (DD-5).
-2.  **May receive**, for `user`. All of: `user` is active; is not the actor;
-    is not the raiser; holds `ticket.approve` over the ticket's centre.
+2.  **May receive**, for `user`. All of: the ticket is OPEN; `user` is
+    active; is not the actor; is not the raiser; has no APPROVE event on the
+    ticket (it could not act there under DD-14, so the ticket would be
+    stranded; added while building P2); holds `ticket.approve` over the
+    ticket's centre.
 3.  **May view**, for the actor. Any of:
     1.  holds `ticket.view` over the ticket's centre;
     2.  is the raiser;
@@ -1756,7 +1759,7 @@ other.
         | `…0c5` tk_fwd | `tok-tkFwd` | `tk_approver` (13): `ticket.approve`, `ticket.view` | CENTRE A | Forward and reassign target |
         | `…0c6` tk_reviewer | `tok-tkReviewer` | `tk_reviewer` (14): `ticket.view` | CENTRE A | Holds a level role without `ticket.approve` |
         | `…0c7` tk_admin | `tok-tkAdmin` | `tk_type_admin` (15): `ticket.type.manage`, `rbac.view` | ALL | `ticket.type.manage` holder |
-        | `…0c8` tk_viewer | `tok-tkViewer` | none | none | Named viewer of the fixture type |
+        | `…0c8` tk_viewer | `tok-tkViewer` | `tk_member` (16): none | CENTRE A | Named viewer of the fixture type. It needs some role, because `app.account_usable()` refuses a session for a user with no assignments |
         | `…0c9` tk_b | `tok-tkB` | 11 | CENTRE B | Approver out of scope |
 
     *   The `setStepUp(token, ageSeconds)` helper, currently duplicated in

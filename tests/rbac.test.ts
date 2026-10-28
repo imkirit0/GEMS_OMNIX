@@ -8,16 +8,12 @@ import {
   assignRole, createRole, createUser, getUser, issueSetupToken, listUsers, RbacError, removeAssignment,
   setRolePermissions, setUserStatus, StepUpRequired,
 } from "../src/server/rbac";
-import { asAdmin, audits, C, reset, T } from "./fixtures";
+import { asAdmin, audits, C, newSession, reset, setStepUp, T } from "./fixtures";
 
 const ROLE = { centreAdmin: 1, hoViewer: 2, rbacAdmin: 3 } as const;
 const REGADMIN = "tok-regadmin"; // RBAC rights network-wide, but centre_admin rights only in region R1
 
-const setStepUp = (token: string, ageSeconds: number) => asAdmin((db) => db.query(
-  `update app.app_session set step_up_at = now() - make_interval(secs => $2) where token_hash = sha256(convert_to($1, 'UTF8'))`, [token, ageSeconds]));
 const centresOf = (token: string) => withScope(token, async (tx) => (await tx.$queryRaw<{ id: number }[]>`select id from app.centre order by id`).map((r) => r.id));
-const newSession = (userId: string, token: string) => asAdmin((db) => db.query(
-  `insert into app.app_session (token_hash, user_id, expires_at, step_up_at) values (sha256(convert_to($1, 'UTF8')), $2, now() + interval '1 hour', now())`, [token, userId]));
 const outcomes = async (action: string) => (await audits(action)).map((a) => a.outcome);
 
 beforeEach(async () => {

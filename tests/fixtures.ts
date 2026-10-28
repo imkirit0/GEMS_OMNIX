@@ -8,6 +8,22 @@ export const T = {
 } as const;
 export const PERIOD = "2026-27";
 
+// Ticket-engine fixture users (design item 20). Existing users and assignments above are unchanged.
+// Each has a session with token tok-tk<Name>, e.g. TK.raiser -> "tok-tkRaiser".
+export const TK = {
+  raiser: "00000000-0000-0000-0000-0000000000c1", // tk_raiser at centre A
+  l1: "00000000-0000-0000-0000-0000000000c2", // tk_level1 at A: level-1 approver by role
+  l2: "00000000-0000-0000-0000-0000000000c3", // tk_level2 at A: level-2 approver (named user in type fixtures)
+  both: "00000000-0000-0000-0000-0000000000c4", // tk_level1 and tk_level2 at A (DD-14)
+  fwd: "00000000-0000-0000-0000-0000000000c5", // tk_approver at A: forward and reassign target
+  reviewer: "00000000-0000-0000-0000-0000000000c6", // tk_reviewer at A: a level role without ticket.approve
+  admin: "00000000-0000-0000-0000-0000000000c7", // tk_type_admin (ticket.type.manage, rbac.view) at ALL
+  viewer: "00000000-0000-0000-0000-0000000000c8", // tk_member at A (no permissions; a user needs a role to sign in): named viewer of a type
+  b: "00000000-0000-0000-0000-0000000000c9", // tk_level1 at centre B: approver out of scope
+} as const;
+export const TK_ROLE = { raiser: 10, level1: 11, level2: 12, approver: 13, reviewer: 14, typeAdmin: 15, member: 16 } as const;
+export const tkToken = (name: keyof typeof TK) => `tok-tk${name[0]!.toUpperCase()}${name.slice(1)}`;
+
 export async function asAdmin<T>(fn: (db: pg.Client) => Promise<T>): Promise<T> {
   const db = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
   await db.connect();
@@ -18,7 +34,10 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
   await asAdmin(async (db) => {
     await db.query("set session_replication_role = replica"); // lets the admin clear the append-only audit table
     await db.query(`truncate app.audit_log, app.number_series, app.app_session, app.role_assignment, app.role_permission,
-      app.role, app.permission, app.app_user, app.centre, app.area, app.region restart identity cascade`);
+      app.role, app.permission, app.app_user, app.centre, app.area, app.region,
+      app.ticket_document, app.ticket_upload, app.ticket_event, app.ticket_level, app.ticket, app.ticket_number_series,
+      app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category restart identity cascade`);
+    if ((await db.query(`select to_regclass('app.test_ticket_counter') t`)).rows[0].t) await db.query(`truncate app.test_ticket_counter`);
     await db.query("set session_replication_role = origin");
     await db.query(`insert into app.region (id, code, name) values (1, 'R1', 'Region 1'), (2, 'R2', 'Region 2')`);
     await db.query(`insert into app.area (id, region_id, name) values (1, 1, 'A1'), (2, 1, 'A2'), (3, 2, 'B1')`);
@@ -26,19 +45,30 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       (1, 'KL2-25', 'Centre A', 1, 'ACTIVE'), (2, 'KL3-07', 'Centre A2', 2, 'ACTIVE'), (3, 'TN1-03', 'Centre B', 3, 'ACTIVE')`);
     await db.query(`insert into app.permission (key, description, sensitive) values
       ('org.centre.view', 'View centre', false), ('numbering.series.allocate', 'Allocate a document number', false),
-      ('rbac.view', 'View users and roles', false), ('rbac.user.manage', 'Manage users', true), ('rbac.role.manage', 'Manage roles', true)`);
+      ('rbac.view', 'View users and roles', false), ('rbac.user.manage', 'Manage users', true), ('rbac.role.manage', 'Manage roles', true),
+      ('ticket.raise', 'Raise tickets', false), ('ticket.view', 'View tickets', false), ('ticket.approve', 'Act on tickets', false),
+      ('ticket.document.view', 'Download ticket documents', false), ('ticket.type.manage', 'Set up ticket types', true)`);
     await db.query(`insert into app.role (id, key, name) values (1, 'centre_admin', 'Centre admin'),
-      (2, 'ho_viewer', 'HO viewer'), (3, 'rbac_admin', 'RBAC admin')`);
+      (2, 'ho_viewer', 'HO viewer'), (3, 'rbac_admin', 'RBAC admin'),
+      (10, 'tk_raiser', 'Ticket raiser'), (11, 'tk_level1', 'Ticket level 1'), (12, 'tk_level2', 'Ticket level 2'),
+      (13, 'tk_approver', 'Ticket approver'), (14, 'tk_reviewer', 'Ticket reviewer'), (15, 'tk_type_admin', 'Ticket type admin'),
+      (16, 'tk_member', 'Centre member (no permissions)')`);
     await db.query(`insert into app.role_permission values
       (1, 'org.centre.view'), (1, 'numbering.series.allocate'), (2, 'org.centre.view'),
-      (3, 'rbac.view'), (3, 'rbac.user.manage'), (3, 'rbac.role.manage')`);
+      (3, 'rbac.view'), (3, 'rbac.user.manage'), (3, 'rbac.role.manage'),
+      (10, 'ticket.raise'), (10, 'ticket.view'), (10, 'ticket.document.view'),
+      (11, 'ticket.approve'), (11, 'ticket.view'), (11, 'ticket.document.view'),
+      (12, 'ticket.approve'), (12, 'ticket.view'), (12, 'ticket.document.view'),
+      (13, 'ticket.approve'), (13, 'ticket.view'), (14, 'ticket.view'),
+      (15, 'ticket.type.manage'), (15, 'rbac.view')`);
     await db.query(`insert into app.app_user (id, login, display_name, status) values
       ('00000000-0000-0000-0000-00000000000a', 'ua', 'User A', 'ACTIVE'),
       ('00000000-0000-0000-0000-00000000000b', 'ub', 'User B', 'ACTIVE'),
       ('00000000-0000-0000-0000-0000000000a1', 'hor1', 'HO Region 1', 'ACTIVE'),
       ('00000000-0000-0000-0000-0000000000a2', 'hoarea', 'HO Area A1', 'ACTIVE'),
       ('00000000-0000-0000-0000-0000000000ff', 'hoall', 'HO All', 'ACTIVE'),
-      ('00000000-0000-0000-0000-0000000000d0', 'disabled', 'Disabled user', 'DISABLED')`);
+      ('00000000-0000-0000-0000-0000000000d0', 'disabled', 'Disabled user', 'DISABLED'),
+      ${Object.entries(TK).map(([k, id]) => `('${id}', '${k.toLowerCase()}', 'Ticket ${k}', 'ACTIVE')`).join(", ")}`);
     await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, region_id, area_id, scope_centre_id) values
       ('00000000-0000-0000-0000-00000000000a', 1, 'CENTRE', null, null, 1),
       ('00000000-0000-0000-0000-00000000000b', 1, 'CENTRE', null, null, 3),
@@ -46,7 +76,12 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('00000000-0000-0000-0000-0000000000a2', 2, 'AREA', null, 1, null),
       ('00000000-0000-0000-0000-0000000000ff', 2, 'ALL', null, null, null),
       ('00000000-0000-0000-0000-0000000000ff', 3, 'ALL', null, null, null),
-      ('00000000-0000-0000-0000-0000000000d0', 2, 'ALL', null, null, null)`);
+      ('00000000-0000-0000-0000-0000000000d0', 2, 'ALL', null, null, null),
+      ('${TK.raiser}', 10, 'CENTRE', null, null, 1), ('${TK.l1}', 11, 'CENTRE', null, null, 1),
+      ('${TK.l2}', 12, 'CENTRE', null, null, 1), ('${TK.both}', 11, 'CENTRE', null, null, 1),
+      ('${TK.both}', 12, 'CENTRE', null, null, 1), ('${TK.fwd}', 13, 'CENTRE', null, null, 1),
+      ('${TK.reviewer}', 14, 'CENTRE', null, null, 1), ('${TK.admin}', 15, 'ALL', null, null, null),
+      ('${TK.viewer}', 16, 'CENTRE', null, null, 1), ('${TK.b}', 11, 'CENTRE', null, null, 3)`);
     await db.query(`insert into app.app_session (token_hash, user_id, expires_at, revoked_at)
       select sha256(convert_to(t, 'UTF8')), u::uuid, now() + e::interval, r from (values
         ('tok-uA', '00000000-0000-0000-0000-00000000000a', '8 hours', null::timestamptz),
@@ -56,7 +91,8 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
         ('tok-hoAll', '00000000-0000-0000-0000-0000000000ff', '8 hours', null),
         ('tok-expired', '00000000-0000-0000-0000-00000000000a', '-1 minute', null),
         ('tok-revoked', '00000000-0000-0000-0000-00000000000a', '8 hours', now()),
-        ('tok-disabled', '00000000-0000-0000-0000-0000000000d0', '8 hours', null)) v(t, u, e, r)`);
+        ('tok-disabled', '00000000-0000-0000-0000-0000000000d0', '8 hours', null),
+        ${Object.entries(TK).map(([k, id]) => `('tok-tk${k[0]!.toUpperCase()}${k.slice(1)}', '${id}', '8 hours', null)`).join(", ")}) v(t, u, e, r)`);
     // explicit ids above do not advance the identity sequences; later inserts must not collide with them
     for (const t of ["region", "area", "centre", "role"]) await db.query(`select setval('app.${t}_id_seq', (select max(id) from app.${t}))`);
     await db.query(`insert into app.number_series (centre_id, doc_type, period, gap_rule, current)
@@ -67,6 +103,16 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
 export const seriesCurrent = (centreId: number, docType = "FEEREC") =>
   asAdmin((db) => db.query(`select current::int as n from app.number_series where centre_id = $1 and doc_type = $2 and period = $3`,
     [centreId, docType, PERIOD]).then((r) => r.rows[0]?.n as number));
+
+// Whole audit rows, for assertions on detail, before/after and target columns.
+export const rows = (action: string) =>
+  asAdmin((db) => db.query(`select * from app.audit_log where action = $1 order by id`, [action]).then((r) => r.rows));
+
+export const setStepUp = (token: string, ageSeconds: number) => asAdmin((db) => db.query(
+  `update app.app_session set step_up_at = now() - make_interval(secs => $2) where token_hash = sha256(convert_to($1, 'UTF8'))`, [token, ageSeconds]));
+
+export const newSession = (userId: string, token: string) => asAdmin((db) => db.query(
+  `insert into app.app_session (token_hash, user_id, expires_at, step_up_at) values (sha256(convert_to($1, 'UTF8')), $2, now() + interval '1 hour', now())`, [token, userId]));
 
 export const audits = (action: string) =>
   asAdmin((db) => db.query(`select outcome, target_centre_id from app.audit_log where action = $1 order by id`, [action])

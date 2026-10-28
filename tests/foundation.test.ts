@@ -48,7 +48,8 @@ describe("database isolation (T-RLS)", () => {
       where n.nspname = 'app' and c.relkind = 'r'
         and (c.relname = 'centre' or exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'centre_id' and not a.attisdropped))
       order by 1`).then((r) => r.rows));
-    expect(rows.map((r) => r.relname)).toEqual(["centre", "number_series"]); // not vacuous
+    expect(rows.map((r) => r.relname)).toEqual(["centre", "number_series", "ticket", "ticket_document", "ticket_event",
+      "ticket_level", "ticket_upload"]); // not vacuous
     for (const r of rows) {
       expect(r.rls && r.force, r.relname).toBe(true);
       const needed = r.relname === "centre" ? ["SELECT"] : ["SELECT", "INSERT", "UPDATE", "DELETE"]; // centre is read-only to the app so far
@@ -66,7 +67,9 @@ describe("database isolation (T-RLS)", () => {
     expect(fns.map((f) => f.proname)).toEqual(["account_usable", "assert_can_grant_role", "audit", "can_grant_permission", "has_permission",
       "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
       "rbac_set_user_status", "rbac_unassign", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
-      "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids", "visible_centre_ids"]);
+      "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids",
+      "ticket_forward_candidates", "ticket_may_act", "ticket_may_receive", "ticket_may_view", "ticket_people", "ticket_type_lock",
+      "user_centre_ids", "visible_centre_ids"]);
     for (const f of fns) expect(f, f.proname).toMatchObject({ fixed: true, owner_bypasses: true });
 
     expect(await visibleCentres(T.uA)).toEqual([C.A]);
