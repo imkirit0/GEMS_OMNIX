@@ -48,13 +48,22 @@ describe("database isolation (T-RLS)", () => {
       where n.nspname = 'app' and c.relkind = 'r'
         and (c.relname = 'centre' or exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'centre_id' and not a.attisdropped))
       order by 1`).then((r) => r.rows));
-    expect(rows.map((r) => r.relname)).toEqual(["centre", "number_series", "ticket", "ticket_document", "ticket_event",
-      "ticket_level", "ticket_upload"]); // not vacuous
+    expect(rows.map((r) => r.relname)).toEqual(["admission", "centre", "number_series", "registration", "ticket", "ticket_document",
+      "ticket_event", "ticket_level", "ticket_upload"]); // not vacuous
     for (const r of rows) {
       expect(r.rls && r.force, r.relname).toBe(true);
       const needed = r.relname === "centre" ? ["SELECT"] : ["SELECT", "INSERT", "UPDATE", "DELETE"]; // centre is read-only to the app so far
       for (const cmd of needed) expect(r.cmds, `${r.relname} ${cmd}`).toContain(cmd);
     }
+  });
+
+  test("T-RLS-002 person (no centre_id) has ENABLE+FORCE RLS with select, insert and update policies and no delete", async () => {
+    const [r] = await asAdmin((db) => db.query(`
+      select c.relrowsecurity rls, c.relforcerowsecurity force,
+             array(select distinct cmd from pg_policies p where p.schemaname = 'app' and p.tablename = 'person') cmds
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'app' and c.relname = 'person'`).then((q) => q.rows));
+    expect(r.rls && r.force).toBe(true);
+    expect([...r.cmds].sort()).toEqual(["INSERT", "SELECT", "UPDATE"]);
   });
 
   test("T-RLS-005 definer functions: inventory, fixed search_path, owner bypasses RLS; scope truth table", async () => {

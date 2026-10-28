@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Forbidden, scopedAction } from "../action";
 import { isConnectionLost, withScope, type Tx } from "../db";
 import { adminWrite } from "../rbac";
-import { allocateTicketNumber, formatTicketNumber } from "../numbering";
+import { allocateGlobal, formatTicketNumber } from "../numbering";
 import { storage } from "../storage";
 import { Prisma } from "../../../generated/prisma/client";
 import {
@@ -166,7 +166,7 @@ export async function raise(session: string | undefined, r: RaiseInput): Promise
     const levels = await tx.$queryRaw<{ level: number; approver_user_id: string | null; approver_role_id: number | null }[]>`
       select level, approver_user_id::text, approver_role_id from app.ticket_type_level where type_id = ${typeId} order by level`;
     if (levels.length === 0 || levels.some((l, i) => l.level !== i + 1)) throw new TicketError("inactive", "type has no valid levels");
-    const seq = await allocateTicketNumber(tx, TICKET_POLICY.numberPeriod);
+    const seq = await allocateGlobal(tx, "TICKET", TICKET_POLICY.numberPeriod);
     const number = formatTicketNumber({ prefix: type!.number_prefix, typeCode: type!.code, number: seq,
       pad: TICKET_POLICY.numberPad, maxLength: TICKET_POLICY.numberMaxLength });
     await tx.$executeRaw`insert into app.ticket (id, number, type_id, centre_id, raised_by, level_count, payload, reraise_of)

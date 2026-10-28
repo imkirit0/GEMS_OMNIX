@@ -76,7 +76,7 @@ describe("ticket engine (T-TKT)", () => {
   });
 
   test("T-TKT-002 numbering: one network-wide counter, no duplicates, no gap after a rollback, first raise creates the row", async () => {
-    expect(await asAdmin((db) => db.query(`select count(*)::int n from app.ticket_number_series`).then((r) => r.rows[0].n))).toBe(0);
+    expect(await asAdmin((db) => db.query(`select count(*)::int n from app.global_number_series where series = 'TICKET'`).then((r) => r.rows[0].n))).toBe(0);
     const typeId = await makeType({ code: "NUM", levels: [{ role: TK_ROLE.level1 }] });
     await grant(TK.b, TK_ROLE.raiser, C.B);
     const a = await raiseAt(tok("raiser"), typeId);
@@ -90,7 +90,7 @@ describe("ticket engine (T-TKT)", () => {
     const ids = await Promise.all([0, 1, 2, 3].map(() => raiseAt(tok("raiser"), typeId)));
     const numbers = (await Promise.all([same, ...ids].map(ticket))).map((t) => Number(t.number.split("/")[2])).sort((x, y) => x - y);
     expect(numbers).toEqual([3, 4, 5, 6, 7]); // consecutive: the loser of the race left no gap
-    expect(await asAdmin((db) => db.query(`select period, current::int from app.ticket_number_series`).then((r) => r.rows)))
+    expect(await asAdmin((db) => db.query(`select period, current::int from app.global_number_series where series = 'TICKET'`).then((r) => r.rows)))
       .toEqual([{ period: "ALL", current: 7 }]);
   });
 

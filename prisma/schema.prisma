@@ -61,6 +61,8 @@ model Centre {
   ticketEvents    TicketEvent[]
   ticketUploads   TicketUpload[]
   ticketDocuments TicketDocument[]
+  admissions      Admission[]
+  registrations   Registration[]
 
   @@map("centre")
   @@schema("app")
@@ -512,11 +514,89 @@ model TicketDocument {
   @@schema("app")
 }
 
-// One network-wide counter (DD-8). Stage 2 uses the single period key ALL (never resets).
-model TicketNumberSeries {
-  period  String @id
+// Network-wide counters (person-core design; generalises the ticket counter of ticket-engine DD-8).
+// series TICKET (period ALL), REGISTER (period ALL, seeded at cutover), ADMISSION (one row per academic year).
+model GlobalNumberSeries {
+  series  String
+  period  String
   current BigInt
 
-  @@map("ticket_number_series")
+  @@id([series, period])
+  @@map("global_number_series")
+  @@schema("app")
+}
+
+// ---------- Person, admission and registration core (person-core design) ----------
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+
+  @@schema("app")
+}
+
+enum RegistrationStatus {
+  ACTIVE
+  DROP
+  LEAVE
+  TRANSFER
+
+  @@schema("app")
+}
+
+// Network-wide: no centre_id. Visible only through an admission in scope (RLS, migration 0011).
+// No Aadhaar, religion, caste or disability until D-SEC-4 is signed.
+model Person {
+  id          String     @id @db.Uuid
+  givenName   String     @map("given_name")
+  familyName  String?    @map("family_name")
+  gender      Gender?
+  dateOfBirth DateTime?  @map("date_of_birth") @db.Date
+  mobile      String?
+  email       String?
+  matchKey    String?    @map("match_key") // set by trigger app.person_set_match_key()
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  admissions  Admission[]
+
+  @@index([matchKey])
+  @@map("person")
+  @@schema("app")
+}
+
+model Admission {
+  id            String         @id @db.Uuid
+  personId      String         @map("person_id") @db.Uuid
+  centreId      Int            @map("centre_id")
+  academicYear  String         @map("academic_year")
+  admissionNo   String         @unique @map("admission_no")
+  admittedOn    DateTime       @map("admitted_on") @db.Date
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  person        Person         @relation(fields: [personId], references: [id], onDelete: Restrict)
+  centre        Centre         @relation(fields: [centreId], references: [id], onDelete: Restrict)
+  registrations Registration[]
+
+  @@unique([id, centreId])
+  @@index([personId])
+  @@map("admission")
+  @@schema("app")
+}
+
+model Registration {
+  id          String             @id @db.Uuid
+  admissionId String             @map("admission_id") @db.Uuid
+  centreId    Int                @map("centre_id")
+  courseCode  String             @map("course_code")
+  registerNo  String             @unique @map("register_no")
+  status      RegistrationStatus @default(ACTIVE)
+  joinDate    DateTime           @map("join_date") @db.Date
+  endDate     DateTime?          @map("end_date") @db.Date
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  // composite: keeps registration.centre_id equal to its admission's centre
+  admission   Admission          @relation(fields: [admissionId, centreId], references: [id, centreId], onDelete: Restrict)
+  centre      Centre             @relation(fields: [centreId], references: [id], onDelete: Restrict)
+
+  @@index([admissionId])
+  @@map("registration")
   @@schema("app")
 }
