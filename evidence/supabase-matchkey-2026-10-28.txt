@@ -1,0 +1,11 @@
+{
+ "lc_ctype": "en_US.UTF-8",
+ "server": "PostgreSQL 17.6",
+ "malayalam": "അനുപമ കൃഷ്ണൻ",
+ "malayalamSwapped": "അനുപമ കൃഷ്ണൻ",
+ "latin": "kumar raj",
+ "latinSwapped": "kumar raj",
+ "single": "anjali",
+ "sameMalayalam": true,
+ "malayalamWords": 2
+}

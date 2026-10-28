@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-28, person-core design Proposed, EGM Stages 5–9 resolved (last evidence: E-031).
+**Last updated:** 2026-10-28, person core built (Q1–Q4), CI green 123 tests (last evidence: E-032).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -13,9 +13,9 @@
 |---|---|---|
 | Requirements (traceability matrix) | 290 | audit 02, T-DOC-001 |
 | Requirements verified (VER) | **0** | E-022 |
-| Open business decisions | **116** (108 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
+| Open business decisions | **117** (109 D-/PR- items + NP-1…8; D-STU-5 added by the person-core design), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
-| Automated tests | **115 passing + 3 todo** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD + 30 T-TKT), plus real-server checks in CI: admin journey (10 steps) and security smoke (18 checks) | `evidence/audit-2026-10-27T190404.txt` |
+| Automated tests | **123 passing + 3 todo** (20 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD + 30 T-TKT + 7 T-PER incl. T-NUM-010), plus real-server checks in CI: admin journey (10 steps) and security smoke (18 checks) | `evidence/audit-2026-10-27T190404.txt` |
 | CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
 | Git | `main`. Pushed to GitHub (public) on 2026-10-28 at the owner's request, again after the dev-origin change (2008a2b); later commits local; outgoing commits scanned for the keys pasted in chat, signed-URL tokens and the project ref: none | `git log`, `git status -sb` |
@@ -51,6 +51,7 @@
 | 25 | Ticket engine real-browser check in Chrome: upload PUT to Supabase under CORS, raise, two-level approval by clicks, download redirect followed under CSP `form-action` | 2026-10-28 | E-028 |
 | 26 | Search rate limit (T-SEC-015 search part): `app.rate_take`, 30 per minute per user (PMC); `ci.sh` green (112 tests) | 2026-10-28 | E-029, commit `eed7d01` |
 | 27 | C-26: cause located (Supabase transaction pooler resets or stalls connections under load; first two fully green POC runs on Supabase) and mitigated in the app (fail-fast timeouts, retry of connections lost before COMMIT); `ci.sh` green (115 tests) | 2026-10-28 | E-030, E-031, commits `d97cc2c`, `c9f2a30` |
+| 28 | Person/admission/registration core built (design Approved 2026-10-28 after EGM Stages 5–9): migration 0011 (`person`, `admission`, `registration`, `ticket_number_series` renamed to `global_number_series`), `allocateGlobal` (upsert / `mustExist` / chained years), `src/server/people.ts` (`admit`, `changeIdentity`, `getPerson`, `findMatches`, `assertAdmittedAt`), T-PER-001…005 and the first CI test of T-NUM-010; 5 mutation checks killed; match-key rule checked on Supabase; `ci.sh` green (123 tests) | 2026-10-28 | E-032, commits `902b369`, `fb6b2c2` |
 
 ## 3. Partly done
 
@@ -92,7 +93,7 @@
 
 **Stage 0 (discovery):** ⛔ blocked on legacy MySQL read-only access.
 
-**Stage 2:** ticket core (P5) built (E-023–E-028). **Person/admission/registration core: design drafted 2026-10-28, status Proposed** (`docs/designs/person-core/person-core.md`; every section owner-approved; DD-1 duplicate check in scope only, DD-2 Register No network-wide and Admission No per centre and year, DD-3 functions not screens; one shared network counter replacing `ticket_number_series`). EGM review: Stage 5 zoom-out 1 blocker (Admission No clash between centres), 4 major, 5 nit, all resolved (`zoom_out_report.md`; owner: Admission No network-wide per year, DD-4 HO links moves, DD-5 no HO edit yet). Stage 6 comprehension: 3 blocker, 11 major, 7 nit, all resolved (`comprehension_report.md`; DD-6 only given name required; admission series self-creates per year; REGISTER seeded at cutover). Stage 7 critic (2026-10-28): 1 blocker (no Risks section), 21 major, 16 nit, all resolved (`critic_report.md`; owner: DD-7 academic years chain, DD-4 enforced with ALL-scope `student.admit`, move leaves old registrations ACTIVE as a recorded limit, counter rename kept with a deploy-together constraint; `changeIdentity` bound to the ticket's centre, advisory lock against concurrent duplicates, order-independent match key). Stage 8 intermediate zoom-out: 0 blocker, 1 major, 4 nit, all resolved (`intermediate_zoom_out_report.md`; owner: linking needs `student.admit` at both centres, so regional users link instead of duplicating; `assertAdmittedAt` shared; year rule in the DB check). Stage 9 implementation readiness + codebase check: 2 blocker, 9 major, 15 nit, all applied (`implementation_readiness_report.md`; regional case moved to A/A2, new HO fixture user, T-NUM-010 gets its first CI test, exact chained-year SQL, rollback test mechanism, new decision D-STU-5 person merge; student permissions `sensitive = false` flagged to owner). Next: owner approval for build (phases Q1–Q4). Still to do: numbering policy sign-off (NP-1…8), migration framework (P8).
+**Stage 2:** ticket core (P5) built (E-023–E-028). **Person/admission/registration core: built 2026-10-28** (design `docs/designs/person-core/person-core.md`, Approved after EGM Stages 5–9; E-032). Functions only, no screens (DD-3). Open: NP-1…8 sign-off and the cutover seed of REGISTER and the 2026-27 ADMISSION year; D-SEC-4 (sensitive fields, PII in audit rows); D-STU-5 person merge; `student.*` permissions `sensitive = false` (PMC). Next Stage 2 pieces: migration framework (P8); Stage 3 admission screens and correction handlers build on this core. Still to do: numbering policy sign-off (NP-1…8), migration framework (P8).
 
 **Stages 3–8:** not started. These are the business modules, G-FIN gate, rehearsals, UAT and cutover (audit 10).
 

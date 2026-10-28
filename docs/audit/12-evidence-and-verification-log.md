@@ -1041,3 +1041,35 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | src/server/tickets/engine.ts | 0c18ae5a88b003569920b9219b416727a15f4c3c04469270729cd923e6c005b0 |
 | tests/foundation.test.ts | 5b06b16bcf53a203fd1444c4e803e406ace1a6cf7bfa7ca360032133301ccba0 |
 | evidence/ci-c26-mitigation-2026-10-28T153135.txt | ca49e6f7bd09e5d64be37fe80eac6c82283e18c3fb731f83c8983ec6e29e9866 |
+
+## E-032 Person, admission and registration core built (2026-10-28)
+- **Request:** "approved, start building". The design `docs/designs/person-core/person-core.md` was marked Approved (EGM Stages 5–9 resolved, reports in the same folder) and built in phases Q1–Q4, each ending with `bash scripts/ci.sh` exit 0.
+- **Q1 (commit `00c7e47`, documents):** T-PER-001…005 in audit 09; T-PER links on R-029, R-150, R-095 (T-NUM-007/010 kept on R-029); D-STU-5 (person merge) added to audit 04, D-STU-4 and NP rows annotated; superseded note in the ticket-engine design; matrix and FRD regenerated (0 T-DOC errors).
+- **Q2 (commit `902b369`, schema):** migration 0011. `ticket_number_series` renamed to `global_number_series` (series `TICKET` added, primary key (series, period)), hand-edited so the counter survives; `person`, `admission`, `registration` generated from the Prisma schema (composite foreign key registration (admission_id, centre_id) → admission (id, centre_id)); `app.person_match_key` (immutable) and its trigger; the academic-year check; RLS (0002 loop on admission and registration, person through an admission, insert needs `student.admit`, no delete); permissions `student.view`, `student.admit` (`sensitive = false`, PMC under D-SEC-4); grants (update only on the six identity columns). `allocateGlobal` replaces `allocateTicketNumber`. No drift.
+- **Q3 (commit `fb6b2c2`, server):** `src/server/people.ts`: `admit` (one `scopedAction`, advisory lock on the match key, duplicate check in the caller's `student.admit` scope, linking needs `student.admit` where the person is already admitted, chained ADMISSION years, REGISTER `mustExist`), `changeIdentity` (bound to the ticket's centre through `assertAdmittedAt`, returns changed fields before/after), `getPerson`, `findMatches`, `personDb` error mapping. Audit action `person.admit` catalogued and scanned by T-AUD-009.
+- **Tests:** `tests/people.test.ts`, 7 tests: T-PER-001…005 (T-PER-003 in three parts) and the first CI test of T-NUM-010 (first Register No 2064113, first Admission No GTEC262743888 from the cutover-style seeds). Fixtures: role 17 `student_admin`, users `sa` (A), `sb` (B), `sr` (REGION 1), `sh` (ALL); `hoAll` unchanged.
+- **Mutation checks** (each restored afterwards; the file compared equal and the suite passed again):
+
+  | Mutation | Test that failed |
+  |---|---|
+  | person select policy `using (true)` | T-PER-004 |
+  | skip `findMatches` in `admit` | T-PER-002 |
+  | allocate the Register No in a separate transaction | T-PER-003 (rollback) |
+  | drop the centre check in `changeIdentity` | T-PER-005 |
+  | ignore `previous` in `allocateGlobal` | T-PER-003 (numbers) |
+
+- **Supabase check (design item 4, K7):** `scripts/manual-supabase-matchkey.mjs`, read-only, evaluated the name rule on the hosted database (PostgreSQL 17.6, `lc_ctype` `en_US.UTF-8`, same as local `en_US.utf8`): a Malayalam name stays two whole words and matches when swapped; Latin swap and single name as locally. Migration 0011 was **not** applied to Supabase.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: no drift; **123 passed + 3 todo**; build; bundle scan; real-server smoke passed.
+- **Limits:** functions only (DD-3), no screen; the cutover seeds (REGISTER, ADMISSION 2026-27) wait for NP-8; after a move the old centre's registrations stay ACTIVE until the Stage 3 transfer ticket (recorded limit).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| src/server/people.ts | d422be4745f6599aa69b071f871dcd5349c20cc3215664d1bd87d6945fcd8808 |
+| src/server/numbering.ts | 4885fcd577739bb44d91616d7c1599eed668e4b29b5e6c472062626225922d89 |
+| prisma/migrations/0011_person_core/migration.sql | 62c1c60f60619b47e423df4499a7f71e9d55dfbb94da27c41b9599a58b2b212d |
+| tests/people.test.ts | 7dd55013c338d70b0f8fb8e549e922474c141113e48773bee57c9848349d5046 |
+| scripts/manual-supabase-matchkey.mjs | 5cfed23d066d6228b756a0157cf421322200b0005f4bc6e3872058e7a0c81a03 |
+| evidence/ci-person-core-2026-10-28T165401.txt | e5379e92960a1412eeba582833922eb2b58d4d6391835b5a5c2c7101c0347f1c |
+| evidence/supabase-matchkey-2026-10-28.txt | 5976dc689a159d4cb1a7ae80c36154b406cc825d78207822d6e0d0ae299a9628 |
