@@ -129,4 +129,4 @@ Owner chose "update doc first" and asked Claude to make the edits and propose th
 
 Also found while fixing: the design called the yearly reset "NP-3", but in `docs/audit/revisions/v1.1-corrections.md` §C-02.1 reset is **NP-2** and NP-3 is the gap rule. Corrected throughout.
 
-DD-9…DD-12 await the owner's approval. Then the one allowed Stage 6 re-audit runs.
+DD-9…DD-12 approved by the owner in session on 2026-10-28. Stage 6 re-audit follows.

@@ -206,8 +206,11 @@ one is PRO until the design is reviewed and approved.
     (TK-26/CMC/23642, current 23,652). Whether it resets each period (NP-2)
     and the starting value (NP-8) stay NP parameters.
 
-**Proposed after the comprehension review, waiting for the owner** (PRO).
-These answer gaps the review found (C4, C6, C8, C14 in
+**Taken by the project owner (gtm) on 2026-10-28**, after the comprehension
+review; proposed by Claude, approved by the owner in session. Each is PRO
+until the design is approved, and DD-9 and DD-10 remain PMC defaults under
+D-TKT-2 and NP-5 until their business owners sign. These answer gaps the
+review found (C4, C6, C8, C14 in
 [`comprehension_report.md`](comprehension_report.md)):
 
 *   **DD-9: Re-raise rules (C4, under D-TKT-2).** Only the person who raised
