@@ -16,4 +16,6 @@ export const AUDIT_CATALOGUE = [
   "ticket.apply_failed", "ticket.document.download",
   "ticket.category.create", "ticket.type.create", "ticket.type.update", "ticket.type.levels", "ticket.type.viewers",
   "ticket.type.activate", "ticket.type.deactivate",
+  // person core (src/server/people.ts)
+  "person.admit",
 ] as const;

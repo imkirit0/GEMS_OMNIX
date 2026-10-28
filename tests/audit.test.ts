@@ -175,7 +175,8 @@ describe("audit trail", () => {
     const found = new Set<string>();
     for (const m of src("src/server/auth/index.ts").matchAll(/"(auth\.[a-z0-9_.]+)"/g)) found.add(m[1]!);
     const scans = [["src/server/rbac.ts", /"(rbac\.[a-z0-9_.]+)"/g], ["src/server/tickets/engine.ts", /"(ticket\.[a-z0-9_.]+)"/g],
-      ["src/server/tickets/setup.ts", /"(ticket\.[a-z0-9_.]+)"/g]] as const;
+      ["src/server/tickets/setup.ts", /"(ticket\.[a-z0-9_.]+)"/g],
+      ["src/server/people.ts", /"(person\.[a-z0-9_.]+)"/g]] as const;
     for (const [file, pattern] of scans) {
       for (const line of src(file).split("\n").filter((l) => l.includes("action:"))) {
         // only the action itself, not the permission key that shares the line (action: comes first)
