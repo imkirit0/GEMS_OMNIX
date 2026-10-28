@@ -1015,3 +1015,29 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | poc/evidence/c26-supabase-fullrun3-2026-10-28.txt | ac2bb2c48493685c896b8db0a492671a748c5ed1ce0e316966cf6603fa4615cc |
 | poc/evidence/c26-pool-experiment-2026-10-28.txt | 9c49f5db69ac2fda28b3bbdd0d6c94d32ee52f748c020ceb9ee9a59236f3b92e |
 | poc/c26-experiment.mjs | b30424af25e933915554a8030435a2d0e999d6f334a23530e91af37fdaa951c3 |
+
+## E-031 C-26 mitigation in the app (2026-10-28)
+- **Request:** "push to github and do the mitigation". Commit `d97cc2c` was pushed first.
+- **Commit `c9f2a30`:**
+  - **`src/server/db.ts`:** `DB_POLICY` on the pg pool (connect 10 s, per-query 60 s, TCP keepalive; PMC, D-OPS-1). `isConnectionLost()` recognises the adapter kinds (`ConnectionClosed`, `SocketTimeout`), socket codes, Postgres 57P01/02/03 and 08000/08003/08006, and the pg driver's messages, across the error chain.
+  - **`withScope`** retries an attempt whose connection was lost **before** COMMIT, using a flag set after `fn` returns. A loss during COMMIT is not retried, because its outcome is unknown. P2034 retries are unchanged.
+  - **Ticket engine:** a lost connection inside `handler.apply` passes through to be retried instead of becoming `ApplyFailed`.
+- **Probe** (local, PgBouncer): killing the server backend mid-transaction reaches the app as `Error: Client has encountered a connection error and is not queryable` (no code). The detector covers that message.
+- **Tests:**
+  - `tests/foundation.test.ts` "lost connections (C-26)":
+    - a killed backend mid-transaction is retried and the allocation commits exactly once (2 calls, counter 1);
+    - with retries off, the loss is recognised; an ordinary error is not retried (1 call);
+    - the detector accepts 8 lost-connection shapes and rejects 6 others (including P2034 and a unique violation).
+  - `tests/tickets.test.ts`: a lost connection inside `apply` is retried 4 times and writes no FAILED row.
+- **Mutation check:** removing the lost-connection clause from `withScope` made the retry test fail. The original was restored (`cmp` equal) and passed again.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: no drift; **115 passed + 3 todo**; build; bundle scan; real-server smoke passed.
+- **Limit:** not proven against the real Supabase pooler failure, which reproduces only rarely (E-030). The local test reproduces the same event, a server connection killed mid-transaction.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| src/server/db.ts | 9e5f2c485987555b68de3db47a921479055cf4401e03c81465aa2de7abd570cc |
+| src/server/tickets/engine.ts | 0c18ae5a88b003569920b9219b416727a15f4c3c04469270729cd923e6c005b0 |
+| tests/foundation.test.ts | 5b06b16bcf53a203fd1444c4e803e406ace1a6cf7bfa7ca360032133301ccba0 |
+| evidence/ci-c26-mitigation-2026-10-28T153135.txt | ca49e6f7bd09e5d64be37fe80eac6c82283e18c3fb731f83c8983ec6e29e9866 |
