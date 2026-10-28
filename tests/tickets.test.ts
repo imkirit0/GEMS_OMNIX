@@ -421,6 +421,18 @@ describe("ticket engine guards and rules", () => {
       expect(await rows("ticket.apply_failed")).toHaveLength(0);
     } finally { delete HANDLERS["test.conflict"]; }
 
+    // a lost connection inside apply is retried like a write conflict, not audited as the handler failing (C-26)
+    let lostCalls = 0;
+    HANDLERS["test.lost"] = { ...testCounter, key: "test.lost",
+      async apply() { lostCalls++; throw new Error("Connection terminated unexpectedly"); } } as TicketHandler<unknown>;
+    try {
+      const lostType = await makeType({ code: "LOST", levels: [{ role: TK_ROLE.level1 }], handler: "test.lost" });
+      const l = await raiseAt(tok("raiser"), lostType);
+      await expect(approve(tok("l1"), l)).rejects.toThrow(/Connection terminated/);
+      expect(lostCalls).toBe(4);
+      expect(await rows("ticket.apply_failed")).toHaveLength(0);
+    } finally { delete HANDLERS["test.lost"]; }
+
     await asAdmin(async (db) => {
       await db.query(fs.readFileSync("tests/sql/audit-fault.sql", "utf8"));
       await db.query(`insert into app.bakeoff_audit_fault default values`);

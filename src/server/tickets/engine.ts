@@ -3,7 +3,7 @@
 // triggers and append-only history (0009); who may act is decided by app.ticket_may_act, refused here (DD-1).
 import { randomUUID } from "node:crypto";
 import { Forbidden, scopedAction } from "../action";
-import { withScope, type Tx } from "../db";
+import { isConnectionLost, withScope, type Tx } from "../db";
 import { adminWrite } from "../rbac";
 import { allocateTicketNumber, formatTicketNumber } from "../numbering";
 import { storage } from "../storage";
@@ -230,7 +230,8 @@ export async function act(session: string | undefined, a: ActInput): Promise<voi
     try {
       change = await handler.apply(tx, t);
     } catch (e) {
-      if ((e as { code?: string }).code === "P2034") throw e; // a write conflict: let withScope retry
+      // a write conflict or a lost connection is not the handler failing: let withScope retry it (C-26)
+      if ((e as { code?: string }).code === "P2034" || isConnectionLost(e)) throw e;
       throw new ApplyFailed(level, e);
     }
     await bump(tx, t, Prisma.sql`status = 'APPROVED', closed_at = now()`);

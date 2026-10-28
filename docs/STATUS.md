@@ -87,7 +87,7 @@
 **Platform:**
 - [x] Dev server reachable from any IPv4 address (`allowedDevOrigins: ["*.*.*.*"]` in `next.config.ts`, owner request 2026-10-28; `next dev` only, no effect on production)
 - [x] C-26 cause located (E-030): Supabase's transaction pooler, under sustained concurrent load, sometimes resets a client connection and sometimes silently stalls it (the client waits; the database has no session). 2 of 3 full runs were green; no wrong data ever.
-- [ ] C-26 mitigation in the app: connection and query timeouts with TCP keepalive (fail fast, never hang), and retry of connection errors before COMMIT in `withScope` (idempotency keys cover a drop during COMMIT)
+- [x] C-26 mitigation in the app (2026-10-28): `DB_POLICY` in `src/server/db.ts` (connect 10 s, per-query 60 s, TCP keepalive; PMC) so a stalled connection fails fast; `withScope` retries a connection lost **before** COMMIT (nothing committed) but not one lost during COMMIT (unknown outcome); the ticket engine passes a lost connection through instead of auditing it as `ApplyFailed`. Not yet proven against the real Supabase pooler (it reproduces rarely)
 
 **Stage 0 (discovery):** ⛔ blocked on legacy MySQL read-only access.
 

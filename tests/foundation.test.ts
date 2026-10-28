@@ -2,7 +2,7 @@
 // Runs against the local Docker database; the app connects as gems_app through PgBouncer (transaction mode).
 import { beforeEach, describe, expect, test } from "vitest";
 import pg from "pg";
-import { ScopeError, withScope } from "../src/server/db";
+import { isConnectionLost, ScopeError, withScope } from "../src/server/db";
 import { Forbidden, scopedAction } from "../src/server/action";
 import { allocate, financialYear, formatNumber } from "../src/server/numbering";
 import { asAdmin, audits, C, PERIOD, reset, seriesCurrent, T } from "./fixtures";
@@ -211,5 +211,59 @@ describe("numbering pure functions", () => {
     const p = { centreCode: "KL2-25", docType: "FEEREC", period: "2026-27", number: 123 };
     expect(formatNumber(p)).toBe("KL2-25/FEEREC/2026-27/000123");
     expect(() => formatNumber({ ...p, maxLength: 16 })).toThrow(RangeError);
+  });
+});
+
+// C-26 (E-030): Supabase's transaction pooler can drop or stall a connection. withScope fails fast (DB_POLICY)
+// and repeats an attempt whose connection was lost before COMMIT; such an attempt committed nothing.
+describe("lost connections (C-26)", () => {
+  beforeEach(() => reset());
+
+  test("a connection lost mid-transaction is retried and the work commits exactly once", async () => {
+    let calls = 0;
+    await withScope(T.uA, async (tx) => {
+      calls++;
+      await allocate(tx, { centreId: C.A, docType: "FEEREC", period: PERIOD });
+      if (calls === 1) { // kill this attempt's server connection, as the pooler does
+        const [r] = await tx.$queryRaw<{ pid: number }[]>`select pg_backend_pid() as pid`;
+        await asAdmin((db) => db.query(`select pg_terminate_backend($1)`, [r!.pid]));
+        await tx.$queryRaw`select 1`;
+      }
+    });
+    expect(calls).toBe(2);
+    expect(await seriesCurrent(C.A)).toBe(1); // the lost attempt's allocation rolled back
+  });
+
+  test("with retries off the loss surfaces; ordinary errors are never retried", async () => {
+    const lost = await withScope(T.uA, async (tx) => {
+      const [r] = await tx.$queryRaw<{ pid: number }[]>`select pg_backend_pid() as pid`;
+      await asAdmin((db) => db.query(`select pg_terminate_backend($1)`, [r!.pid]));
+      await tx.$queryRaw`select 1`;
+    }, { retries: 0 }).catch((e: unknown) => e);
+    expect(isConnectionLost(lost)).toBe(true);
+    let calls = 0;
+    await expect(withScope(T.uA, async () => { calls++; throw new Error("business rule"); })).rejects.toThrow("business rule");
+    expect(calls).toBe(1);
+  });
+
+  test("isConnectionLost recognises each reported shape and nothing else", () => {
+    const lostShapes = [
+      new Error("Client has encountered a connection error and is not queryable"), // pg, socket died (local probe)
+      new Error("Connection terminated unexpectedly"),
+      new Error("Query read timeout"), // DB_POLICY.query_timeout
+      new Error("timeout exceeded when trying to connect"), // DB_POLICY.connectionTimeoutMillis
+      Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }),
+      { message: "x", meta: { driverAdapterError: { cause: { kind: "ConnectionClosed" } } } },
+      { message: "x", meta: { driverAdapterError: { cause: { kind: "postgres", originalCode: "57P01" } } } },
+      Object.assign(new Error("wrapper"), { cause: new Error("Connection terminated unexpectedly") }),
+    ];
+    for (const e of lostShapes) expect(isConnectionLost(e), JSON.stringify(e) || String(e)).toBe(true);
+    const otherShapes = [
+      new Error("business rule"), new ScopeError("invalid, expired or revoked session"),
+      Object.assign(new Error("conflict"), { code: "P2034" }),
+      { message: "x", meta: { driverAdapterError: { cause: { kind: "postgres", originalCode: "23505" } } } },
+      undefined, null,
+    ];
+    for (const e of otherShapes) expect(isConnectionLost(e), String(e)).toBe(false);
   });
 });
