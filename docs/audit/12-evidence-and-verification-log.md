@@ -769,3 +769,28 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | tests/audit-catalogue.ts | 3e91aefff312ff6459a73b2ea6c022d0a1edf8af656beb35dc5c69d70a2351cc |
 | scripts/smoke-security.mjs | 4211b7066e3af15ca0c5c9470ae94b040dcd93e1a6bd77e8c6c3f73feab095b1 |
 | evidence/audit-2026-10-27T190404.txt | 5e92225d012be6f6da092fd38d4c9db1a89920837bfdea176983fc6b78137a24 |
+
+## E-023 Ticket-engine design approved; build phase P1 (2026-10-28)
+- **Request:** the user said "do next step" and, when asked, answered "Approve, start P1" for `docs/designs/ticket-engine/ticket-engine.md`.
+- **Design:** the EGM review ran stages 5 to 9, each with fresh-context reviewers, and every finding was resolved; the reports are in `docs/designs/ticket-engine/`. The design status is now **Approved** by the project owner in session. Its business parameters (PMC) stay unsigned.
+- **P1 (documentation), commit `eeb42b2`:**
+  - `docs/adr/ADR-002-document-storage.md`, status **Proposed**; the owner, IT and Legal signatures are blank.
+  - Audit 04 gains **D-STO-1** (upload limits, IT + Legal), which brings the open decisions to 116 (108 D-/PR- + NP-1…8). It also records the ticket notes on NP-1/NP-5 (DD-8, DD-10), D-TKT-2 (DD-9) and D-TKT-4 (DD-14). All of these stay PMC and not approved.
+  - Audit 09 gains T-TKT-019…022, and marks the parts of T-TKT-002 (NP-8) and T-TKT-008 (notification) that are deferred out of Stage 2.
+  - The matrix rows R-094.03 and R-094.04 gain the new tests, and R-094.03 gains D-STO-1. `02-requirements-traceability-matrix.csv` and the FRD were regenerated.
+- **Checks:**
+  - `python -I docs/audit/tools/build_matrix.py docs/audit`: ERRORS (0); WARNINGS 12, the same as before the change.
+  - `bash scripts/ci.sh` exit 0 on a fresh local database. Tests 80/80 (8 files); no schema drift; build; no client secrets (10 files, 9 values, 4 patterns); real-server smoke 16/16.
+  - The first CI run failed only because the regenerated CSV was not yet committed. That is the gate working as designed.
+- **Code:** none. Phases P2 to P5 are not started.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| docs/designs/ticket-engine/ticket-engine.md | 6428616800f9e8f0f1f0fdda7d1184848269b5f7734a599e45d3b4bfe86f730f |
+| docs/adr/ADR-002-document-storage.md | 7e6436ec3c0834051804d3656341c0aa3a07fcfb635e025bd408a61ae6d3978e |
+| docs/audit/04-manager-decision-register.md | 5c543cf13297c733c86946ccf97ceb3ad0ecdea5c04fe7357af87b0b75344154 |
+| docs/audit/09-test-strategy-and-acceptance-criteria.md | 234b02b93694bc8c41c33daea9d070a9207e306aa723b25eb3db5b3fcf714ab4 |
+| docs/audit/data/matrix-04-logs-tickets-exams-supply.tsv | fc95d376bab7d99f0f2a59d4538714ad98c2bf55f472e82aa1328c8b86053af3 |
+| evidence/ci-p1-2026-10-28T121950.txt | 9ebc04a9e8f9cee949de34eea31b152fa6bf4cca636faf70edbe9c46f98aee07 |
