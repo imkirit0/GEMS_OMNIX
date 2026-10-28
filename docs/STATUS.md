@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-28, async large exports deferred by the owner (last evidence: E-028).
+**Last updated:** 2026-10-28, search rate limit done (last evidence: E-029).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -15,7 +15,7 @@
 | Requirements verified (VER) | **0** | E-022 |
 | Open business decisions | **116** (108 D-/PR- items + NP-1…8), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
-| Automated tests | **111 passing + 3 todo** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD + 30 T-TKT), plus real-server checks in CI: admin journey (10 steps) and security smoke (18 checks) | `evidence/audit-2026-10-27T190404.txt` |
+| Automated tests | **112 passing + 3 todo** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD + 30 T-TKT), plus real-server checks in CI: admin journey (10 steps) and security smoke (18 checks) | `evidence/audit-2026-10-27T190404.txt` |
 | CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
 | Git | `main`. Pushed to GitHub (public) on 2026-10-28 at the owner's request, again after the real-browser check E-028 (up to and including this STATUS update); outgoing commits scanned for the keys pasted in chat, signed-URL tokens and the project ref: none | `git log`, `git status -sb` |
@@ -49,6 +49,7 @@
 | 23 | Ticket engine P4: routes (upload, raise, act, reassign, download as POST + 303), screens (list, raise, detail, approvals, ticket-type admin), CSP storage origin, bundle scan for Supabase keys, `storage-setup.mjs`; ticket 404 parity on the real server; `ci.sh` green (111 tests, smoke 18/18) | 2026-10-28 | E-026, commits `00ab8a0`, `6fbab77` |
 | 24 | Ticket engine P5: manual Supabase run. Private bucket `ticket-documents` created; storage calls, Range, overwrite refusal, type limit checked; **DD-15 Data API check passed** (no `app` schema); end to end through the real app: upload, raise, two-level approval, download | 2026-10-28 | E-027 |
 | 25 | Ticket engine real-browser check in Chrome: upload PUT to Supabase under CORS, raise, two-level approval by clicks, download redirect followed under CSP `form-action` | 2026-10-28 | E-028 |
+| 26 | Search rate limit (T-SEC-015 search part): `app.rate_take`, 30 per minute per user (PMC); `ci.sh` green (112 tests) | 2026-10-28 | E-029, commit `eed7d01` |
 
 ## 3. Partly done
 

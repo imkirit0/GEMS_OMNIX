@@ -961,3 +961,25 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | File | SHA-256 |
 |---|---|
 | evidence/browser-check-2026-10-28T131230.txt | f96c61a8abd4dcac5aeec01cd12a534e5529d92a7eb9daaec0af613910b2de8d |
+
+## E-029 Search rate limit, T-SEC-015 search part (2026-10-28)
+- **Request:** "do the search rate limit", chosen by the owner after async large exports were deferred.
+- **Commit `eed7d01`:**
+  - **Migration `0010_search_rate_limit`:** `app.rate_hit`, with no grant to any app role, and `app.rate_take(bucket, max, minutes)`. That definer function checks and records in one step for the session's own user, prunes that user's old hits, and returns false without a session.
+  - **`src/server/rate-limit.ts`:** `SEARCH_POLICY` 30 per minute per user (PMC, D-OPS-1). `listCentres` counts a search only when there is a search term.
+  - **The centres page** shows "Too many searches" over the limit. **Deviation from the T-SEC-015 wording ("429"):** a Next.js page cannot set its status. The module throws the same `RateLimited` as exports, which do answer 429.
+  - **Known ceiling:** concurrent calls may both pass at the last slot, because there is no lock. This is documented in the migration.
+- **Tests:**
+  - T-SEC-015 search: 30 searches pass and the 31st is refused (`retryAfterSeconds` 60); a plain list is not counted; budgets are per user; the window frees it; old hits are pruned; the app role cannot delete from the table.
+  - T-RLS-005 inventory: adds `rate_take`.
+  - `reset()` truncates `rate_hit`.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: no drift; typecheck; **112 passed + 3 todo**; build; bundle scan (10 secret values including the now-configured Supabase key, 6 patterns, nothing found); real-server smoke passed. The saved log contains no keys (checked).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0010_search_rate_limit/migration.sql | b6f9a425f27c7e08bbeae7a8bb5256ec49491c36bebd1feeca29b76feebb012a |
+| src/server/rate-limit.ts | bafdbdf184419f15c7af2f06f106ea0f26da4a55d1d7a68dd026ba6595ac2d20 |
+| src/server/centres.ts | 898a0a31eec294166aab05a46486338200464cfb01dd35be225d1e8645be088b |
+| evidence/ci-search-limit-2026-10-28T134450.txt | ce306b57309bfca0f7a9913d06fe0a20b4d299491013b0f3cab6d4b0b11eed2f |
