@@ -18,7 +18,7 @@
 | Automated tests | **80 passing** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD), plus real-server checks in CI: admin journey (10 steps) and security smoke (16 checks) | `evidence/audit-2026-10-27T190404.txt` |
 | CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) up to `857b51a`; `949e91e` (audit) and later commits are local until you approve a push | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) on 2026-10-28 at the owner's request, up to and including this STATUS update (ticket-engine design reviewed) | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -130,7 +130,6 @@
 | Rotate the Supabase DB password (pasted in chat on 26 Oct) | You | 2026-10-26 |
 | Named owners and decisions for 115 open items (start with BRD §9.2) | Business owners | 2026-10-26 |
 | Review BRD/FRD v0.1 | You | 2026-10-27 |
-| Push the local commits to GitHub? The repo is public | You | 2026-10-27 |
 
 ## 6. Known risks
 
