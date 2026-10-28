@@ -1,7 +1,7 @@
 # Ticket and approval engine (Stage 2 core)
 
 *   **Author:** gtm
-*   **Status:** Reviewed (EGM stages 5–9 complete, 2026-10-28), awaiting human approval
+*   **Status:** **Approved** for implementation by the project owner (gtm) in session, 2026-10-28, after EGM review stages 5–9. Business parameters (PMC) stay unsigned until their owners sign
 *   **Date:** 2026-10-27
 *   **Last updated:** 2026-10-28
 

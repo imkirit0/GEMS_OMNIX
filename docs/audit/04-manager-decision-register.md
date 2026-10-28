@@ -54,15 +54,15 @@ Column order: ID · decision · owner · evidence · proposed default (UNCONFIRM
 | D-FIN-8 | Hash-chained finance audit | — | Yes | Weak tamper evidence | T-AUD-008 |
 | D-FIN-9 | Advances / application fees | SPEC p50 | Unapplied-payment liability | Early revenue | T-FEE-024 |
 | D-CUR-1 | Multi-currency, non-GST centres | SPEC pp. 2, 13 | Currency per centre; GST India only | Wrong tax | T-FEE-005 |
-| NP-1…NP-8 | Numbering policy (owner Accounts + Certification) | see 01 §C-02.1 | Unset | Duplicates; non-compliant serials | T-NUM-001…010 |
+| NP-1…NP-8 | Numbering policy (owner Accounts + Certification) | see 01 §C-02.1 | Unset. Tickets (PMC, ticket-engine design, 2026-10-28): NP-1 one network-wide ticket counter (DD-8, accepted by the project owner); NP-5 sequence not padded, at most 30 characters, prefix fixed text per type (DD-10) | Duplicates; non-compliant serials | T-NUM-001…010, T-TKT-002 |
 
 ## Tickets, exams, certificates, supply, royalty, year end
 | ID | Decision | Owner | Evidence | Default | If wrong | Tests |
 |---|---|---|---|---|---|---|
 | D-TKT-1 | Approvers and levels per type | Ops/PRO | WF p12 | Migrate current configuration | Stuck or bypassed | T-TKT-004 |
-| D-TKT-2 | Rejected: reopen or new ticket | Ops | WF p12, p14 | New ticket linked to rejected | Lost trail | T-TKT-015 |
+| D-TKT-2 | Rejected: reopen or new ticket | Ops | WF p12, p14 | New ticket linked to rejected; only the raiser re-raises, once, with the same type and centre (ticket-engine DD-9) | Lost trail | T-TKT-015 |
 | D-TKT-3 | SLA and escalation | Ops | WF p12; 2,412 pending | Reminders on, no auto-escalation | Backlog | T-TKT-016 |
-| D-TKT-4 | Self-approval ⛔ prod-gate | Ops | — | Prohibited | Fraud | T-TKT-010 |
+| D-TKT-4 | Self-approval ⛔ prod-gate | Ops | — | Prohibited; also nobody approves more than one level of the same ticket (ticket-engine DD-14) | Fraud | T-TKT-010, T-TKT-021 |
 | D-EXM-1 | G-TEC vs vendor exam flows | Certification | WF p17 | Registration Form Master flags | Wrong steps | T-E2E-008 |
 | D-EXM-2 | Previous-sub-exam rule scope | Certification | SPEC p40 | Semester only; per-form flag | Wrong blocks | T-E2E-008 |
 | D-EXM-3 | Result entry; change after publication | Certification | WF p17 | HO; later change via ticket | Certificate integrity | T-TKT-017 |
@@ -113,6 +113,7 @@ Column order: ID · decision · owner · evidence · proposed default (UNCONFIRM
 | D-SEC-2 | HO read-only "view as centre" | Operations | SPEC p35 | Scope filter, no impersonation | — | T-SEC-013 |
 | D-SEC-3 | Timeouts, password policy, 2FA scope | IT | — | 2FA for HO; 30 min idle / 12 h absolute | Lockouts or weak sessions | T-AUTH-005, T-AUTH-013 |
 | D-SEC-4 | Aadhaar/PAN/caste storage; DPDP Act duties | IT + Legal | SPEC pp. 24, 27, 31, 55 | Masked + encrypted where justified; consent | Legal exposure | T-AUD-005 |
+| D-STO-1 | Document upload limits: size, types, files per ticket, retention, virus scan | IT + Legal | ticket-engine design Q9; ADR-002 §3; D-SEC-4 | 10 MB; PDF, JPEG, PNG by file signature; 5 files per ticket; unattached uploads deleted after 24 h (go-live gate); retention and virus scan open | Personal data kept too long; unsafe files | T-TKT-020 |
 | D-SEC-5 | Retention, backups, RPO/RTO | IT | — | PITR + daily off-provider dump | Data loss | PERF/DR drill |
 | D-SEC-6 | Rotate exposed legacy keys/secrets | IT | REQ V11; SPEC p14 | Rotate all at cutover | Credential misuse | T-SEC-017 |
 | D-TZ-1 | Legacy time zone; storage zone | IT | REQ C10 | UTC storage; Asia/Kolkata display; legacy zone TBD | Month shifts | T-RPT-015 |

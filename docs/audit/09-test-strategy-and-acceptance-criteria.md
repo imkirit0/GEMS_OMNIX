@@ -100,13 +100,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | ID | Test | Expected |
 |---|---|---|
 | T-TKT-001 | Raise without a mandatory document | Rejected |
-| T-TKT-002 | Ticket number | Format per NP policy; counter continuity (NP-8) |
+| T-TKT-002 | Ticket number | Format per NP policy; counter continuity (NP-8). Stage 2 covers format and the network-wide counter; NP-8 continuity waits for the NP sign-off |
 | T-TKT-003 | Level-1 queue | Shows only in-scope tickets |
 | T-TKT-004 | L1 approve on a 2-level type | Level advances; no domain change |
 | T-TKT-005 | Final approve | Domain change applied exactly once; history row; audit row |
 | T-TKT-006 | Concurrent final approvals | One application; the other gets a conflict |
 | T-TKT-007 | `apply` throws | Ticket stays at its level; domain unchanged |
-| T-TKT-008 | Reject | Remarks mandatory; centre notified |
+| T-TKT-008 | Reject | Remarks mandatory; centre notified. Stage 2 covers remarks; notification waits for D-COMM-1 |
 | T-TKT-009 | Forward | Only to an in-scope employee |
 | T-TKT-010 | Self-approval | Blocked (D-TKT-4 PMC) |
 | T-TKT-011 | Stale request | Re-validated at apply; rejected with reason |
@@ -117,6 +117,10 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-TKT-016 | SLA reminder job | Idempotent per ticket per day |
 | T-TKT-017 | Per-type handler (one sub-case per type: 31 types + CMC queue + exam/supply/cert queues) | Correct domain effect |
 | T-TKT-018 | Bulk approve | Per-ticket transactions; failures isolated and reported |
+| T-TKT-019 | Document download | Needs `ticket.document.view` for the centre; 404 outside scope; audited |
+| T-TKT-020 | Upload check | Refused when the stored object's real size or file signature breaks the limit (D-STO-1), when it belongs to another user or centre, or when it is already attached |
+| T-TKT-021 | Distinct approvers | One user cannot approve two levels of the same ticket (D-TKT-4 PMC) |
+| T-TKT-022 | Administrator reassign | A `ticket.type.manage` holder reassigns a ticket whose named approver was disabled; the new assignee can act |
 
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
