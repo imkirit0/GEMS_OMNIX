@@ -37,7 +37,7 @@ const invalid = (field: string, rule: string) => new PersonError("invalid", `${f
 
 const istToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10); // Asia/Kolkata, no DST
 
-function isoDate(field: string, v: unknown): string {
+export function isoDate(field: string, v: unknown): string {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw invalid(field, "YYYY-MM-DD");
   const d = new Date(`${v}T00:00:00Z`);
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) throw invalid(field, "not a date");
@@ -47,7 +47,7 @@ function isoDate(field: string, v: unknown): string {
 const optText = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
 
 // One field of an identity; null clears it (except givenName). Returns the stored form.
-function identityField(k: keyof Identity, v: unknown): string | null {
+export function identityField(k: keyof Identity, v: unknown): string | null {
   if (k === "givenName") {
     const s = typeof v === "string" ? v.trim() : "";
     if (s.length < 1 || s.length > 100) throw invalid("givenName", "1-100 characters");
@@ -81,13 +81,14 @@ function identityField(k: keyof Identity, v: unknown): string | null {
   }
 }
 
-const IDENTITY_KEYS = ["givenName", "familyName", "gender", "dateOfBirth", "mobile", "email"] as const;
-type StoredIdentity = Record<(typeof IDENTITY_KEYS)[number], string | null>;
+export const IDENTITY_KEYS = ["givenName", "familyName", "gender", "dateOfBirth", "mobile", "email"] as const;
+export type StoredIdentity = Record<(typeof IDENTITY_KEYS)[number], string | null>;
 
 function identity(p: Identity): StoredIdentity {
   return Object.fromEntries(IDENTITY_KEYS.map((k) => [k, identityField(k, p[k])])) as StoredIdentity;
 }
 
+export const ACADEMIC_YEAR_RULE = "YYYY-YY, consecutive years";
 export function academicYearOk(y: string): boolean {
   return /^\d{4}-\d{2}$/.test(y) && Number(y.slice(5)) === (Number(y.slice(0, 4)) + 1) % 100;
 }
@@ -114,7 +115,7 @@ async function personDb<T>(run: () => Promise<T>): Promise<T> {
     const cause = (e as { meta?: { driverAdapterError?: { cause?: PgCause } } }).meta?.driverAdapterError?.cause;
     const code = cause?.originalCode;
     const constraint = /constraint "([^"]+)"/.exec(cause?.originalMessage ?? "")?.[1];
-    if (code === "23514" && constraint === "admission_academic_year_check") throw invalid("academicYear", "YYYY-YY, consecutive years");
+    if (code === "23514" && constraint === "admission_academic_year_check") throw invalid("academicYear", ACADEMIC_YEAR_RULE);
     if (code === "23505" && (constraint === "admission_admission_no_key" || constraint === "registration_register_no_key"))
       throw new PersonError("invalid", "number already issued");
     if (code === "23503") throw new PersonError("invalid", "inconsistent reference");
@@ -184,7 +185,7 @@ export type Admitted = { personId: string; admissionId: string; admissionNo: str
 export async function admit(session: string | undefined, input: AdmitInput): Promise<Admitted> {
   // validation before the action: nothing to audit for a malformed request
   if (!Number.isSafeInteger(input.centreId)) throw invalid("centreId", "required");
-  if (typeof input.academicYear !== "string" || !academicYearOk(input.academicYear)) throw invalid("academicYear", "YYYY-YY, consecutive years");
+  if (typeof input.academicYear !== "string" || !academicYearOk(input.academicYear)) throw invalid("academicYear", ACADEMIC_YEAR_RULE);
   const admittedOn = isoDate("admittedOn", input.admittedOn); // independent of academicYear until R-028 (design)
   const list = courses(input.courses);
   const existingId = "existingId" in input.person ? input.person.existingId : undefined;

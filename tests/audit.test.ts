@@ -174,6 +174,7 @@ describe("audit trail", () => {
     const src = (f: string) => fs.readFileSync(f, "utf8");
     const found = new Set<string>();
     for (const m of src("src/server/auth/index.ts").matchAll(/"(auth\.[a-z0-9_.]+)"/g)) found.add(m[1]!);
+    for (const m of src("etl/run.ts").matchAll(/"(migration\.run\.[a-z]+)"/g)) found.add(m[1]!);
     const scans = [["src/server/rbac.ts", /"(rbac\.[a-z0-9_.]+)"/g], ["src/server/tickets/engine.ts", /"(ticket\.[a-z0-9_.]+)"/g],
       ["src/server/tickets/setup.ts", /"(ticket\.[a-z0-9_.]+)"/g],
       ["src/server/people.ts", /"(person\.[a-z0-9_.]+)"/g]] as const;
