@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-28, C-26 mitigation done (last evidence: E-031).
+**Last updated:** 2026-10-28, person-core design started (last evidence: E-031).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -92,7 +92,7 @@
 
 **Stage 0 (discovery):** ⛔ blocked on legacy MySQL read-only access.
 
-**Stage 2:** identity model (D-STU-4), numbering policy (NP-1…8), ticket core (P5), migration framework (P8).
+**Stage 2:** ticket core (P5) built (E-023–E-028). **Person/admission/registration core: design started 2026-10-28** (EGM; input brief `docs/designs/person-core/input-brief.md`; D-STU-4 default used as a parameter). Still to do: numbering policy sign-off (NP-1…8), migration framework (P8).
 
 **Stages 3–8:** not started. These are the business modules, G-FIN gate, rehearsals, UAT and cutover (audit 10).
 
