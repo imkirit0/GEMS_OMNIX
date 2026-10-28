@@ -84,7 +84,8 @@ try {
   const hiddenTicket = await smokeTicket("TK-26/SMK/2", ids.B, xssId);
   const tOwn = await get(`/tickets/${ownTicket}`, viewer);
   const [tHidden, tMissing] = [await get(`/tickets/${hiddenTicket}`, viewer), await get(`/tickets/${randomUUID()}`, viewer)];
-  const normalT = (b) => normal(b).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, "UUID");
+  // uuids first: normal() strips digits after "k":", which would otherwise cut a uuid that starts with digits
+  const normalT = (b) => normal(b.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, "UUID"));
   const [th, tm] = [normalT(await tHidden.text()), normalT(await tMissing.text())];
   check("T-SEC-001 own-centre ticket 200", tOwn.status === 200 && (await tOwn.text()).includes("TK-26/SMK/1"), String(tOwn.status));
   check("T-SEC-001 hidden-centre ticket 404 and identical to a missing one", tHidden.status === 404 && tMissing.status === 404
