@@ -79,4 +79,15 @@ No finding was contested. Every one was checked against the document or the code
 
 ## Resolution
 
-Pending the owner's choice: DD-13 to DD-16 need a decision, and then the fixes are applied in one batch.
+**Status: resolved (2026-10-28).** The owner chose "Accept all, apply": DD-13 to DD-16 were accepted as proposed, and every FIX item was applied in one batch. S16 was declined, as above. The Overview, Decisions, Open Questions, CUJs, Technical Plan, Alternatives and NFR sections were rewritten in place. A new **Risks and Mitigations** section and **CUJ 5** (stranded ticket) were added, along with **Alternatives I, J and K**. The Detailed Implementation Plan was aligned to match:
+- ADR-002 scope
+- register entries
+- T-TKT-021/022
+- the guard triggers
+- `reassign`
+- `TICKET_POLICY` additions
+- the reassign route
+- the new tests
+- 15 audit actions
+
+One gap found while applying: the "stranded" notice cannot use `ticket_may_act`, which answers only for the actor. A fifth definer function, `app.ticket_stranded(ticket)`, was added for it, readable only by `ticket.type.manage` holders.
