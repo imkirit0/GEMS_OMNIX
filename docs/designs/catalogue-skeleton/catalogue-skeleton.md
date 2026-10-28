@@ -1,7 +1,7 @@
 # Centre and catalogue skeleton (Stage 2)
 
 *   **Author:** gtm
-*   **Status:** Draft, for the design owner's section-by-section review. Decisions taken before drafting (2026-10-28): DD-1 tables, DD-2 course identity, DD-3 academic-year master, DD-4 write path.
+*   **Status:** Proposed. The design owner accepted every section on 2026-10-28; build approval follows the EGM review (steps 5–9). Decisions taken before drafting (2026-10-28): DD-1 tables, DD-2 course identity, DD-3 academic-year master, DD-4 write path.
 *   **Date:** 2026-10-28
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
