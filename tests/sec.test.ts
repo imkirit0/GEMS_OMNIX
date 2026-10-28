@@ -8,6 +8,7 @@ import { getCentre, listCentres } from "../src/server/centres";
 import { scopedAction } from "../src/server/action";
 import { allocate } from "../src/server/numbering";
 import { safeRoute } from "../src/server/safe-route";
+import { buildCsp } from "../src/server/csp";
 import { asAdmin, audits, C, PERIOD, reset, T } from "./fixtures";
 
 const codes = (rows: { code: string }[]) => rows.map((r) => r.code);
@@ -78,6 +79,18 @@ describe("T-SEC application-level isolation", () => {
     } finally { spy.mockRestore(); }
     // every route handler goes through safeRoute
     for (const f of routeFiles("app")) expect(fs.readFileSync(f, "utf8"), f).toMatch(/export const POST = safeRoute\(/);
+  });
+
+  test("T-SEC-014 CSP: the storage origin is allowed only for uploads and the download redirect (ADR-002)", () => {
+    const parts = (csp: string) => Object.fromEntries(csp.split("; ").map((d) => [d.split(" ")[0], d.split(" ").slice(1)]));
+    const without = parts(buildCsp("n0nce", false));
+    expect(without["connect-src"]).toEqual(["'self'"]);
+    expect(without["form-action"]).toEqual(["'self'"]);
+    const withStorage = parts(buildCsp("n0nce", false, "https://abc.supabase.co/some/path"));
+    expect(withStorage["connect-src"]).toEqual(["'self'", "https://abc.supabase.co"]);
+    expect(withStorage["form-action"]).toEqual(["'self'", "https://abc.supabase.co"]);
+    for (const d of ["default-src", "script-src", "img-src", "frame-ancestors"]) expect(withStorage[d], d).toEqual(without[d]);
+    expect(withStorage["script-src"]).not.toContain("'unsafe-inline'");
   });
 
   test("T-SEC-013 no way to act as a centre: HO acts as themselves, within scope, and is audited as themselves", async () => {

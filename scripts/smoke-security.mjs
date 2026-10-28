@@ -1,7 +1,7 @@
 // Real-server security smoke (T-SEC-001/005/012/014 + security headers), run by scripts/ci.sh against `next start`.
 // Creates its own data and sessions directly in the database (ADMIN_DATABASE_URL). Prints PASS/FAIL lines; exit 1 on any FAIL.
 // Usage: node scripts/smoke-security.mjs [baseUrl]
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import pg from "pg";
 
@@ -65,6 +65,30 @@ try {
   while (at < Math.min(no.length, nm.length) && no[at] === nm[at]) at++;
   check("T-SEC-001 other centre 404 and identical to a missing one", other.status === 404 && missing.status === 404
     && no === nm && !otherBody.includes("SMK-B"), no === nm ? "" : `differs at ${at}: ${JSON.stringify(no.slice(at - 30, at + 30))} vs ${JSON.stringify(nm.slice(at - 30, at + 30))}`);
+
+  // T-SEC-001 for tickets: a ticket at a hidden centre and a missing one give identical 404 pages. Fixtures are
+  // inserted in the order the guard triggers require: OPEN at level 1, version 1; levels; then the RAISE event.
+  const uid = async (login) => (await db.query(`select id from app.app_user where login = $1`, [login])).rows[0].id;
+  const [viewerId, xssId] = [await uid("smoke.viewer"), await uid("smoke.xss")];
+  const cat = (await db.query(`insert into app.ticket_category (name) values ('Smoke') returning id`)).rows[0].id;
+  const type = (await db.query(`insert into app.ticket_type (code, name, category_id, handler_key, number_prefix, active)
+    values ('SMK', 'Smoke type', $1, 'smoke.none', 'TK-26', true) returning id`, [cat])).rows[0].id;
+  const smokeTicket = async (number, centre, raiser) => {
+    const id = (await db.query(`insert into app.ticket (id, number, type_id, centre_id, raised_by, level_count, payload)
+      values (gen_random_uuid(), $1, $2, $3, $4, 1, '{}') returning id`, [number, type, centre, raiser])).rows[0].id;
+    await db.query(`insert into app.ticket_level (ticket_id, centre_id, level, approver_role_id) values ($1, $2, 1, $3)`, [id, centre, role]);
+    await db.query(`insert into app.ticket_event (ticket_id, centre_id, actor_id, action, level) values ($1, $2, $3, 'RAISE', 1)`, [id, centre, raiser]);
+    return id;
+  };
+  const ownTicket = await smokeTicket("TK-26/SMK/1", ids.A, viewerId); // the viewer raised it, so may view it
+  const hiddenTicket = await smokeTicket("TK-26/SMK/2", ids.B, xssId);
+  const tOwn = await get(`/tickets/${ownTicket}`, viewer);
+  const [tHidden, tMissing] = [await get(`/tickets/${hiddenTicket}`, viewer), await get(`/tickets/${randomUUID()}`, viewer)];
+  const normalT = (b) => normal(b).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, "UUID");
+  const [th, tm] = [normalT(await tHidden.text()), normalT(await tMissing.text())];
+  check("T-SEC-001 own-centre ticket 200", tOwn.status === 200 && (await tOwn.text()).includes("TK-26/SMK/1"), String(tOwn.status));
+  check("T-SEC-001 hidden-centre ticket 404 and identical to a missing one", tHidden.status === 404 && tMissing.status === 404
+    && th === tm && !th.includes("SMK/2"), th === tm ? "" : "pages differ");
 
   // T-SEC-005: crafted filters on the list
   const list = await (await get(`/centres?centre=${ids.A}&centre=${ids.B}&region=${ids.r1}&region=${ids.r2}`, viewer)).text();

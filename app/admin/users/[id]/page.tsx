@@ -15,7 +15,7 @@ export default async function UserDetail({ params, searchParams }: { params: Pro
       <p><a href="/admin/users">All users</a></p>
       <h1>{user.displayName} ({user.login})</h1>
       {created && <p role="status">User created. Assign a role, then issue a set-up link.</p>}
-      {error && <p role="alert">{ADMIN_MESSAGES[error] ?? ADMIN_MESSAGES["invalid"]}</p>}
+      {error && <p role="alert">{ADMIN_MESSAGES[error] ?? ADMIN_MESSAGES["invalid"]}{error === "forbidden" && <> {ADMIN_MESSAGES["rbac.forbidden"]}</>}</p>}
       <p>Status: {user.status} · Two-step verification required: {user.requiresTotp ? "Yes" : "No"}</p>
       <form method="post" action={`${self}/status`}>
         <input type="hidden" name="status" value={user.status === "ACTIVE" ? "DISABLED" : "ACTIVE"} />

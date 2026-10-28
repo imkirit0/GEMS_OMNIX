@@ -10,7 +10,7 @@ export default async function Users({ searchParams }: { searchParams: Promise<{ 
     <main>
       <p><a href="/">Home</a> · <a href="/admin/roles">Roles</a></p>
       <h1>Users</h1>
-      {error && <p role="alert">{ADMIN_MESSAGES[error] ?? ADMIN_MESSAGES["invalid"]}</p>}
+      {error && <p role="alert">{ADMIN_MESSAGES[error] ?? ADMIN_MESSAGES["invalid"]}{error === "forbidden" && <> {ADMIN_MESSAGES["rbac.forbidden"]}</>}</p>}
       <table>
         <thead><tr><th>Login</th><th>Name</th><th>Status</th><th>Two-step required</th><th>Roles</th></tr></thead>
         <tbody>

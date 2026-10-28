@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const SECRET_ENV = ["MIGRATE_URL", "ADMIN_DATABASE_URL", "APP_DATABASE_URL", "JOB_DATABASE_URL", "AUTH_DATABASE_URL", "AUTH_ENC_KEY", "DATABASE_URL", "DIRECT_URL"];
+const SECRET_ENV = ["MIGRATE_URL", "ADMIN_DATABASE_URL", "APP_DATABASE_URL", "JOB_DATABASE_URL", "AUTH_DATABASE_URL", "AUTH_ENC_KEY", "DATABASE_URL", "DIRECT_URL", "SUPABASE_SERVICE_KEY"];
 const needles = new Set();
 for (const name of SECRET_ENV) {
   const v = process.env[name];
@@ -12,7 +12,12 @@ for (const name of SECRET_ENV) {
   needles.add(v);
   try { const u = new URL(v); if (u.password) needles.add(decodeURIComponent(u.password)); } catch { /* not a URL */ }
 }
-const patterns = [/postgres(ql)?:\/\/[^\s"'`]+:[^\s"'`]+@/i, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bsk_live_[0-9a-zA-Z]{10,}/, /\bAUTH_ENC_KEY\b/];
+const patterns = [/postgres(ql)?:\/\/[^\s"'`]+:[^\s"'`]+@/i, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bsk_live_[0-9a-zA-Z]{10,}/, /\bAUTH_ENC_KEY\b/,
+  /\bsb_secret_[0-9A-Za-z_-]{10,}/, /\bSUPABASE_SERVICE_KEY\b/]; // Supabase secret keys (ADR-002)
+// A service-role JWT: decode each JWT-shaped string, because a fixed base64 pattern depends on where "role" falls.
+const serviceRoleJwt = (text) => [...text.matchAll(/eyJ[\w-]+\.(eyJ[\w-]+)\.[\w-]+/g)].some((m) => {
+  try { return JSON.parse(Buffer.from(m[1], "base64url").toString("utf8")).role === "service_role"; } catch { return false; }
+});
 
 const root = ".next/static";
 if (!fs.existsSync(root)) { console.error(`${root} not found: run next build first`); process.exit(2); }
@@ -26,6 +31,7 @@ for (const f of files) {
   const text = fs.readFileSync(f, "utf8");
   for (const n of needles) if (n.length >= 8 && text.includes(n)) hits.push(`${f}: contains the value of a server secret`);
   for (const re of patterns) if (re.test(text)) hits.push(`${f}: matches ${re}`);
+  if (serviceRoleJwt(text)) hits.push(`${f}: contains a service-role JWT`);
 }
 console.log(`scanned ${files.length} client files against ${needles.size} secret values and ${patterns.length} patterns`);
 if (hits.length) { for (const h of hits) console.error(h); process.exit(1); }

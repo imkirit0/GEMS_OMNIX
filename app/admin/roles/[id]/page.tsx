@@ -14,7 +14,7 @@ export default async function RoleDetail({ params, searchParams }: { params: Pro
       <p><a href="/admin/roles">All roles</a></p>
       <h1>{role.name}</h1>
       {saved && <p role="status">Saved. Users holding this role have been signed out.</p>}
-      {error && <p role="alert">{ADMIN_MESSAGES[error] ?? ADMIN_MESSAGES["invalid"]}</p>}
+      {error && <p role="alert">{ADMIN_MESSAGES[error] ?? ADMIN_MESSAGES["invalid"]}{error === "forbidden" && <> {ADMIN_MESSAGES["rbac.forbidden"]}</>}</p>}
       <p>{role.holders} user(s) hold this role.</p>
       <form method="post" action={`/admin/roles/${role.id}/permissions`}>
         <fieldset>

@@ -9,6 +9,13 @@ import { POST as setupLinkRoute } from "../app/admin/users/[id]/setup-link/route
 import { POST as removeRoute } from "../app/admin/assignments/[id]/remove/route";
 import { POST as createRoleRoute } from "../app/admin/roles/create/route";
 import { POST as permissionsRoute } from "../app/admin/roles/[id]/permissions/route";
+import { POST as ticketUploadRoute } from "../app/tickets/uploads/route";
+import { POST as ticketCreateRoute } from "../app/tickets/create/route";
+import { POST as ticketActRoute } from "../app/tickets/[id]/act/route";
+import { POST as ticketReassignRoute } from "../app/tickets/[id]/reassign/route";
+import { POST as ticketDocumentRoute } from "../app/tickets/[id]/documents/[docId]/route";
+import { POST as ticketTypeCreateRoute } from "../app/admin/ticket-types/create/route";
+import { POST as ticketTypeSaveRoute } from "../app/admin/ticket-types/[id]/save/route";
 import { auth, SESSION_COOKIE } from "../src/server/auth/http";
 import { hashPassword } from "../src/server/auth";
 import { safeNext } from "../src/server/admin-http";
@@ -16,6 +23,7 @@ import { bootstrapAdmin } from "../scripts/bootstrap-admin.mjs";
 import { asAdmin, reset, setStepUp, T } from "./fixtures";
 
 const ORIGIN = "https://gems.test";
+const TICKET = "00000000-0000-0000-0000-00000000f001";
 const HO_ID = "00000000-0000-0000-0000-0000000000ff";
 const params = (id: string | number) => ({ params: Promise.resolve({ id: String(id) }) });
 function post(path: string, body: URLSearchParams | Record<string, string>, { origin = ORIGIN as string | null, token = T.hoAll as string } = {}) {
@@ -35,8 +43,14 @@ describe("admin routes", () => {
       ["/admin/users/x/assign", (r) => assignRoute(r, params(HO_ID))], ["/admin/users/x/status", (r) => statusRoute(r, params(HO_ID))],
       ["/admin/users/x/setup-link", (r) => setupLinkRoute(r, params(HO_ID))], ["/admin/assignments/1/remove", (r) => removeRoute(r, params(1))],
       ["/admin/roles/1/permissions", (r) => permissionsRoute(r, params(1))],
+      // ticket engine (design item 22a): all seven new POST routes
+      ["/tickets/uploads", ticketUploadRoute], ["/tickets/create", ticketCreateRoute],
+      ["/tickets/x/act", (r) => ticketActRoute(r, params(TICKET))], ["/tickets/x/reassign", (r) => ticketReassignRoute(r, params(TICKET))],
+      ["/tickets/x/documents/1", (r) => ticketDocumentRoute(r, { params: Promise.resolve({ id: TICKET, docId: "1" }) })],
+      ["/admin/ticket-types/create", ticketTypeCreateRoute], ["/admin/ticket-types/1/save", (r) => ticketTypeSaveRoute(r, params(1))],
     ];
-    const count = () => asAdmin((db) => db.query(`select (select count(*) from app.app_user) + (select count(*) from app.role) + (select count(*) from app.role_assignment) + (select count(*) from app.audit_log) n`).then((r) => r.rows[0].n));
+    const count = () => asAdmin((db) => db.query(`select (select count(*) from app.app_user) + (select count(*) from app.role) + (select count(*) from app.role_assignment) + (select count(*) from app.audit_log)
+      + (select count(*) from app.ticket) + (select count(*) from app.ticket_upload) + (select count(*) from app.ticket_type) + (select count(*) from app.ticket_category) n`).then((r) => r.rows[0].n));
     const before = await count();
     for (const [path, call] of calls) for (const origin of ["https://evil.example", null]) {
       expect((await call(post(path, { login: "x", displayName: "x", key: "x", name: "x", status: "DISABLED" }, { origin }))).status, `${path} ${origin}`).toBe(403);

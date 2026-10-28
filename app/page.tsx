@@ -16,6 +16,7 @@ export default async function Home() {
       <h1>GEMS OMNIX</h1>
       <p>Signed in as {user.displayName} ({user.login}).</p>
       {centres.length > 0 && <p><a href="/centres">Centres</a> ({centres.length})</p>}
+      <p><a href="/tickets">Tickets</a> · <a href="/tickets/approvals">My approvals</a></p>
       {admin && <p><a href="/admin/users">User and role administration</a></p>}
       <form method="post" action="/auth/logout"><button type="submit">Sign out</button></form>
     </main>
