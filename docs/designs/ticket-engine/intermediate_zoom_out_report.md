@@ -54,4 +54,15 @@ All eight findings hold on inspection:
 
 ## Resolution
 
-Pending the Stage 8 checkpoint.
+**Status: resolved (2026-10-28).** The owner chose "Apply all, then Stage 9". All eight were applied:
+
+| Finding | Resolution |
+|---|---|
+| Z1 | `requestUpload` takes `typeId` and refuses with `inactive` unless the type is active and `document_required`, so every upload is refused in Stage 2. `maxPendingUploads` and its test were removed. The per-user limit joins the deletion job as a go-live gate, reusing `recent_export_count`/`RateLimited`. **DD-16 narrowed.** |
+| Z2 | The number is allocated before the ticket insert; the "allocates last" sentences were removed. |
+| Z3 | `ticket_stranded` was dropped. The reassign form is offered on every OPEN ticket to `ticket.type.manage` holders, and a stranded-ticket list is now a Stage 5 Future Improvement. **DD-13 narrowed.** |
+| Z4 | `ticket_may_act(ticket)` takes one argument, with self-approval and distinct approvers built into the SQL. `blockSelfApproval`/`distinctApprovers` were removed from `TICKET_POLICY`. Turning either rule off now needs a migration (Q4 updated). |
+| Z5 | The re-raise form opens blank with type and centre fixed; pre-fill waits for the first domain module. `toFields` was removed. **DD-9 narrowed.** |
+| Z6 | `test_ticket_counter` is keyed on `key` only, with no RLS and no T-RLS-002 special case. |
+| Z7 | `TICKET_POLICY` is the one source for the limits. Storage and `storage-setup.mjs` point to it, and item 9 points to the Storage call list. |
+| Z8 | No change, as the reviewer advised. |

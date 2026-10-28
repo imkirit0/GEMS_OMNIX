@@ -231,9 +231,10 @@ under D-TKT-2 and NP-5 until their business owners sign.
 *   **DD-9: Re-raise rules (C4, under D-TKT-2).** Only the raiser of the
     rejected ticket may re-raise it, once, and they must still hold
     `ticket.raise` for its centre. The new ticket keeps the rejected ticket's
-    type and centre. The form is pre-filled with the old request, which the
-    user may edit. Documents are attached again; the old ticket keeps its
-    own. Mechanics: Actions, Re-raise.
+    type and centre. In Stage 2 the form opens blank with type and centre
+    fixed; pre-filling it with the old request waits for the first domain
+    module (narrowed after the zoom-out finding Z5). Documents are attached
+    again; the old ticket keeps its own. Mechanics: Actions, Re-raise.
 *   **DD-10: Number format defaults (C6, NP-5 parameters).** No padding of the
     sequence (as in the legacy 23642), at most 30 characters, and a prefix
     that is fixed text per type. The legacy prefix `TK-26` (R-094.02) is kept
@@ -263,17 +264,22 @@ critic findings D1, D4, D6 and D7.
 *   **DD-14: Distinct approvers (D4; PMC under D-TKT-4).** Nobody may approve
     more than one level of the same ticket, whether by holding several
     levels' roles or by being forwarded the next level. Without this, a
-    multi-level chain can collapse to one person. A code constant like
-    `blockSelfApproval`. Mechanics: Eligibility and visibility.
+    multi-level chain can collapse to one person. Built into
+    `ticket_may_act`, like self-approval. Mechanics: Eligibility and
+    visibility.
 *   **DD-15: Supabase service key, with limits (D6).** The server keeps the
     Supabase service key for storage calls. That key can also bypass RLS
     through Supabase's Data API, so ADR-002 requires a recorded check that
     the Data API does not expose schema `app`. Storage-only S3 keys are the
     noted alternative (Alternative J). See Risks and Mitigations.
-*   **DD-16: Upload retention and cap (D7).** Uploads that are never attached
-    may hold personal data, so deleting them is a **go-live gate** for the
-    first type with `document_required`, and each user may hold at most 20
-    unattached uploads from the last hour (PMC). Mechanics: Actions, Raise.
+*   **DD-16: Upload retention and cap (D7; narrowed after zoom-out finding
+    Z1).** Uploads that are never attached may hold personal data. In Stage
+    2 no upload is possible at all: the upload route refuses unless the type
+    is active and requires a document, and no such type exists yet. Before
+    the first type with `document_required` goes live, two things are a
+    **go-live gate**: the job that deletes unattached uploads, and a per-user
+    limit on upload requests (PMC, reusing the export rate-limit pattern).
+    Mechanics: Actions, Raise.
 
 ## Open Questions
 
@@ -287,10 +293,10 @@ question lists its owner, what it blocks, and the default that ships.
     rolled-back raise may leave a gap; NP-5 per DD-10; NP-8 not continued
     until signed. Mechanics: Numbering.
 *   **Q4: Self-approval and distinct approvers (D-TKT-4, ⛔ prod-gate).**
-    Owner: Operations. Blocks: production. Default: both prohibited
-    (`blockSelfApproval`, `distinctApprovers`), as code constants that need a
-    code change and review to turn off. Mechanics: Actions, Act step 3, and
-    Eligibility and visibility.
+    Owner: Operations. Blocks: production. Default: both prohibited, built
+    into `app.ticket_may_act`, so turning either off needs a migration and
+    review, not a click. Mechanics: Actions, Act step 3, and Eligibility and
+    visibility.
 *   **Q7: Legacy migration (D-MIG).** Owner: IT and Operations. Blocks: the
     migration design, not Stage 2. It covers 16,542 tickets, 2,412 of them
     pending, and waits for read access to the legacy MySQL database. Default:
@@ -473,7 +479,6 @@ type TicketHandler<P> = {
   key: string;
   fields: { name: string; label: string; kind: "text" | "number" | "date" }[]; // what the raise form shows
   parse(payload: Record<string, string>): P;        // shape check; throws TicketError("invalid")
-  toFields(p: P): Record<string, string>;           // reverse of parse, to pre-fill the form on re-raise
   validate(tx: Tx, t: { centreId: number; payload: P }): Promise<void>;   // at raise
   revalidate?(tx: Tx, t: TicketRow<P>): Promise<void>;                    // at last-level approval, after the row lock; defaults to validate
   apply(tx: Tx, t: TicketRow<P>): Promise<{ before: unknown; after: unknown }>; // domain change; result goes to the audit row
@@ -547,8 +552,8 @@ route returns JSON `{error: "<reason>"}`.
 | Upload route: cross-origin request; no or expired session | not used | not used | 403; 401 | none |
 | No `ticket.raise` / `ticket.approve` / `ticket.document.view` / `ticket.type.manage` for the centre; `ticket_may_act` false (includes self-approval and distinct approvers) | `Forbidden` | `?error=forbidden` | 403 | DENIED (existing path) |
 | Payload fails `parse`; blank reject remarks; forward or reassign target refused by `ticket_may_receive`; re-raise of a ticket that is not REJECTED, already re-raised, or raised by someone else | `invalid` | `?error=ticket.invalid` | 400 | none |
-| Required document missing; upload not the actor's, other centre, already attached, too big, too many, or wrong signature; too many unattached uploads (DD-16) | `document` | `?error=ticket.document` | 400 | none |
-| Type inactive, or its `handler_key` no longer registered, at raise or at last-level approval (DD-12) | `inactive` | `?error=ticket.inactive` | not used | none |
+| Required document missing; upload not the actor's, other centre, already attached, too big, too many, or wrong signature | `document` | `?error=ticket.document` | 400 | none |
+| Type inactive, or its `handler_key` no longer registered, at raise or at last-level approval (DD-12); upload request for a type that is not active or needs no document (DD-16) | `inactive` | `?error=ticket.inactive` | 400 | none |
 | Ticket not OPEN, `version` differs, or the update matched 0 rows | `conflict` | `?error=ticket.conflict` | not used | none |
 | `revalidate` refuses | `stale` | `?error=ticket.stale&detail=<key>` | not used | none |
 | `handler.apply` throws | `ApplyFailed` | generic error page with reference id (`safeRoute`) | not used | FAILED `ticket.apply_failed` |
@@ -560,10 +565,12 @@ not 404, because the ticket is visible to them.
 **Raise** (`ticket.raise` for the centre):
 
 1.  **Before raise, for each file:** the browser calls
-    `POST /tickets/uploads` with the file name, size and type.
-    *   The server refuses sizes over the limit, types that are not allowed,
-        and an actor who already holds `TICKET_POLICY.maxPendingUploads`
-        (20, PMC) unattached uploads from the last hour (DD-16).
+    `POST /tickets/uploads` with the type id, centre, file name, size and
+    type.
+    *   The server refuses with `inactive` unless the ticket type is active
+        and `document_required` (DD-16), so in Stage 2 every upload request
+        is refused. It refuses sizes over the limit and types that are not
+        allowed.
     *   It inserts a `ticket_upload` row with key
         `uploads/{centreId}/{uploadId}` and returns a signed upload URL,
         created with overwriting turned off (`x-upsert: false`), so a stored
@@ -599,11 +606,10 @@ not 404, because the ticket is visible to them.
     *   If the type requires a document, at least one must be present
         (T-TKT-001); at most `TICKET_POLICY.maxFilesPerTicket` (5, PMC) may be
         attached.
-    *   Insert the ticket with the id from the form (see Idempotent raise),
-        copy the levels into `ticket_level`, insert the document rows, and
-        allocate the number as the last write before the RAISE event (see
-        Numbering), so the counter row stays locked as briefly as possible.
-        Write the RAISE event. Audit `ticket.raise`.
+    *   Allocate the number (see Numbering). Insert the ticket with it and
+        with the id from the form (see Idempotent raise), copy the levels into
+        `ticket_level`, insert the document rows, and write the RAISE event.
+        Audit `ticket.raise`.
 4.  **Unattached uploads.** Objects uploaded but never attached stay in
     `uploads/`. No `ticket_document` row points to them, so no user can get a
     link to them, but they use storage and may hold personal data. Deleting
@@ -623,16 +629,15 @@ maps to `TicketError("document")`, not a generic error.
     ticket is not OPEN or `version` differs from what the actor saw, throw
     `TicketError("conflict")` (T-TKT-006: the second of two racing approvers
     waits on the lock, then sees the new version).
-2.  **Who may act.** `app.ticket_may_act(ticket_id, policy)` must be true
+2.  **Who may act.** `app.ticket_may_act(ticket_id)` must be true
     for the actor (Eligibility and visibility). It includes the
     `ticket.approve` check for the ticket's centre, so it agrees with
     `scopedAction()`'s own check. If it is false, throw `Forbidden`, so the
     attempt is audited as DENIED.
-3.  **Self-approval and distinct approvers.** `policy` carries
-    `TICKET_POLICY.blockSelfApproval` and `TICKET_POLICY.distinctApprovers`.
-    With the first, the raiser cannot act on their ticket at all (approve,
-    reject or forward) at any level (T-TKT-010). With the second, an actor
-    who already has an APPROVE event on the ticket cannot act on it again
+3.  **Self-approval and distinct approvers.** Both are built into
+    `ticket_may_act` (rule 1). The raiser cannot act on their ticket at all
+    (approve, reject or forward) at any level (T-TKT-010). An actor who
+    already has an APPROVE event on the ticket cannot act on it again
     (DD-14). Because the queue, `canAct` on the detail page and `act()` all
     call the same function, a ticket in your queue is always one you can act
     on. A raiser who wants to withdraw a ticket asks an approver to reject it.
@@ -673,10 +678,10 @@ maps to `TicketError("document")`, not a generic error.
 Input: ticket id, `version` seen, target user. Lock the ticket as in Act step
 1; it must be OPEN. The target must pass `app.ticket_may_receive`. Set
 `assigned_user_id`, write a FORWARD event at the current level with
-`detail {admin: true}`, and audit `ticket.reassign`. This is the way out
-when no one can act: `app.ticket_stranded(ticket)` (Eligibility and
-visibility) tells a `ticket.type.manage` holder "No one can act on this
-ticket" on the detail page.
+`detail {admin: true}`, and audit `ticket.reassign`. The reassign form is
+shown on every OPEN ticket to `ticket.type.manage` holders, and the
+administrator decides when it is needed; a list of stranded tickets waits for
+Stage 5 (Future Improvements).
 
 **Re-raise** (D-TKT-2, PMC; rules in DD-9): a raise with `reraiseOf` set.
 The pre-read takes the rejected ticket's `centre_id`, which is also the
@@ -688,7 +693,7 @@ actor, and not yet re-raised. The new ticket takes its type and centre
 ### Reads
 
 *   **Approval queue** (T-TKT-003): OPEN tickets where
-    `app.ticket_may_act(id, policy)` is true for the actor. Row-level security
+    `app.ticket_may_act(id)` is true for the actor. Row-level security
     limits rows to the actor's centres first. Oldest first (`created_at`,
     then `id`), 50 per page, keyset pagination.
 *   **Ticket list and detail:** tickets where `app.ticket_may_view(id)` is true
@@ -717,7 +722,7 @@ DD-1 still holds.
 
 `app.scoped_centre_ids` answers only for the session's user and filters by
 permission. The ticket functions must also ask about other users (forward
-targets, stranded tickets) and about roles (role-based levels and viewers).
+targets) and about roles (role-based levels and viewers).
 So 0009 adds one internal helper with the same body, generalised:
 
 ```sql
@@ -732,17 +737,17 @@ app.user_centre_ids(p_user uuid, p_permission text default null, p_role int defa
 
 | Function | Answers | Used by |
 |---|---|---|
-| `app.ticket_may_act(ticket, block_self, distinct)` | May the actor act on this ticket now? (rule 1) | Act step 2, the approval queue, `canAct` on the detail page |
+| `app.ticket_may_act(ticket)` | May the actor act on this ticket now? (rule 1) | Act step 2, the approval queue, `canAct` on the detail page |
 | `app.ticket_may_receive(ticket, user)` | May this user be made the forward or reassign target? (rule 2) | Forward step 7, Reassign |
 | `app.ticket_forward_candidates(ticket)` | Id and display name of every user for whom rule 2 holds | The forward and reassign pickers |
 | `app.ticket_may_view(ticket)` | May the actor see this ticket? (rule 3) | List, detail, document download |
-| `app.ticket_stranded(ticket)` | Is the ticket OPEN with no active user for whom rule 1 holds (ignoring the actor-only parts 2 and 3)? Returns false unless the actor holds `ticket.type.manage` | The reassign notice on the detail page (DD-13) |
 
 1.  **May act**, for the actor only (`app.session_user_id()`; the function
     has no user parameter, so it cannot be asked about others). All of:
     1.  the ticket is OPEN;
-    2.  the actor is not the raiser, when `block_self`;
-    3.  the actor has no APPROVE event on the ticket, when `distinct`;
+    2.  the actor is not the raiser (self-approval, Q4);
+    3.  the actor has no APPROVE event on the ticket (distinct approvers,
+        DD-14);
     4.  the actor holds `ticket.approve` over the ticket's centre;
     5.  either `assigned_user_id` is the actor, or no one is assigned and
         the actor is the current level's named user or holds its role over
@@ -788,9 +793,9 @@ whether a user holds rights at a centre the actor cannot see.
     that a second PUT to an existing key is refused.
     The bucket is created once per environment by
     `scripts/storage-setup.mjs`, run by hand by whoever holds the key. It
-    makes `TICKET_BUCKET` private with `file_size_limit` 10485760 and
-    `allowed_mime_types` `application/pdf`, `image/jpeg`, `image/png` (the
-    Q9 defaults), and does nothing if the bucket already matches. So
+    makes `TICKET_BUCKET` private with the size limit and MIME types from
+    `TICKET_POLICY` (the Q9 defaults), and does nothing if the bucket
+    already matches. So
     oversized or wrong-type uploads are refused before our check runs. The
     browser never receives the key. Signed URLs do contain the bucket name
     and the object key (Risks and Mitigations).
@@ -821,8 +826,7 @@ returning current;
 *   **No seeding step** (zoom-out finding M1). The first raise in a new
     period creates the row. The row lock taken by the upsert serialises
     concurrent raises, and a rolled-back raise releases its number, as with
-    `allocate()`. The raise allocates last, so the lock is held only for the
-    end of the transaction.
+    `allocate()`.
 *   **Period.** Stage 2 uses one period key, `ALL`: the counter never resets.
     A yearly reset (NP-2) is not offered yet, because the format has no
     period in it and a reset would repeat numbers. If NP-2 chooses a reset,
@@ -986,7 +990,7 @@ The engine refuses to start with that setting on any Vercel deployment
     NP-3 chooses that.
 *   **Reason for Rejection**: A one-row counter table supports every NP-2 and
     NP-3 option. At ticket volumes (about 16,500 tickets over the legacy
-    system's life) the row lock costs little, and the raise takes it last.
+    system's life) the row lock costs little.
 
 ## Risks and Mitigations
 
@@ -994,15 +998,15 @@ The engine refuses to start with that setting on any Vercel deployment
 |---|---|---|---|
 | Code writes tickets without the engine | Eligibility, self-approval and distinct-approver checks skipped | The engine is the only write path; guard triggers still enforce legal states (DD-1) | Accepted by owner (DD-1); Alternative A if a second write path appears |
 | Handler sends an outside effect and the transaction is retried | Effect happens twice | Handler rule 1: database work only; outbox later | Each domain module's review |
-| Named approver or forward target leaves | Ticket stranded | Administrator reassign (DD-13); detail page flags it | Operations to watch; SLA escalation in Stage 5 |
+| Named approver or forward target leaves | Ticket stranded | Administrator reassign (DD-13), offered on every OPEN ticket | Operations to watch; SLA escalation in Stage 5 |
 | One person approves several levels | Multi-level control collapses | Distinct approvers (DD-14) | PMC, Operations sign-off (Q4) |
-| Raiser approves their own ticket | Fraud | `blockSelfApproval` (Act step 3) | ⛔ prod-gate, Operations (Q4) |
+| Raiser approves their own ticket | Fraud | Built into `ticket_may_act` (Act step 3) | ⛔ prod-gate, Operations (Q4) |
 | Double submit of the raise form | Two tickets, two changes | Idempotent raise with a form-carried id | none |
 | Object replaced after its check | Unchecked file attached | `x-upsert: false`; manual check proves a second PUT is refused | ADR-002 |
 | Upload URL valid longer than needed | Someone holding the URL can write that one key until it expires | The URL writes only its own key; only the requester can attach it; checks run at attach | Accepted by owner with ADR-002 (Q9) |
 | Signed URLs show bucket name and object key | Names visible to the user | Keys are random ids; URLs expire; the bucket is private | Accepted by owner with ADR-002 (Q9) |
 | Supabase service key leaks from the server | Full storage access, and RLS bypass through the Data API | Key never reaches the browser (bundle scan); recorded check that the Data API does not expose schema `app` (DD-15) | IT, ADR-002; S3 keys as fallback (Alternative J) |
-| Unattached uploads pile up | Personal data kept without limit; storage cost | Per-user cap (DD-16); deletion job is a go-live gate | IT and Legal (Q9) |
+| Unattached uploads pile up | Personal data kept without limit; storage cost | No upload is possible until a document type is live; then the deletion job and a per-user limit are a go-live gate (DD-16) | IT and Legal (Q9) |
 | Handler swapped under open tickets | Old payloads reach new code | `handler_key` changes only on an inactive type with no OPEN tickets (DD-11) | none |
 | Deactivation races a last-level approval | Change applied after "off" | Type read `for share` in raise and last-level approval | none |
 | Queue slows as tickets grow | Slow approver page | Measure it; switch to a set-returning query (see NFR) | Stage 5 |
@@ -1048,7 +1052,13 @@ The engine refuses to start with that setting on any Vercel deployment
 
 *   **Deleting uploads that were never attached**: a daily job that removes
     `uploads/` objects older than 24 hours with no `ticket_document`.
-    **Go-live gate** for the first type with `document_required` (DD-16).
+    **Go-live gate** for the first type with `document_required` (DD-16),
+    together with a per-user limit on upload requests that reuses
+    `app.recent_export_count` and `RateLimited` (429) from
+    `src/server/exports.ts`.
+*   **Stranded-ticket list**: a list for administrators of OPEN tickets on
+    which no active user can act, with SLA escalation (Stage 5). In Stage 2
+    the administrator decides when to reassign (DD-13).
 *   **Outbox for outside effects**: needed for centre notifications
     (T-TKT-008, D-COMM-1) and any handler that must call another system.
 *   **Database-side eligibility checks** (Alternative A), if a second write
@@ -1134,10 +1144,10 @@ routes and screens, then the documentation. Every step leaves
     *   The internal helper `app.user_centre_ids(user, permission, role)`
         (Eligibility and visibility), revoked from public and granted to no
         app role.
-    *   The five definer read functions in Eligibility and visibility
-        (`ticket_may_act(ticket, block_self, distinct)`,
+    *   The four definer read functions in Eligibility and visibility
+        (`ticket_may_act(ticket)`,
         `ticket_may_receive`, `ticket_forward_candidates`,
-        `ticket_may_view`, `ticket_stranded`), built on
+        `ticket_may_view`), built on
         `app.user_centre_ids` and `app.visible_centre_ids`, each returning
         false or nothing outside the caller's `visible_centre_ids()`. Granted
         to `gems_app` only.
@@ -1172,7 +1182,7 @@ routes and screens, then the documentation. Every step leaves
     `key` (text), `failApply` and `failRevalidate` (text; `"1"` means
     yes), and its payload is `{key: string, failApply: boolean,
     failRevalidate: boolean}`. `apply` adds 1 to the
-    `app.test_ticket_counter` row for (ticket centre, `key`), creating it at
+    `app.test_ticket_counter` row for `key`, creating it at
     1, and returns the old and new value as `before`/`after`. With
     `failApply` it throws after the increment (T-TKT-007: the increment must
     roll back); with `failRevalidate`, `revalidate` throws
@@ -1185,15 +1195,17 @@ routes and screens, then the documentation. Every step leaves
 *   **Type / Scope**: TypeScript module (core).
 *   **Proposed Changes**:
     *   `TICKET_POLICY` constant, PMC, in the same style as `EXPORT_POLICY` in
-        `exports.ts`: `blockSelfApproval: true`, `distinctApprovers: true`
-        (DD-14), `maxPendingUploads: 20` (per actor, last hour; DD-16),
-        `maxFileBytes: 10 * 1024 * 1024`,
+        `exports.ts`:
+
+        `maxFileBytes: 10 * 1024 * 1024` (the Q9 defaults; the one source for
+        the size and type limits, also used by `storage-setup.mjs`),
         `allowedSignatures: [pdf, jpeg, png]` (bytes in Actions, Raise),
         `maxFilesPerTicket: 5`,
         `downloadUrlSeconds: 60`, `numberPad: 0`, `numberMaxLength: 30`
         (DD-10).
-    *   Writes: `requestUpload(session, {centreId, fileName, size,
-        contentType})`, `raise(session, {typeId, centreId, payload,
+    *   Writes: `requestUpload(session, {typeId, centreId, fileName, size,
+        contentType})` (refused unless the type is active and
+        `document_required`), `raise(session, {typeId, centreId, payload,
         uploadIds, reraiseOf?, ticketId})`, `act(session, {ticketId, action,
         seenVersion, remarks?, forwardTo?})` and `reassign(session,
         {ticketId, seenVersion, toUserId})` (DD-13; `ticket.type.manage`
@@ -1209,7 +1221,7 @@ routes and screens, then the documentation. Every step leaves
         {status?, typeId?, priority?, centreId?, cursor?})` (order and page
         size in Reads),
         `getTicket(session, id)` (detail, levels, history, documents,
-        `canAct`, `stranded` (from `app.ticket_stranded`), forward
+        `canAct`, forward
         candidates) and `documentLink(session, ticketId, documentId)`
         (pre-check `ticket_may_view`, then `scopedAction()` with
         `ticket.document.view`; audited; returns a signed URL).
@@ -1246,9 +1258,8 @@ routes and screens, then the documentation. Every step leaves
 *   **Proposed Changes**: `signedUploadUrl(key)`, `head(key, bytes)` (a
     Range request for the first `bytes`; the total size comes from the
     `Content-Range` header) and `signedDownloadUrl(key, seconds)`. The
-    Supabase driver uses `fetch` against `/storage/v1/object/upload/sign/…`
-    (with `x-upsert: false`),
-    `/storage/v1/object/authenticated/…` and `/storage/v1/object/sign/…`.
+    Supabase driver makes the three `fetch` calls listed in Technical Plan,
+    Storage.
     That Supabase honours Range requests on the authenticated endpoint is
     checked first in the manual check, together with the refusal of a
     second PUT to the same key; if Range is not honoured, fall back to a
@@ -1266,10 +1277,10 @@ routes and screens, then the documentation. Every step leaves
     run by CI.
 *   **Proposed Changes**: Reads `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` and
     `TICKET_BUCKET`. Creates the bucket with `POST /storage/v1/bucket`
-    (`public: false`, `file_size_limit: 10485760`, `allowed_mime_types`
-    PDF, JPEG, PNG), or updates it with `PUT /storage/v1/bucket/{id}` if
-    its settings differ. Prints what it did. The values match
-    `TICKET_POLICY`; ADR-002 records them.
+    (`public: false`, with `file_size_limit` and `allowed_mime_types` taken
+    from `TICKET_POLICY`), or updates it with `PUT /storage/v1/bucket/{id}`
+    if its settings differ. Prints what it did. ADR-002 records the
+    values.
 
 #### 10. `src/server/numbering.ts` (Modify)
 
@@ -1326,13 +1337,13 @@ routes and screens, then the documentation. Every step leaves
     centre, one `p.<name>` input per handler field, file picker; POST
     fields `ticketId` (hidden, generated when the form is rendered),
     `typeId`, `centreId`, `p.*`, `uploadId`, and `reraiseOf` when
-    opened as `?reraise=<id>`, which fixes type and centre and pre-fills the
-    fields with `toFields` per DD-9; on a re-raise `raise` ignores any
+    opened as `?reraise=<id>`, which fixes type and centre and leaves the
+    fields blank per DD-9; on a re-raise `raise` ignores any
     `typeId`/`centreId` sent and uses the rejected ticket's), the detail page (history, documents,
     and an action form with fields `action` (approve, reject, forward),
     hidden `seenVersion`, `remarks` and `forwardTo` (the forward picker);
-    for `ticket.type.manage` holders a reassign form, and a "No one can act
-    on this ticket" notice when `stranded`) and the approval queue. All reads go through
+    for `ticket.type.manage` holders a reassign form on every OPEN ticket)
+    and the approval queue. All reads go through
     `pageRead()`, so anything out of scope gives 404.
 
 #### 15. `app/tickets/new/upload.tsx` (Create)
@@ -1371,9 +1382,9 @@ routes and screens, then the documentation. Every step leaves
 
 *   **Type / Scope**: Test-only SQL, applied by the admin connection, as with
     `audit-fault.sql`.
-*   **Proposed Changes**: Table `app.test_ticket_counter(centre_id, key,
-    value)` with RLS by centre (all four policies, as in 0002), granted to
-    `gems_app`, used by
+*   **Proposed Changes**: Table `app.test_ticket_counter(key primary key,
+    value)`, with no `centre_id` and so no RLS (tests use unique keys),
+    granted to `gems_app`, used by
     `test-handler.ts`. For the manual harness it is applied by hand to the
     local database.
 
@@ -1393,11 +1404,12 @@ routes and screens, then the documentation. Every step leaves
     *   Distinct approvers (DD-14): a user holding the roles of levels 1 and
         2 can approve level 1 only; forwarding level 1 to the level-2
         approver does not let them approve both.
-    *   Reassign (DD-13): a ticket whose named approver is disabled is
-        `stranded`; reassign needs `ticket.type.manage` and step-up, refuses
-        a target failing `ticket_may_receive`, and lets the target act.
-    *   Upload cap (DD-16): the 21st unattached upload in an hour is
-        refused.
+    *   Reassign (DD-13): after a ticket's named approver is disabled, no
+        one can act on it; reassign needs `ticket.type.manage` and step-up,
+        refuses a target failing `ticket_may_receive`, and lets the target
+        act.
+    *   Upload gate (DD-16): an upload request for an inactive type, or a
+        type without `document_required`, is refused with `inactive`.
     *   `ticket_event` update and delete are refused.
     *   Activation without a registered handler is refused.
     *   T-TKT-002: tickets raised at two different centres get consecutive,
@@ -1431,12 +1443,11 @@ routes and screens, then the documentation. Every step leaves
 
 *   **Type / Scope**: Foundation RLS tests.
 *   **Proposed Changes**: T-RLS-002's expected table list gains the five
-    per-ticket tables. `test_ticket_counter` also has `centre_id` and may
-    exist when T-RLS-002 runs, so the test SQL gives it all four policies and
-    the test excludes tables created by test SQL by name. T-RLS-005's
+    per-ticket tables. `test_ticket_counter` has no `centre_id`, so T-RLS-002
+    needs no special case for it. T-RLS-005's
     definer-function inventory gains `ticket_forward_candidates`,
-    `ticket_may_act`, `ticket_may_receive`, `ticket_may_view`,
-    `ticket_stranded` and the internal helper `user_centre_ids`.
+    `ticket_may_act`, `ticket_may_receive`, `ticket_may_view` and the
+    internal helper `user_centre_ids`.
 
 #### 21. `tests/audit-catalogue.ts` and `tests/audit.test.ts` (Modify)
 
