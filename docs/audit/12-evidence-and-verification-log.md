@@ -794,3 +794,43 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | docs/audit/09-test-strategy-and-acceptance-criteria.md | 234b02b93694bc8c41c33daea9d070a9207e306aa723b25eb3db5b3fcf714ab4 |
 | docs/audit/data/matrix-04-logs-tickets-exams-supply.tsv | fc95d376bab7d99f0f2a59d4538714ad98c2bf55f472e82aa1328c8b86053af3 |
 | evidence/ci-p1-2026-10-28T121950.txt | 9ebc04a9e8f9cee949de34eea31b152fa6bf4cca636faf70edbe9c46f98aee07 |
+
+## E-024 Ticket engine build phase P2: schema, migration 0009, fixtures (2026-10-28)
+- **Request:** "start that then", which started P2 of the approved design.
+- **Commit `9ff5d54`:**
+  - **`prisma/schema.prisma`:** ten ticket models and three enums. `AuditOutcome` gains `FAILED`.
+  - **Migration `0009_tickets`, generated part:** the tables, keys, indexes and foreign keys came from `prisma migrate diff --from-config-datasource --to-schema` on a fresh database at 0008. That gives serial ids, Prisma constraint names (`ticket_pkey`, `ticket_document_upload_id_key`, `ticket_reraise_of_key`) and `ON DELETE RESTRICT`. `ADD VALUE 'FAILED'` was moved first, and nothing in 0009 uses it.
+  - **Migration `0009_tickets`, hand-written part:**
+    - shape checks;
+    - RLS on the five per-ticket tables (the 0002 loop) and on the four setup tables (everyone reads; writes need `ticket.type.manage` network-wide, in `select`-wrapped form);
+    - guard triggers `ticket_guard` (insert and update) and `ticket_level_guard` (insert);
+    - `ticket_immutable` on `ticket_event` and `ticket_document`, for update, delete and truncate;
+    - the internal `user_centre_ids` helper and the six definer functions;
+    - five permissions, the grants, and usage on the five sequences.
+  - **Tests:**
+    - `tests/sql/ticket-test-handler.sql`.
+    - `reset()` truncates the ticket tables and the counter (`test_ticket_counter` via `to_regclass`) and re-seeds the five ticket permissions.
+    - Nine ticket fixture users with roles 10 to 16; existing fixtures are unchanged.
+    - `setStepUp`, `newSession` and `rows` moved into `fixtures.ts`.
+    - The T-RLS-002 table list and the T-RLS-005 definer inventory are updated.
+- **Probe on the live database** (transaction rolled back), 11 cases:
+  - refused: an insert that is not OPEN; a level past `level_count`; a level insert after the RAISE event; an update without a version bump; approval below the last level; a jump of two levels; a change to a closed ticket; an update to `ticket_event` (message "ticket_event is append-only");
+  - succeeded: the legal path (level 1 → 2, then APPROVED at the last level, version 3);
+  - `ticket_type_lock` returned the row.
+- **Ad-hoc check:** this throwaway test is not committed. Every fixture session resolves to its intended centres. As `gems_app`, the eligibility functions return false or nothing for an unknown ticket.
+- **Findings while building, written back into the design:**
+  1. `app.account_usable()` refuses a session for a user with no role assignments, so the "viewer" fixture gets a role with no permissions (`tk_member`).
+  2. `ticket_may_receive` also refuses a target who already approved the ticket. Under DD-14 that target could not act, so the ticket would be stranded.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: T-DOC-001 0 errors; no schema drift; typecheck; **80/80** tests (8 files); build; no client secrets; real-server smoke passed.
+- **Not yet tested by the suite:** the triggers and functions get their permanent tests in P3 (`tests/tickets.test.ts`, design item 19).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0009_tickets/migration.sql | ecc557304c7bf305a8154fee4e5bc576c23442d815200088c2fb6b4ed015cd0a |
+| prisma/schema.prisma | 132795a24d489079fe7239b23c6514db77320929deeb7504079a84a489e1e582 |
+| tests/fixtures.ts | 12f567f8032482de78bde3db05e88c4457e1a2ec0461241b300b2b728f77b051 |
+| tests/foundation.test.ts | 5ce18f6f63cb306f8314943400003bbfe8b25717a71e8b244a11890e6a28e24c |
+| tests/sql/ticket-test-handler.sql | 641be5d44197631a08142afba2e530713a67113da96a61374b1dd4c6981e6264 |
+| evidence/ci-p2-2026-10-28T123134.txt | 9907f2c96183968a552f12b6d0c091ec4700fcc22c1eb67034b6d2370832cf1c |
