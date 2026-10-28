@@ -130,3 +130,29 @@ Owner chose "update doc first" and asked Claude to make the edits and propose th
 Also found while fixing: the design called the yearly reset "NP-3", but in `docs/audit/revisions/v1.1-corrections.md` §C-02.1 reset is **NP-2** and NP-3 is the gap rule. Corrected throughout.
 
 DD-9…DD-12 approved by the owner in session on 2026-10-28. Stage 6 re-audit follows.
+
+## Re-audit (2026-10-28)
+
+The one allowed Stage 6 re-audit was run by a fresh `egm-comprehension` reviewer. It confirmed **21 of C1-C23 resolved**. C3 and C15 were partly resolved, and it found **0 Blocker, 9 Major (R1-R9) and 8 Nit (R10-R17)** new gaps. Most came from the Stage 6 edits. The re-audit cap is reached, so no further Stage 6 run will happen. The findings were fixed in the document directly:
+
+| Finding | Resolution |
+|---|---|
+| R1 | P2034 from `apply` passes through unwrapped so `withScope()` retries; an exhausted P2034 writes no FAILED row |
+| R2 | Setup tables: `gems_app` gets select, insert, update and delete, with RLS limiting writes to `ticket.type.manage` |
+| R3 | The `stale` message is fixed text with no personal data, sent as `&detail=` (escaped, at most 200 characters) |
+| R4 | `TicketNotFound` → 404 in `adminPost`; the upload route has no ticket and never returns 404 |
+| R5 | **Changes DD-3/T-TKT-010 behaviour:** with `blockSelfApproval` the raiser cannot approve, reject or forward. `ticket_may_act(ticket, block_self)` is the one rule used by the queue, `canAct` and `act()` |
+| R6 | Handler `toFields(p)` pre-fills the form on re-raise |
+| R7 | Two-step raise form (`?type=&centre=` reload); the centre list comes from `scoped_centre_ids('ticket.raise')` |
+| R8 | The upload URL's validity is set by Supabase; the 2-minute claim and `uploadUrlSeconds` are removed |
+| R9 | **Tightens DD-11:** `handler_key` changes only while the type is inactive and has no OPEN tickets |
+| R10 | An empty level set is refused |
+| R11 | Upload route: 403 for cross-origin, 401 for no session; impossible rows removed |
+| R12 | Download without `ticket.document.view` → 404 |
+| R13 | Raise POST field names; on re-raise, any `typeId`/`centreId` sent are ignored |
+| R14 | Prefix and code validated against `numberMaxLength`; an unregistered handler on an active type → `inactive` |
+| R15 | T-DOC-001 added to the terms table; NP location fixed; audit 06 path given |
+| R16 | Setup function parameters given; the save route dispatches on a hidden `op` field; name and category are editable |
+| R17 | Cursor is base64url of `<created_at>\|<id>` |
+
+R5 and R9 change owner-approved behaviour and are flagged for the owner.

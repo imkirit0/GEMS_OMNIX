@@ -45,12 +45,12 @@ shaped some decisions is called the **zoom-out review**; its finding IDs
 |---|---|---|
 | SPEC, WF6 | The legacy specification PDF and its workflow 6 ("Tickets"), pp. 11–12 of *GEMS Workflows for Manager Review* | `docs/audit/00-README.md` lists the sources |
 | FR-xxx, R-xxx | Requirement rows in the traceability matrix | `docs/audit/02-requirements-traceability-matrix.csv` |
-| D-xxx, NP-x | Open business decisions, each with an owner and a proposed default | `docs/audit/04-manager-decision-register.md` |
+| D-xxx | Open business decisions, each with an owner and a proposed default | `docs/audit/04-manager-decision-register.md` (NP-1…8 are listed there as one row) |
 | D-TKT-1…4 | Approver setup per type; reject = new linked ticket; SLA and escalation; self-approval | audit 04 |
 | D-COMM-1, D-SEC-4, D-MIG-x | Message providers; storage of personal identifiers; legacy migration choices | audit 04 |
 | NP-1…8 | Numbering policy: 1 series scope, 2 reset period, 3 gap rule, 4 cancelled numbers, 5 format and maximum length, 6 receipt prefixes, 7 register numbers, 8 continuing legacy counters | `docs/audit/revisions/v1.1-corrections.md` §C-02.1 |
 | ⛔ prod-gate | A decision that must be signed before production deployment | audit 04, top of file |
-| T-TKT-xxx, T-SEC-xxx, T-RLS-xxx, T-AUD-xxx | Acceptance and security tests | `docs/audit/09-test-strategy-and-acceptance-criteria.md` |
+| T-TKT-xxx, T-SEC-xxx, T-RLS-xxx, T-AUD-xxx, T-DOC-001 | Acceptance and security tests (T-DOC-001: the audit pack's consistency check) | `docs/audit/09-test-strategy-and-acceptance-criteria.md` |
 | POC P2, P3, P5 | Proofs of concept: RLS isolation, numbering, ticket core | `docs/audit/11-proof-of-concept-specification.md` |
 | RLS | Postgres row-level security; every centre-scoped table is filtered by `app.visible_centre_ids()` | `prisma/migrations/0002_security` |
 | RBAC | Roles, permissions and scoped role assignments (ALL, REGION, AREA, CENTRE) | `src/server/rbac.ts`, migration 0005 |
@@ -234,8 +234,8 @@ review found (C4, C6, C8, C14 in
     raised afterwards. Levels and viewers can also change at any time,
     because levels are copied onto each ticket at raise, and a viewer change
     is meant to take effect at once. `handler_key` can change only while the
-    type is inactive, because it decides what `apply` does to tickets
-    already open.
+    type is inactive **and has no OPEN tickets**, because it decides what
+    `apply` does with payloads written for the old handler.
 *   **DD-12: Deactivating a type (C14).** Deactivation is the rollback
     switch. It stops new raises and stops final approvals of that type's
     open tickets (`ticket.inactive`), so its handler's `apply` cannot run.
@@ -378,8 +378,10 @@ refused.
 
 **Grants.** `gems_app` gets select and insert on the per-ticket tables,
 update on `ticket` only, and select, insert and update on
-`ticket_number_series`. Setup tables can only be changed by holders of
-`ticket.type.manage`, enforced by an RLS write policy that calls
+`ticket_number_series`. On the four setup tables `gems_app` gets select,
+insert, update and delete (delete because `setTypeLevels` and
+`setTypeViewers` replace whole sets), and an RLS write policy limits every
+write to holders of `ticket.type.manage`:
 `app.has_permission('ticket.type.manage', null)`.
 
 **Permissions** (inserted the same way as migration 0007):
@@ -397,13 +399,19 @@ type TicketHandler<P> = {
   key: string;
   fields: { name: string; label: string; kind: "text" | "number" | "date" }[]; // what the raise form shows
   parse(payload: Record<string, string>): P;        // shape check; throws TicketError("invalid")
+  toFields(p: P): Record<string, string>;           // reverse of parse, to pre-fill the form on re-raise
   validate(tx: Tx, t: { centreId: number; payload: P }): Promise<void>;   // at raise
   revalidate?(tx: Tx, t: TicketRow<P>): Promise<void>;                    // at final approval, after the row lock; defaults to validate
   apply(tx: Tx, t: TicketRow<P>): Promise<{ before: unknown; after: unknown }>; // domain change; result goes to the audit row
 };
 ```
 
-The raise form renders one input per entry in `fields`, named `p.<name>`.
+The raise form has two steps without client JavaScript. `/tickets/new`
+first shows a GET form choosing the type (active types only) and the centre
+(centres where the user holds `ticket.raise`, from
+`app.scoped_centre_ids('ticket.raise')`). Submitting it reloads
+`/tickets/new?type=<id>&centre=<id>`, which renders one input per entry in
+the type's handler `fields`, named `p.<name>`.
 The raise route collects every `p.*` form field into a
 `Record<string, string>` (prefix removed) and passes it to `parse`. The
 parsed value is stored as `payload`. `TicketRow<P>` is the `ticket` row as
@@ -417,7 +425,10 @@ Rules for every handler:
     whole transaction on a write conflict (P2034). A handler that sent an
     e-mail or called an outside service could therefore do it twice. Outside
     effects wait for an outbox, which is not part of this design.
-2.  **`revalidate` refuses with a reason** (`TicketError("stale", reason)`, T-TKT-011). The
+2.  **`revalidate` refuses with a message** (`TicketError("stale", message)`, T-TKT-011).
+    The message is short fixed text with no personal data (for example
+    "The voucher is already paid"), because it is shown to the approver
+    through the URL. The
     engine rolls back and shows the reason. The ticket stays OPEN, so an
     approver can then reject it with remarks.
 3.  **`apply` runs at most once per ticket.** The engine guarantees this
@@ -453,19 +464,24 @@ choosing the action name before the row lock shows which level it is.
 | Reject | `{status: "OPEN", level}` | `{status: "REJECTED"}` |
 | Forward | `{assignedUserId}` | `{assignedUserId}` |
 
-**Errors.** Engine failures are `TicketError(reason, message)`. Form routes
-return to the page with `?error=ticket.<reason>`; the upload route returns
-JSON `{error: "<reason>"}`.
+**Errors.** Engine failures are `TicketError(reason, message)`, where
+`reason` is one of the codes below and `message` is optional text. Form
+routes return to the page with `?error=ticket.<reason>`; for `stale` they
+also add `&detail=<message>` (URL-encoded, cut to 200 characters), which the
+page shows as plain escaped text. A ticket that does not exist or that the
+user may not view throws `TicketNotFound`, which `adminPost` turns into a
+404 response. The upload route returns JSON `{error: "<reason>"}`.
 
 | Situation | Error | Form route | Upload route | Audit row |
 |---|---|---|---|---|
-| Ticket missing, out of scope, or not viewable | not found | 404 | 404 | none |
+| Ticket missing, out of scope, or not viewable; document download without `ticket.document.view` | `TicketNotFound` | 404 | not used | none |
+| Upload route: cross-origin request; no or expired session | | | 403; 401 | none |
 | No `ticket.raise` / `ticket.approve` for the centre; `ticket_may_act` false; self-approval blocked | `Forbidden` | `?error=forbidden` | 403 | DENIED (existing path) |
 | Payload fails `parse`; blank reject remarks; forward target refused by `ticket_may_receive`; re-raise of a ticket that is not REJECTED, already re-raised, or raised by someone else | `invalid` | `?error=ticket.invalid` | 400 | none |
 | Required document missing; upload not the actor's, other centre, already attached, too big, too many, or wrong signature | `document` | `?error=ticket.document` | 400 | none |
-| Type inactive at raise or at final approval (DD-12) | `inactive` | `?error=ticket.inactive` | 400 | none |
+| Type inactive, or its `handler_key` no longer registered, at raise or at final approval (DD-12) | `inactive` | `?error=ticket.inactive` | not used | none |
 | Ticket not OPEN, or `version` differs | `conflict` | `?error=ticket.conflict` | not used | none |
-| `revalidate` refuses | `stale` | `?error=ticket.stale` with the reason | not used | none |
+| `revalidate` refuses | `stale` | `?error=ticket.stale&detail=…` | not used | none |
 | `handler.apply` throws | `ApplyFailed` | generic error page with reference id (`safeRoute`) | not used | FAILED `ticket.apply_failed` |
 
 A user who may view a ticket but not act on it sees no action buttons. If
@@ -477,8 +493,11 @@ not 404, because the ticket is visible to them.
     browser asks `POST /tickets/uploads` with the file name, size and type.
     The server refuses sizes over the limit and types that are not allowed.
     It inserts a `ticket_upload` row with key
-    `uploads/{centreId}/{uploadId}` and returns a signed upload URL valid for
-    2 minutes (PMC). The browser then PUTs the file straight to Supabase.
+    `uploads/{centreId}/{uploadId}` and returns a signed upload URL. Its
+    validity is set by Supabase, not by us (the sign call takes no expiry);
+    the manual check records the actual period. A long-lived URL is
+    accepted: it can only write that one key, and only its requester can
+    attach the result. The browser then PUTs the file straight to Supabase.
 2.  **At raise, outside the transaction:** for each upload id sent, read the
     `ticket_upload` row. It must belong to the actor and the same centre, and
     must not be attached yet. Then fetch only the first 16 bytes of the object
@@ -507,18 +526,19 @@ not 404, because the ticket is visible to them.
     OPEN or `version` differs from what the user saw, throw `TicketError("conflict")`
     (T-TKT-006: the second of two racing approvers waits on the lock, then
     sees the new version).
-2.  **Who may act:** `app.ticket_may_act(ticket_id)` must be true for the
+2.  **Who may act:** `app.ticket_may_act(ticket_id, blockSelfApproval)` must be true for the
     session's user (see Eligibility and visibility). It includes the
     `ticket.approve` check for the ticket's centre, so it agrees with
     `scopedAction()`'s own check. If it is false, throw `Forbidden`, so the
     attempt is audited as DENIED.
 3.  **Self-approval.** If `TICKET_POLICY.blockSelfApproval` is set, the person
-    who raised the ticket cannot approve or forward at any level (T-TKT-010);
-    the attempt throws `Forbidden`.
-    The queue and the detail page apply the same rule: the queue leaves out
-    tickets the user raised, and the detail page offers only the actions the
-    engine would allow. So a ticket in your queue is always one you can
-    approve.
+    who raised the ticket cannot act on it at all (approve, reject or
+    forward) at any level (T-TKT-010); the attempt throws `Forbidden`. The
+    engine passes the flag to `app.ticket_may_act(ticket, block_self)`, which
+    returns false for the raiser when it is true. So the queue, `canAct` on
+    the detail page, and `act()` all use one rule, and a ticket in your
+    queue is always one you can act on. A raiser who wants to withdraw a
+    ticket asks an approver to reject it.
 4.  **Approve, not the last level:** `current_level + 1`, clear
     `assigned_user_id`, APPROVE event (T-TKT-004).
 5.  **Approve, last level:** the type must be active (DD-12). Then
@@ -526,8 +546,11 @@ not 404, because the ticket is visible to them.
     status APPROVED with `closed_at`, APPROVE event. The audit row takes
     `before` and `after` from `apply` (T-TKT-005). If anything throws, the
     whole transaction rolls back. The engine wraps the call to
-    `handler.apply` and rethrows any error from it as `ApplyFailed` (a class
-    in `engine.ts` that keeps the original as `cause`). For `ApplyFailed`
+    `handler.apply` and rethrows its errors as `ApplyFailed` (a class in
+    `engine.ts` that keeps the original as `cause`), except a write conflict
+    (Prisma code P2034), which passes through unchanged so `withScope()` can
+    retry. If the retries run out, that P2034 reaches the user as a generic
+    error and writes no FAILED row, because it is not `ApplyFailed`. For `ApplyFailed`
     only, a `ticket.apply_failed` audit row with outcome FAILED (a new
     `AuditOutcome` value) is written in its own transaction (T-TKT-007),
     through a new optional failure-audit hook on `scopedAction()`. The row
@@ -556,13 +579,15 @@ actor, and not yet re-raised; the new ticket takes its type and centre
 ### Reads
 
 *   **Approval queue** (T-TKT-003): OPEN tickets where
-    `app.ticket_may_act(id)` is true for the session's user. Row-level
+    `app.ticket_may_act(id, blockSelfApproval)` is true for the session's user. Row-level
     security limits rows to the actor's centres first. Oldest first
     (`created_at`, then `id`), 50 per page, keyset pagination.
 *   **Ticket list and detail:** tickets where `app.ticket_may_view(id)` is true
     (T-TKT-012). List filters are optional `status`, `typeId`, `priority` and
     `centreId`; newest first (`created_at desc`, then `id`), 50 per page,
-    keyset pagination. The detail page shows the history and the documents.
+    keyset pagination. The cursor is opaque to the browser: base64url of
+    `<created_at ISO>|<id>` of the last row shown. The detail page shows the
+    history and the documents.
 *   **Document download** (`ticket.document.view`): the ticket must pass
     `app.ticket_may_view` and the document row must be readable (RLS applies).
     Write a `ticket.document.download` audit row, then redirect to a signed
@@ -594,7 +619,7 @@ app.user_centre_ids(p_user uuid, p_permission text default null, p_role int defa
 
 | Function | True when | Used by |
 |---|---|---|
-| `app.ticket_may_act(ticket)` | For the session's user (`app.session_user_id()`; no user parameter, so it cannot be asked about others): the ticket is OPEN, the user holds `ticket.approve` over its centre, and either `assigned_user_id` is the user, or no one is assigned and the user is the current level's named user or holds its role through an assignment covering the ticket's centre (DD-5) | Act step 2, the approval queue, `canAct` on the detail page |
+| `app.ticket_may_act(ticket, block_self)` | For the session's user (`app.session_user_id()`; no user parameter, so it cannot be asked about others): the ticket is OPEN, the user is not its raiser when `block_self` is true, the user holds `ticket.approve` over its centre, and either `assigned_user_id` is the user, or no one is assigned and the user is the current level's named user or holds its role through an assignment covering the ticket's centre (DD-5) | Act step 2, the approval queue, `canAct` on the detail page |
 | `app.ticket_may_receive(ticket, user)` | `user` is active, is not the caller, is not the person who raised the ticket, and holds `ticket.approve` over the ticket's centre | Forward step 7 |
 | `app.ticket_forward_candidates(ticket)` | Returns id and display name of every user for whom `ticket_may_receive` is true | The forward picker |
 | `app.ticket_may_view(ticket)` | The caller holds `ticket.view` over the centre; or raised the ticket; or is the named user on any of its `ticket_level` rows, or holds one of their roles over the centre; or was ever a forward target (`ticket_event.to_user_id`); or is a viewer of its type (named user, or holds the viewer role over the centre) | List, detail, document download |
@@ -805,8 +830,9 @@ and final approvals but leaves reject and forward available (DD-12).
 
 *   `docs/designs/ticket-engine/input-brief.md` (the drafting input)
 *   WF6, *GEMS Workflows for Manager Review*, pp. 11–12; SPEC p.38
-*   Audit 04 (D-TKT-1…4, NP-1…8), 06 (threat model), 09 (T-TKT-001…018),
-    10 (stage placement), 11 (POC P5)
+*   In `docs/audit/`: 04 (D-TKT-1…4), 06 (`06-security-threat-model.md`),
+    09 (T-TKT-001…018), 10 (stage placement), 11 (POC P5);
+    NP-1…8 in `revisions/v1.1-corrections.md` §C-02.1
 *   ADR-001 (first-party authentication); migrations 0002 (scope functions)
     and 0005 (RBAC pattern)
 
@@ -943,7 +969,7 @@ routes and screens, then the documentation. Every step leaves
         `exports.ts`: `blockSelfApproval: true`,
         `maxFileBytes: 10 * 1024 * 1024`,
         `allowedSignatures: [pdf, jpeg, png]` (bytes in Actions, Raise),
-        `maxFilesPerTicket: 5`, `uploadUrlSeconds: 120`,
+        `maxFilesPerTicket: 5`,
         `downloadUrlSeconds: 60`, `numberPad: 0`, `numberMaxLength: 30`
         (DD-10).
     *   Writes: `requestUpload(session, {centreId, fileName, size,
@@ -969,13 +995,18 @@ routes and screens, then the documentation. Every step leaves
 #### 8. `src/server/tickets/setup.ts` (Create)
 
 *   **Type / Scope**: TypeScript module (type setup).
-*   **Proposed Changes**: `createCategory`, `createType`,
+*   **Proposed Changes**: `createCategory({name, parentId?})`,
+    `createType({code, name, categoryId, priority, documentRequired,
+    handlerKey, numberPrefix})` (created inactive),
     `updateType(typeId, {name, categoryId, priority, documentRequired,
-    handlerKey})`, `setTypeLevels(typeId, levels[])`, `setTypeViewers` and
+    handlerKey})`, `setTypeLevels(typeId, levels: {level, userId? |
+    roleId?}[])`, `setTypeViewers(typeId, viewers: {userId? | roleId?}[])` and
     `setTypeActive(typeId, active)`. Editing follows DD-11: `updateType`
-    refuses a `handlerKey` change while the type is active.
+    refuses a `handlerKey` change while the type is active or has OPEN
+    tickets. `createType` and `updateType` refuse a prefix and code whose
+    number could exceed `numberMaxLength` with a 10-digit sequence.
     `setTypeLevels` replaces the whole set and refuses gaps (levels must be
-    1…n, n ≤ 4). Activation refuses a `handler_key` that is not in
+    1…n, 1 ≤ n ≤ 4; an empty set is refused). Activation refuses a `handler_key` that is not in
     `HANDLERS` and a type with no levels or with gaps. All writes use
     `scopedAction()` with `ticket.type.manage`, need fresh step-up (reuse
     `requireFreshStepUp` from `rbac.ts` by exporting it), and record before
@@ -1063,9 +1094,11 @@ routes and screens, then the documentation. Every step leaves
 
 *   **Type / Scope**: Server-rendered pages (unstyled).
 *   **Proposed Changes**: The ticket list with filters, the raise form (type,
-    centre, one `p.<name>` input per handler field, file picker,
-    `?reraise=<id>`, which fixes type and centre and pre-fills the fields
-    from the old payload per DD-9), the detail page (history, documents,
+    centre, one `p.<name>` input per handler field, file picker; POST
+    fields `typeId`, `centreId`, `p.*`, `uploadId`, and `reraiseOf` when
+    opened as `?reraise=<id>`, which fixes type and centre and pre-fills the
+    fields with `toFields` per DD-9; on a re-raise `raise` ignores any
+    `typeId`/`centreId` sent and uses the rejected ticket's), the detail page (history, documents,
     and an action form with fields `action` (approve, reject, forward),
     hidden `seenVersion`, `remarks` and `forwardTo` (the forward picker))
     and the approval queue. All reads go through
@@ -1094,9 +1127,12 @@ routes and screens, then the documentation. Every step leaves
 
 *   **Type / Scope**: Admin pages and routes.
 *   **Proposed Changes**: List and create types and categories. Edit levels
-    (1–4, user or role each), viewers, priority, document required,
-    `handler_key` (a choice from `HANDLERS`, editable only while inactive)
-    and active, following DD-11. These follow the `/admin/roles` pages.
+    (1–4, user or role each), viewers, name, category, priority, document
+    required, `handler_key` (a choice from `HANDLERS`, editable per DD-11)
+    and active. The page has one form per part, and the save route reads a
+    hidden `op` field (`details`, `levels`, `viewers`, `active`) to call
+    `updateType`, `setTypeLevels`, `setTypeViewers` or `setTypeActive`.
+    These follow the `/admin/roles` pages.
 
 #### 18. `tests/sql/ticket-test-handler.sql` (Create)
 
