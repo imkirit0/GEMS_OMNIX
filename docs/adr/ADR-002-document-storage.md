@@ -75,7 +75,7 @@ It also records the Data API check in §4. The results go in the evidence log.
 *   **Upload link:** valid for **7,200 seconds** (2 hours), set by Supabase.
 *   **Data API check (§4):** passed. The REST listing shows no `app` tables, and a request for schema `app` is refused (406, PGRST106).
 *   **End to end:** the app (production build, test handler, real storage) completed upload, raise, approval at two levels and download over HTTP, and the downloaded bytes matched.
-*   **Not yet checked:** a real browser following the download redirect under the CSP `form-action` rule, and the browser PUT under CORS. The CSP header carries the storage origin.
+*   **Real browser (E-028, `evidence/browser-check-2026-10-28T131230.txt`):** checked in Chrome. The upload component's cross-origin PUT to Supabase succeeded under CORS, and the browser followed the download's 303 to the signed URL (200) with no CSP violation.
 
 ## 7. Approval
 

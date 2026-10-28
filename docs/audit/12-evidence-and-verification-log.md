@@ -943,3 +943,21 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | evidence/manual-supabase-run-2026-10-28T130635.txt | 6f3ad2e1721117b239c59e4aed24e534575c285f955bb018daca2451523b17d4 |
 | scripts/manual-supabase-storage-probe.mts | ef70f7f50313bcced5beaa0031dd3cb1d8e3fed999f2ae2b7d5831d0b3e59add |
 | scripts/manual-supabase-run.mts | cf91d42a5a2ee526b25254f8c4f213315d945654510427d0f6ba484011a5a9ac |
+
+## E-028 Ticket engine: real-browser check (2026-10-28)
+- **Request:** "do next step". This was the last open technical item of the engine core: the real-browser part of the manual Supabase run, which E-027 left open.
+- **Setup:** Chrome, driven through Claude in Chrome, against `next start` on localhost with the production build, `TICKET_TEST_HANDLER=1` and real Supabase Storage. The local database was reset to the test fixtures with one active document-required test type. Sign-in used the fixture test session tokens as the session cookie, on localhost only; the cookie was cleared afterwards.
+- **Results:**
+  - **Upload under CORS:** the upload component's cross-origin PUT to Supabase succeeded ("certificate.pdf: uploaded"), and the server attached the document only after reading the stored object back.
+  - **Approval:** at level 1 the page showed "Level 2 of 2", then at level 2 "APPROVED", with no errors.
+  - **Download under the CSP `form-action` rule:** the browser followed the 303 to the signed Supabase URL (GET 200), with no CSP messages in the console.
+  - **Database:** APPROVED, version 3; events RAISE, APPROVE, APPROVE; document `application/pdf`; counter 1.
+  - **Audit:** `upload.request` 1, `raise` 1, `approve` 2, `document.download` 1, all OK.
+- **Cleanup:** the storage object was deleted, the tab closed and the server stopped (its log has no errors). No test files were left in the repository.
+- **Code:** none changed.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| evidence/browser-check-2026-10-28T131230.txt | f96c61a8abd4dcac5aeec01cd12a534e5529d92a7eb9daaec0af613910b2de8d |

@@ -1,0 +1,21 @@
+Real-browser check (ticket engine; ADR-002 §6 remaining item), 2026-10-28.
+Chrome (Claude in Chrome), app = `next start -p 3106` (production build, TICKET_TEST_HANDLER=1, STORAGE_DRIVER unset,
+real Supabase Storage, bucket ticket-documents), local Docker database reset to tests/fixtures.ts with one active
+document-required test.counter type (levels: role tk_level1, then named user tk_l2). Sessions: the fixture test tokens,
+set as the __Host-gems_session cookie on localhost only, and cleared afterwards.
+
+1. Raise form /tickets/new?type=1&centre=1 rendered the handler field and the upload component.
+2. A PDF File was attached to the file input (DataTransfer + change event, as a user's pick does). The component's
+   POST /tickets/uploads and its cross-origin PUT to Supabase succeeded: it showed "certificate.pdf: uploaded" and added
+   one hidden uploadId. => browser upload under CORS works.
+3. Click "Raise ticket": landed on /tickets/<id>, TK-26/FNC/1, document listed (the server attached it only after reading
+   the real object back from storage).
+4. As tk_l1, click Approve: "Status OPEN · Level 2 of 2", no error. As tk_l2, click Approve: "Status APPROVED · Level 2 of 2".
+5. As the raiser, click "Download certificate.pdf" (form POST): the browser followed the 303 to
+   https://<project>.supabase.co/storage/v1/object/sign/ticket-documents/uploads/1/<id>?token=..., GET 200, and the tab
+   showed the storage URL. No Content-Security-Policy messages in the console. => form-action allows the download redirect.
+
+Database afterwards: number TK-26/FNC/1, status APPROVED, version 3, document application/pdf 68 bytes,
+events RAISE, APPROVE, APPROVE, test counter 1.
+Audit: ticket.upload.request OK 1, ticket.raise OK 1, ticket.approve OK 2, ticket.document.download OK 1.
+Cleanup: storage object deleted (200); cookie cleared; tab closed; server stopped; server log 0 lines containing "error".
