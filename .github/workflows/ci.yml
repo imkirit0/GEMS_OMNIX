@@ -25,6 +25,7 @@ jobs:
       JOB_DATABASE_URL: postgresql://gems_job:dev_job_pw@127.0.0.1:64320/gems
       AUTH_DATABASE_URL: postgresql://gems_auth:dev_auth_pw@127.0.0.1:64320/gems
       NEXT_TELEMETRY_DISABLED: "1"
+      STORAGE_DRIVER: fake # ticket documents: in-memory fake in CI (ADR-002); no Supabase secrets here
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

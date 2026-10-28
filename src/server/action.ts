@@ -1,5 +1,6 @@
 // Every mutation goes through scopedAction: authorize -> change -> audit, in one transaction.
-// A denial rolls the business transaction back and is audited in its own transaction (T-RLS-018).
+// A denial rolls the business transaction back and is audited in its own transaction (T-RLS-018);
+// so is a failure the caller's onFailure hook chooses to record (outcome FAILED, e.g. ticket.apply_failed).
 import { withScope, type Ctx, type Tx } from "./db";
 
 export class Forbidden extends Error {
@@ -25,7 +26,7 @@ export async function authorize(tx: Tx, permission: string, centreId?: number): 
 export type AuditExtra = { before?: unknown; after?: unknown; reason?: string; [k: string]: unknown };
 
 // All app audit rows go through app.audit(): actor, session, roles, scope, request id and ip are filled by the DB.
-async function audit(tx: Tx, meta: ActionMeta, outcome: "OK" | "DENIED", extra: AuditExtra) {
+async function audit(tx: Tx, meta: ActionMeta, outcome: "OK" | "DENIED" | "FAILED", extra: AuditExtra) {
   const { before, after, reason, ...detail } = extra;
   await tx.$executeRaw`select app.audit(${meta.action}, ${outcome}::app."AuditOutcome", ${meta.centreId ?? null}::int,
     ${meta.targetType ?? null}::text, ${meta.targetId ?? null}::text, ${reason ?? meta.reason ?? null}::text,
@@ -38,6 +39,7 @@ export async function scopedAction<T>(
   meta: ActionMeta,
   fn: (tx: Tx, ctx: Ctx) => Promise<T>,
   auditDetail: (result: T) => AuditExtra = () => ({}),
+  onFailure?: (e: unknown) => { action: string; extra: AuditExtra } | null,
 ): Promise<T> {
   try {
     return await withScope(session, async (tx, ctx) => {
@@ -47,8 +49,15 @@ export async function scopedAction<T>(
       return result;
     });
   } catch (e) {
-    if (e instanceof Forbidden) {
-      await withScope(session, (tx) => audit(tx, meta, "DENIED", { permission: meta.permission }));
+    // Runs once, after withScope's retries. Forbidden wins: DENIED, and the hook is not asked.
+    const failed = e instanceof Forbidden ? null : onFailure?.(e);
+    try {
+      if (e instanceof Forbidden) await withScope(session, (tx) => audit(tx, meta, "DENIED", { permission: meta.permission }));
+      else if (failed) await withScope(session, (tx) => audit(tx, { ...meta, action: failed.action }, "FAILED", failed.extra));
+    } catch (auditError) {
+      // never let a failed audit write hide why the action failed
+      console.error(JSON.stringify({ level: "error", msg: "failure audit not written", action: meta.action,
+        error: auditError instanceof Error ? auditError.name : "unknown" }));
     }
     throw e;
   }

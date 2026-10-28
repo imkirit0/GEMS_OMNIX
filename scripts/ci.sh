@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ -f .env.local ]; then set -a; . ./.env.local; set +a; fi
-for v in MIGRATE_URL ADMIN_DATABASE_URL APP_DATABASE_URL AUTH_DATABASE_URL AUTH_ENC_KEY; do
+for v in MIGRATE_URL ADMIN_DATABASE_URL APP_DATABASE_URL AUTH_DATABASE_URL AUTH_ENC_KEY STORAGE_DRIVER; do
   [ -n "${!v:-}" ] || { echo "missing environment variable $v" >&2; exit 1; }
 done
 PY=$(command -v python3 || command -v python)

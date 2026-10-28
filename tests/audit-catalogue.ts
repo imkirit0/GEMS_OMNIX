@@ -11,4 +11,9 @@ export const AUDIT_CATALOGUE = [
   "rbac.role.create", "rbac.role.permissions", "rbac.user.setup_link", "rbac.bootstrap",
   // exports (src/server/exports.ts DATASETS)
   "export.centres", "export.users",
+  // tickets (src/server/tickets/engine.ts, setup.ts)
+  "ticket.upload.request", "ticket.raise", "ticket.approve", "ticket.reject", "ticket.forward", "ticket.reassign",
+  "ticket.apply_failed", "ticket.document.download",
+  "ticket.category.create", "ticket.type.create", "ticket.type.update", "ticket.type.levels", "ticket.type.viewers",
+  "ticket.type.activate", "ticket.type.deactivate",
 ] as const;

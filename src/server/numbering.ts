@@ -12,6 +12,23 @@ export async function allocate(tx: Tx, s: { centreId: number; docType: string; p
   return rows[0].current;
 }
 
+// Tickets: one network-wide counter (ticket-engine DD-8), so it cannot live in number_series (centre in its key).
+// The first raise of a period creates the row; the upsert's row lock serialises raisers like allocate().
+export async function allocateTicketNumber(tx: Tx, period: string): Promise<bigint> {
+  const [row] = await tx.$queryRaw<{ current: bigint }[]>`
+    insert into app.ticket_number_series (period, current) values (${period}, 1)
+    on conflict (period) do update set current = ticket_number_series.current + 1
+    returning current`;
+  return row!.current;
+}
+
+// SRC format {prefix}/{typecode}/{seq}; padding and length are NP-5 parameters (DD-10). Over-length is rejected.
+export function formatTicketNumber(p: { prefix: string; typeCode: string; number: bigint | number; pad: number; maxLength: number }): string {
+  const s = `${p.prefix}/${p.typeCode}/${String(p.number).padStart(p.pad, "0")}`;
+  if (s.length > p.maxLength) throw new RangeError(`ticket number is ${s.length} chars, limit ${p.maxLength}`);
+  return s;
+}
+
 // Indian financial year (Apr-Mar) of an instant in Asia/Kolkata (UTC+5:30, no DST). NP-2 may choose AY instead.
 export function financialYear(instant: Date): string {
   const ist = new Date(instant.getTime() + 330 * 60_000);

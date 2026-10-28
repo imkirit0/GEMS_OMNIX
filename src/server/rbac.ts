@@ -11,7 +11,8 @@ export class StepUpRequired extends Error {
 }
 export class RbacError extends Error {
   override name = "RbacError";
-  constructor(readonly reason: "duplicate" | "notfound" | "invalid", message: string) { super(message); }
+  /** key: a more specific message key for the page (e.g. ticket.setup.levels); defaults to the reason */
+  constructor(readonly reason: "duplicate" | "notfound" | "invalid", message: string, readonly key?: string) { super(message); }
 }
 
 export type ScopeInput = { kind: "ALL" | "REGION" | "AREA" | "CENTRE"; regionId?: number; areaId?: number; centreId?: number };
@@ -39,7 +40,7 @@ async function requireFreshStepUp(tx: Tx) {
 }
 
 // Admin write = permission check + fresh step-up + the DB function, audited in the same transaction.
-function adminWrite<T>(session: string | undefined, meta: { action: string; permission: string; targetType: string; targetId?: string; reason?: string },
+export function adminWrite<T>(session: string | undefined, meta: { action: string; permission: string; targetType: string; targetId?: string; reason?: string },
   fn: (tx: Tx) => Promise<T>, detail: (r: T) => AuditExtra = () => ({})) {
   return scopedAction(session, meta, async (tx) => {
     await requireFreshStepUp(tx);
