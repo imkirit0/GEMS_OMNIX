@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-28, search rate limit done (last evidence: E-029).
+**Last updated:** 2026-10-28, C-26 cause located (last evidence: E-030).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -18,7 +18,7 @@
 | Automated tests | **112 passing + 3 todo** (19 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 7 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD + 30 T-TKT), plus real-server checks in CI: admin journey (10 steps) and security smoke (18 checks) | `evidence/audit-2026-10-27T190404.txt` |
 | CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 0 blocked | audit 10 |
-| Git | `main`. Pushed to GitHub (public) on 2026-10-28 at the owner's request, again after the search rate limit E-029 (up to and including this STATUS update); outgoing commits scanned for the keys pasted in chat, signed-URL tokens and the project ref: none | `git log`, `git status -sb` |
+| Git | `main`. Pushed to GitHub (public) on 2026-10-28 at the owner's request, again after the dev-origin change (2008a2b); later commits local; outgoing commits scanned for the keys pasted in chat, signed-URL tokens and the project ref: none | `git log`, `git status -sb` |
 
 ## 2. Completed
 
@@ -55,7 +55,7 @@
 
 | Item | Done | Missing | Evidence |
 |---|---|---|---|
-| POC P2/P3 on Supabase (C-17) | Each test passed in ≥ 1 full run | No fully green run: 38/39 twice, intermittent connection drops, **cause unknown** (C-26) | E-010, rev. v1.4 |
+| POC P2/P3 on Supabase (C-17) | **Two fully green runs (39/39) on 2026-10-28** (E-030); every test has passed | A third run dropped one connection (C-26: Supabase's transaction pooler; cause located, app mitigation open). No wrong data in any run | E-010, E-030 |
 | Ticket/approval engine design (Stage 2 core) | Design workflow chosen: EGM plugin (`egm@egm`, google/elephant-goldfish-model 0.1.0). Input brief `docs/designs/ticket-engine/input-brief.md`; `CLAUDE.md` points EGM artifacts to `docs/designs`. **Design drafted 2026-10-27** (EGM draft skill followed manually: its skills are not registered as commands): `docs/designs/ticket-engine/ticket-engine.md`, status Proposed, every section approved by the project owner in session. Owner decisions DD-1…6: rules in app code + DB guard; test-only handler in Stage 2; forward = reassign at same level; documents in Supabase Storage (needs ADR-002); role-level approver = role held over the ticket's centre; direct browser-to-Supabase upload (Vercel 4.5 MB body cap). Open: Q2 numbering series scope, Q4 self-approval sign-off, Q7 migration, Q8 legacy config, Q9 storage limits  EGM review in progress (interactive): Stage 5 zoom-out found 1 blocker (ticket numbers collide across centres), 4 major, 7 nit (`zoom_out_report.md`); all resolved in the design, owner decisions DD-7 (screens as test harness) and DD-8 (one network-wide counter); Stage 5 re-audit: 2 major, 5 nit, all applied (re-audit cap reached); Stage 6 comprehension (2026-10-28): 0 blocker, 15 major, 8 nit (`comprehension_report.md`), all 23 addressed in the design (2026-10-28), NP-2/NP-3 mix-up corrected; proposed decisions DD-9 re-raise, DD-10 number format, DD-11 type editing, DD-12 deactivation approved by owner (DD-9/DD-10 stay PMC under D-TKT-2/NP-5); Stage 6 re-audit: 21/23 confirmed, 9 major + 8 nit new (R1-R17), all fixed; R5 (raiser cannot act at all) and R9 (no handler change with open tickets) flagged to owner; Stage 7 critic review (2026-10-28): 1 blocker (stuck tickets), 20 major, 27 nit (`critic_report.md`); proposed DD-13 admin reassign, DD-14 distinct approvers, DD-15 service-key limits, DD-16 upload retention gate accepted by owner; all fixes applied (Risks section, CUJ 5, Alternatives I-K, guard triggers on insert, idempotent raise, `ticket_stranded`); Stage 8 intermediate zoom-out (2026-10-28): 0 blocker, 3 major, 5 nit (`intermediate_zoom_out_report.md`), all applied (DD-9, DD-13, DD-16 narrowed by owner); Stage 9 implementation readiness (2026-10-28): 6 blocker, 29 major, 19 nit (`implementation_readiness_report.md`), all applied; plan rewritten in 5 build phases against the real code. Stage 9 re-audit: 6 blocker, 20 major, 30 nit (incl. `for share` filtered by RLS UPDATE policy → `app.ticket_type_lock`; CSP `form-action` blocking the download redirect; own `ticketDb()` mapper), all applied; re-audit cap reached. **EGM review concluded 2026-10-28** (owner); design **Approved** for implementation by the owner (2026-10-28), then Stage 7 critic review | Engine core built and verified end to end, including in a real browser (P1–P5, E-023–E-028). Open: ADR-002 signatures; business sign-offs (NP-1…8, D-TKT-4, D-STO-1); the first domain handler (Stage 3) | commit `9632364` |
 | BRD / FRD | Drafts written | Your review; named owners (BRD §5, §18) | E-013 |
 | ADR-001 approval | Project owner approved B | Named IT / Sponsor countersignature (or a note that yours suffices) | ADR §7 |
@@ -86,7 +86,8 @@
 
 **Platform:**
 - [x] Dev server reachable from any IPv4 address (`allowedDevOrigins: ["*.*.*.*"]` in `next.config.ts`, owner request 2026-10-28; `next dev` only, no effect on production)
-- [ ] Root-cause the Supabase connection drops (C-26), from inside the region
+- [x] C-26 cause located (E-030): Supabase's transaction pooler, under sustained concurrent load, sometimes resets a client connection and sometimes silently stalls it (the client waits; the database has no session). 2 of 3 full runs were green; no wrong data ever.
+- [ ] C-26 mitigation in the app: connection and query timeouts with TCP keepalive (fail fast, never hang), and retry of connection errors before COMMIT in `withScope` (idempotency keys cover a drop during COMMIT)
 
 **Stage 0 (discovery):** ⛔ blocked on legacy MySQL read-only access.
 

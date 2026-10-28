@@ -983,3 +983,35 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | src/server/rate-limit.ts | bafdbdf184419f15c7af2f06f106ea0f26da4a55d1d7a68dd026ba6595ac2d20 |
 | src/server/centres.ts | 898a0a31eec294166aab05a46486338200464cfb01dd35be225d1e8645be088b |
 | evidence/ci-search-limit-2026-10-28T134450.txt | ce306b57309bfca0f7a9913d06fe0a20b4d299491013b0f3cab6d4b0b11eed2f |
+
+## E-030 C-26 investigation: Supabase connection drops (2026-10-28)
+- **Request:** "do next step", then explicit permission to provision the POC schema and roles on Supabase, run the investigation and tear down.
+- **Setup:** `poc/supabase.mjs setup` on the existing project.
+  - Pre-check: no `app` schema, no `gems_*` roles, no `public` tables; buckets `resumes` (old) and `ticket-documents`.
+  - The database allows **60 connections**. The proof's "direct" connections go through the **session pooler** (5432); its pooled ones through the **transaction pooler** (Supavisor, 6543).
+- **Three full runs** (`poc/evidence/c26-supabase-fullrun{1,2,3}-2026-10-28.txt`):
+  - **Runs 1 and 2: 39/39 green.** These are the first fully green runs on Supabase (E-010 had none).
+  - **Run 3: 34/39.**
+    - The one real failure is T-NUM-001 (UNIQUE mode, 200 concurrent allocations through 16 pooled clients): `read ECONNRESET`.
+    - T-NUM-002…005 then failed with `deadlock detected` inside `reset()`: a server session orphaned by the drop held a lock that `TRUNCATE` waited for. This is a harness knock-on, not a product fault.
+- **Experiment** (`poc/c26-experiment.mjs`; `poc/evidence/c26-pool-experiment-2026-10-28.txt`): the T-NUM-001 workload repeated at client pool 16, then 12.
+  - Size 16, runs 1–6: all clean (200/200 committed and distinct, no errors, about 33 s each).
+  - **Run 7 stalled indefinitely.** After about 75 minutes the process still held **2 established TCP connections to the transaction pooler (6543)**, while `pg_stat_activity` showed **0 client sessions** for `gems_*` or `postgres`. The process was killed; size 12 never ran.
+- **Finding:**
+  - The drops come from **Supabase's transaction pooler under sustained concurrent load**, not from Postgres or our code. Sometimes it resets the client connection (`ECONNRESET`). Sometimes it silently stops answering: the client waits forever, while the database has no session doing the work.
+  - The pool-size hypothesis (16 clients against a server pool of about 15) is **not confirmed**: six runs at 16 were clean, and the stall left no server sessions, which is not how pool exhaustion looks.
+  - **No run, now or in E-010, showed wrong data:** no leaked rows, no duplicate or skipped numbers.
+- **Consequence for the app:** a request can fail, or hang until the platform's function timeout, when the pooler drops it. Mitigation, not built yet (STATUS):
+  - client-side connection and query timeouts with TCP keepalive, so a stalled connection fails fast instead of hanging;
+  - treat a connection error before COMMIT as retryable in `withScope`. A drop **during** COMMIT leaves the outcome unknown, which the existing idempotency keys cover for receipts and numbers.
+- **Teardown:** `poc/supabase.mjs teardown`. Verified: `app` schema 0, `gems_*` roles 0, `poc/.env.supabase` deleted. The evidence files contain no credentials (checked).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| poc/evidence/c26-supabase-fullrun1-2026-10-28.txt | b9cf099e273117cebdf3955c8ad8e1557c5c1b333f0d81fd35c63c2990669708 |
+| poc/evidence/c26-supabase-fullrun2-2026-10-28.txt | 04a75eb9e11f1d9aedbf3e472ddf6f8d9cc8498e124e2468b5db56dcaffb4c82 |
+| poc/evidence/c26-supabase-fullrun3-2026-10-28.txt | ac2bb2c48493685c896b8db0a492671a748c5ed1ce0e316966cf6603fa4615cc |
+| poc/evidence/c26-pool-experiment-2026-10-28.txt | 9c49f5db69ac2fda28b3bbdd0d6c94d32ee52f748c020ceb9ee9a59236f3b92e |
+| poc/c26-experiment.mjs | b30424af25e933915554a8030435a2d0e999d6f334a23530e91af37fdaa951c3 |

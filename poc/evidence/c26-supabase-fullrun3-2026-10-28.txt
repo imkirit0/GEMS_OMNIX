@@ -1,0 +1,204 @@
+
+> test
+> node --test --test-concurrency=1 test/*.test.js
+
+▶ NP-3 mode GAPLESS
+  ✔ T-NUM-001 200 concurrent allocations via PgBouncer (35270.9206ms)
+  ✔ T-NUM-002 every 5th business tx rolled back after allocation (9908.0566ms)
+  ✔ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (4251.3682ms)
+  ✔ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (5152.6354ms)
+  ✔ T-NUM-005 connection killed between allocation and commit (3474.7016ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (12938.3549ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (4059.8497ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (3633.8786ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (1792.2265ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (2676.0409ms)
+✔ NP-3 mode GAPLESS (83160.1286ms)
+▶ NP-3 mode UNIQUE
+  ✖ T-NUM-001 200 concurrent allocations via PgBouncer (21428.0004ms)
+  ✖ T-NUM-002 every 5th business tx rolled back after allocation (3917.7112ms)
+  ✖ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (3828.8264ms)
+  ✖ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (3828.9362ms)
+  ✖ T-NUM-005 connection killed between allocation and commit (3869.3215ms)
+  ✔ T-NUM-006 series isolation across centres and doc types in parallel (14057.6478ms)
+  ✔ T-NUM-007 FY boundary in Asia/Kolkata selects the new period at its configured start (4016.6604ms)
+  ✔ T-NUM-008 cancelled number stays assigned and is never reissued (3872.2607ms)
+  ✔ T-NUM-009 format and length are parameters of NP-5 (unapproved) (2071.9886ms)
+  ✔ T-NUM-010 migrated counter continues from legacy current + 1 (2809.6179ms)
+✖ NP-3 mode UNIQUE (63701.883ms)
+{"centrePage":{"p95NoRlsMs":52.66,"p95RlsMs":52.631,"addedMs":-0.029,"overheadPct":-0.1},"allCentresPage":{"p95NoRlsMs":52.752,"p95RlsMs":52.605,"addedMs":-0.147,"overheadPct":-0.3}}
+✔ T-RLS-017 RLS overhead on paged lists is measured (78312.5822ms)
+✔ T-RLS-001 app roles have no superuser/bypass/owner/DDL/SET ROLE (3512.8465ms)
+✔ T-RLS-002 every table with centre_id has ENABLE+FORCE RLS and SELECT/INSERT/UPDATE/DELETE policies (531.1956ms)
+✔ T-RLS-003 every view is security_invoker and filters by scope (1126.6093ms)
+✔ T-RLS-004 materialized view not readable by app roles; aggregate table is RLS-scoped (1599.2062ms)
+✔ T-RLS-005 SECURITY DEFINER inventory, fixed search_path, scope function truth table (2697.5493ms)
+✔ T-RLS-006 missing scope: 0 rows, writes fail, app guard raises (731.837ms)
+✔ T-RLS-007 forged/expired/revoked sessions and other GUCs grant nothing (2182.9881ms)
+✔ T-RLS-008 cross-centre writes under an A session are rejected or affect 0 rows (3253.7604ms)
+✔ T-RLS-009 PgBouncer transaction pooling: 2,000 interleaved txs, aborted txs, 0 leaks (34456.694ms)
+✔ T-RLS-010 query outside the transaction throws before reaching the DB (514.574ms)
+✔ T-RLS-011 streamed export with tampered filters returns only in-scope rows and audits actual scope (986.4861ms)
+✔ T-RLS-012 job as gems_job limited to declared centre list; undeclared scope fails loudly (580.5855ms)
+✔ T-RLS-013 raw SQL via the app client and via a direct gems_app connection is under RLS (1041.9144ms)
+✔ T-RLS-014 region scope follows centre moves on the next transaction (1436.1931ms)
+✔ T-RLS-015 no unexpected BYPASSRLS role; platform API roles cannot reach the app schema (839.3051ms)
+✔ T-RLS-016 gems_report_ro is under the same policies and cannot write (no replica in POC) (823.3273ms)
+✔ T-RLS-018 denied action consumes no number and writes only a denial audit row (2104.6938ms)
+✔ audit_log is append-only for app roles and the owner (1336.9447ms)
+ℹ tests 39
+ℹ suites 2
+ℹ pass 34
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 285246.8338
+
+✖ failing tests:
+
+test at test\num.test.js:35:5
+✖ T-NUM-001 200 concurrent allocations via PgBouncer (21428.0004ms)
+  Error: read ECONNRESET
+      at D:\GEMS OMNIX\poc\node_modules\pg-pool\index.js:45:11
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async withScope (file:///D:/GEMS%20OMNIX/poc/src/db.js:11:22)
+      at async createReceipt (file:///D:/GEMS%20OMNIX/poc/src/receipts.js:21:12)
+      at async Promise.all (index 2)
+      at async TestContext.<anonymous> (file:///D:/GEMS%20OMNIX/poc/test/num.test.js:37:19)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1869:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    errno: -4077,
+    code: 'ECONNRESET',
+    syscall: 'read'
+  }
+
+test at test\num.test.js:43:5
+✖ T-NUM-002 every 5th business tx rolled back after allocation (3917.7112ms)
+  error: deadlock detected
+      at D:\GEMS OMNIX\poc\node_modules\pg\lib\client.js:545:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///D:/GEMS%20OMNIX/poc/test/helpers.js:55:5
+      at async asAdmin (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:35:16)
+      at async reset (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:53:3)
+      at async TestContext.<anonymous> (file:///D:/GEMS%20OMNIX/poc/test/num.test.js:33:30)
+      at async TestHook.run (node:internal/test_runner/test:1389:7)
+      at async Suite.runHook (node:internal/test_runner/test:1269:9)
+      at async Test.run (node:internal/test_runner/test:1342:9)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    length: 325,
+    severity: 'ERROR',
+    code: '40P01',
+    detail: 'Process 4020560 waits for AccessExclusiveLock on relation 20864 of database 5; blocked by process 4018914.\nProcess 4018914 waits for AccessShareLock on relation 20908 of database 5; blocked by process 4020560.',
+    hint: 'See server log for query details.',
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'deadlock.c',
+    line: '1130',
+    routine: 'DeadLockReport'
+  }
+
+test at test\num.test.js:52:5
+✖ T-NUM-003 lock timeout then retry: failed attempt leaves no trace (3828.8264ms)
+  error: deadlock detected
+      at D:\GEMS OMNIX\poc\node_modules\pg\lib\client.js:545:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///D:/GEMS%20OMNIX/poc/test/helpers.js:55:5
+      at async asAdmin (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:35:16)
+      at async reset (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:53:3)
+      at async TestContext.<anonymous> (file:///D:/GEMS%20OMNIX/poc/test/num.test.js:33:30)
+      at async TestHook.run (node:internal/test_runner/test:1389:7)
+      at async Suite.runHook (node:internal/test_runner/test:1269:9)
+      at async Test.run (node:internal/test_runner/test:1342:9)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    length: 325,
+    severity: 'ERROR',
+    code: '40P01',
+    detail: 'Process 4020560 waits for AccessExclusiveLock on relation 20864 of database 5; blocked by process 4018914.\nProcess 4018914 waits for AccessShareLock on relation 20908 of database 5; blocked by process 4020560.',
+    hint: 'See server log for query details.',
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'deadlock.c',
+    line: '1130',
+    routine: 'DeadLockReport'
+  }
+
+test at test\num.test.js:78:5
+✖ T-NUM-004 idempotent retry returns the original number (sequential and concurrent) (3828.9362ms)
+  error: deadlock detected
+      at D:\GEMS OMNIX\poc\node_modules\pg\lib\client.js:545:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///D:/GEMS%20OMNIX/poc/test/helpers.js:55:5
+      at async asAdmin (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:35:16)
+      at async reset (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:53:3)
+      at async TestContext.<anonymous> (file:///D:/GEMS%20OMNIX/poc/test/num.test.js:33:30)
+      at async TestHook.run (node:internal/test_runner/test:1389:7)
+      at async Suite.runHook (node:internal/test_runner/test:1269:9)
+      at async Test.run (node:internal/test_runner/test:1342:9)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    length: 325,
+    severity: 'ERROR',
+    code: '40P01',
+    detail: 'Process 4020560 waits for AccessExclusiveLock on relation 20864 of database 5; blocked by process 4019743.\nProcess 4019743 waits for AccessShareLock on relation 20908 of database 5; blocked by process 4020560.',
+    hint: 'See server log for query details.',
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'deadlock.c',
+    line: '1130',
+    routine: 'DeadLockReport'
+  }
+
+test at test\num.test.js:88:5
+✖ T-NUM-005 connection killed between allocation and commit (3869.3215ms)
+  error: deadlock detected
+      at D:\GEMS OMNIX\poc\node_modules\pg\lib\client.js:545:17
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///D:/GEMS%20OMNIX/poc/test/helpers.js:55:5
+      at async asAdmin (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:35:16)
+      at async reset (file:///D:/GEMS%20OMNIX/poc/test/helpers.js:53:3)
+      at async TestContext.<anonymous> (file:///D:/GEMS%20OMNIX/poc/test/num.test.js:33:30)
+      at async TestHook.run (node:internal/test_runner/test:1389:7)
+      at async Suite.runHook (node:internal/test_runner/test:1269:9)
+      at async Test.run (node:internal/test_runner/test:1342:9)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    length: 325,
+    severity: 'ERROR',
+    code: '40P01',
+    detail: 'Process 4020560 waits for AccessExclusiveLock on relation 20864 of database 5; blocked by process 4018914.\nProcess 4018914 waits for AccessShareLock on relation 20908 of database 5; blocked by process 4020560.',
+    hint: 'See server log for query details.',
+    position: undefined,
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'deadlock.c',
+    line: '1130',
+    routine: 'DeadLockReport'
+  }

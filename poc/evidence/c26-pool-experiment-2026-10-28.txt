@@ -1,0 +1,7 @@
+{"size":16,"run":1,"ms":33357,"ok":200,"committed":200,"distinct":200,"errors":{}}
+{"size":16,"run":2,"ms":34904,"ok":200,"committed":200,"distinct":200,"errors":{}}
+{"size":16,"run":3,"ms":34308,"ok":200,"committed":200,"distinct":200,"errors":{}}
+{"size":16,"run":4,"ms":32458,"ok":200,"committed":200,"distinct":200,"errors":{}}
+{"size":16,"run":5,"ms":35377,"ok":200,"committed":200,"distinct":200,"errors":{}}
+{"size":16,"run":6,"ms":32631,"ok":200,"committed":200,"distinct":200,"errors":{}}
+STALLED at size 16 run 7 (started ~14:10 IST); killed 15:25. At that moment: 2 ESTABLISHED TCP connections from the process to the Supabase transaction pooler (port 6543); pg_stat_activity showed 0 client sessions for gems_* or postgres. Size 12 never ran.
