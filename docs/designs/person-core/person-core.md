@@ -1,7 +1,7 @@
 # Person, admission and registration core (Stage 2)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The owner accepted every section on 2026-10-28. Build approval follows EGM review Stages 5–9. Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (Stage 5), [`comprehension_report.md`](comprehension_report.md) (Stage 6), [`critic_report.md`](critic_report.md) (Stage 7).
+*   **Status:** Proposed. The owner accepted every section on 2026-10-28. Build approval follows EGM review Stages 5–9. Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (Stage 5), [`comprehension_report.md`](comprehension_report.md) (Stage 6), [`critic_report.md`](critic_report.md) (Stage 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (Stage 8), [`implementation_readiness_report.md`](implementation_readiness_report.md) (Stage 9).
 *   **Date:** 2026-10-28
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its business owner to sign). Input: [`input-brief.md`](input-brief.md).
@@ -44,7 +44,7 @@ The admission and enquiry screens, lists, correction handlers and fee links are 
 | `scopedAction()` | Authorise, change and audit in one transaction | `src/server/action.ts` |
 | `Forbidden` | The error `scopedAction()` throws on a denial, which it audits as DENIED | `src/server/action.ts` |
 | `app.visible_centre_ids()` | All centres any of the user's role assignments cover; drives RLS | migration 0002 |
-| `app.scoped_centre_ids(p)` | The centres where the user holds permission `p` | migration 0002 |
+| `app.scoped_centre_ids(p)` | The centres where the user holds permission `p` | migration 0002; executable by `gems_app` since 0007 |
 | The 0002 loop | The block in migration 0002 that gives a table with `centre_id` RLS plus select/insert/update/delete policies | migration 0002 |
 | Permission rows "as in 0007" | `insert into app.permission … on conflict (key) do nothing` | migration 0007 |
 | Drift gate | CI check: the Prisma schema equals the migrated database | `scripts/ci.sh` |
@@ -65,11 +65,11 @@ The legacy system does not say clearly what a "student" is, and that ambiguity w
 
 ## Goals
 
-Each goal is met when its listed tests pass in `bash scripts/ci.sh`. The T-PER tests are new (Implementation Plan, item 1). T-NUM-007/010 test `number_series` and are unchanged.
+Each goal is met when its listed tests pass in `bash scripts/ci.sh`. The T-PER tests are new (Implementation Plan, item 1). R-029 also lists T-NUM-007, which tests `financialYear()` only and is unchanged, and T-NUM-010 ("first new number = legacy current + 1"), which has no CI test today; this design implements it in `tests/people.test.ts` against the seeded `REGISTER` and `ADMISSION` rows.
 
 *   **G1: People and registrations are counted separately.** One person can hold several admissions and registrations, and each can be counted (T-PER-001, with T-XM-01).
 *   **G2: Duplicates are caught at entry.** When a new person's match key equals that of a person in the caller's scope, `admit()` throws `PossibleDuplicate` before saving, so staff can pick the existing person instead (T-PER-002).
-*   **G3: Numbers follow the allocator.** Admission No and Register No are allocated in the same transaction as the admission or registration, unique network-wide, and formatted from parameters; NP-2, NP-7 and NP-8 stay unsigned (T-PER-003).
+*   **G3: Numbers follow the allocator.** Admission No and Register No are allocated in the same transaction as the admission or registration, unique network-wide, and formatted from parameters; NP-2, NP-7 and NP-8 stay unsigned (T-PER-003, T-NUM-010).
 *   **G4: Scope holds.** A centre sees only the admissions and registrations it holds, and a person only through one of them. Another centre's records are indistinguishable from missing ones (T-PER-004; T-RLS-002 extended).
 *   **G5: Identity changes keep their history.** Every change to a person's identity fields goes through one function that returns before and after, which the ticket engine records in the audit trail (T-PER-005).
 *   **G6: The shape fits the migration.** No migration-only columns are added, and a bulk insert gets its `match_key` from the database, as the migration load will (T-PER-002). P8 later confirms the legacy rows map onto the three entities (T-MIG-004).
@@ -82,9 +82,9 @@ Each goal is met when its listed tests pass in `bash scripts/ci.sh`. The T-PER t
 *   **Sensitive fields.** Aadhaar, religion, caste and disability are not stored until D-SEC-4 is signed.
 *   **Fees, schemes and discounts** on the course grid. These are Stage 4, behind the G-FIN gate.
 *   **Documents and the photo** on the admission. These will use the ticket engine's file-storage pattern in Stage 3.
-*   **Merging duplicate persons.** A merge tool needs D-MIG-4 maps and its own design. The model must allow it, but it is not built.
+*   **Merging duplicate persons** (D-STU-5, new). A merge tool needs its own design; the D-MIG-4 master dedupe maps are an input. The model must allow it, but it is not built.
 *   **Running the migration.** P8 is a separate Stage 2 piece; this design only keeps the tables compatible with it.
-*   **The Academic Year Master** (R-028, D-YEAR-3). Stage 2 holds the academic year as a checked text value (`2026-27`); the master table and its rules come with their decision.
+*   **The Academic Year Master** (R-028). Stage 2 holds the academic year as a checked text value (`2026-27`); the master table and its rules come with their decision.
 *   **A direct identity edit by an HO user** outside a ticket (DD-5).
 *   **Mandatory fields beyond the given name** (DD-6).
 
@@ -123,7 +123,7 @@ Each goal is met when its listed tests pass in `bash scripts/ci.sh`. The T-PER t
 
 **`match_key`** is set by a database trigger, so migration bulk loads get it too. It is used only for the duplicate check (G2). The rule:
 
-*   **Name part:** the words of `given_name` and `family_name` together (a missing family name counts as empty), lower-cased, keeping only letters (non-Latin letters included), sorted and joined. "Raj" + "Kumar" and "Kumar" + "Raj" give the same name part, and a single-name learner still has one.
+*   **Name part:** the words of `given_name` and `family_name` together (a missing family name counts as empty), lower-cased, keeping letters and the combining marks of Indic scripts (so a Malayalam or Tamil name is not cut at its vowel signs), sorted and joined. "Raj" + "Kumar" and "Kumar" + "Raj" give the same name part, and a single-name learner still has one.
 *   **Key:** name part, date of birth as `yyyymmdd`, and the stored 10-digit mobile, joined with `|`.
 *   **Null** when the name part is empty, the date of birth is null, or the mobile is not exactly 10 digits. No match is claimed on partial data.
 
@@ -154,15 +154,15 @@ NP-2, NP-7 and NP-8 stay parameters (PMC).
 *   **admission, registration:** the 0002 loop by `centre_id`, so a centre sees only what it holds.
 *   **person:** no `centre_id`. Its select and update policies allow a row only when the person has an admission the caller can see. `admission`'s own policy already limits that check to the caller's centres. A learner admitted at two centres is visible to both, and each centre still sees only its own admissions and registrations.
 *   **Inserting a person** happens in the same transaction as the first admission. The app generates the uuid and never reads the row back before the admission exists, because `insert … returning` would need the select policy.
-*   **Records outside scope** are indistinguishable from missing ones. Stage 2 functions throw the same `PersonError("notfound")` for both. The Stage 3 routes turn that into 404 through `pageRead`, as the ticket pages do for `TicketNotFound`.
+*   **Records outside scope** are indistinguishable from missing ones. Stage 2 functions throw the same `PersonError("notfound")` for both. Stage 3 extends `pageRead` (`src/server/page-read.ts`, which today maps only `Forbidden` and `TicketNotFound`) so the routes turn it into 404, preferably through a shared `NotFound` base class.
 
 ### Writes and reads (`src/server/people.ts`)
 
 *   **`admit(session, { person, centreId, academicYear, admittedOn, courses, confirmNew? })`** runs as one `scopedAction()` with `student.admit` for the centre.
     *   **Inputs:**
         *   `person` is either `{ existingId }` or new identity fields. An `existingId` must have an admission at a centre in the caller's `student.admit` scope (DD-4); the same set `findMatches` searches, so any person the duplicate check names can be linked.
-        *   `courses` is `{ courseCode: string; joinDate: date; endDate?: date }[]`, with at least one entry.
-        *   `academicYear` must match `YYYY-YY` with consecutive years. The database check enforces both (so bulk loads get the rule too); `admit` checks first only to give `PersonError("invalid")` before allocating. `admittedOn` is not checked against it until the Academic Year Master defines year boundaries (D-YEAR-3).
+        *   `courses` is `{ courseCode: string; joinDate: string; endDate?: string }[]`, with at least one entry. All dates cross the API as `'YYYY-MM-DD'` strings, never `Date`, so no time zone shifts a day.
+        *   `academicYear` must match `YYYY-YY` with consecutive years. The database check enforces both (so bulk loads get the rule too); `admit` checks first only to give `PersonError("invalid")` before allocating. `admittedOn` is not checked against it until the Academic Year Master (R-028) defines year boundaries.
     *   **Duplicate check, new person only:**
         *   When the candidate's match key is not null, `admit` takes a transaction-scoped advisory lock on it first, so two admits of the same learner run one after the other and the second sees the first.
         *   `findMatches(tx, identity, "student.admit")` runs inside the action. If it finds a match and `confirmNew` is not true, `admit` throws `PossibleDuplicate` with the matching persons; the transaction rolls back, and no audit row is written.
@@ -181,27 +181,27 @@ NP-2, NP-7 and NP-8 stay parameters (PMC).
     *   **Any future non-ticket caller** must audit the change itself.
 *   **`findMatches(tx, identity, permission)`**: persons with an admission at a centre in `app.scoped_centre_ids(permission)` whose `match_key` equals the key computed by the same SQL function for the candidate.
     *   **Deliberately in scope only** (DD-1). Looking across all centres would tell a centre that a person with this name, birth date and mobile studies elsewhere.
-*   **`getPerson(session, id)`** requires `student.view`. It includes only admissions at centres in `app.scoped_centre_ids('student.view')`, and throws `PersonError("notfound")` when none is visible. It returns:
+*   **`getPerson(session, id)`** runs in `withScope`, is not audited, and requires `student.view` somewhere (otherwise `PersonError("notfound")`). It includes only admissions at centres in `app.scoped_centre_ids('student.view')`, and throws `PersonError("notfound")` when none is visible. It returns:
 
     ```ts
     { person: { id, givenName, familyName, gender, dateOfBirth, mobile, email },
       admissions: [{ id, centreId, academicYear, admissionNo, admittedOn,
                      registrations: [{ id, courseCode, registerNo, status, joinDate, endDate }] }] }
     ```
-*   **Permissions** (inserted as in 0007): `student.view`, `student.admit`.
+*   **Permissions** (inserted as in 0007, `sensitive = false`, so no TOTP step-up; PMC under D-SEC-4): `student.view` "View learners admitted at a centre in your scope", `student.admit` "Admit learners at a centre".
 
 ### How later stages plug in
 
 *   **Stage 3 forms** call `admit()` and `getPerson()`. The form's other sections add columns by expand migrations. A client idempotency key, if wanted, is an optional new `admit` field and breaks no caller.
 *   **Correction tickets** (R-095) are ticket types whose handlers call `changeIdentity()`. A course change (CMC) is a handler that ends one registration (status TRANSFER) and creates another under the same admission.
-*   **A move to another centre** (DD-4): a user whose `student.admit` covers both the old and the new centre (an HO user, or a regional user within their region) admits the existing person at the new centre with `existingId`. A centre user cannot see learners of other centres (DD-1), so a move they start creates a new person, which head office later merges (D-MIG-4). Ending the old centre's registrations is the Stage 3 transfer ticket's job (see Risks).
+*   **A move to another centre** (DD-4): a user whose `student.admit` covers both the old and the new centre (an HO user, or a regional user within their region) admits the existing person at the new centre with `existingId`. A centre user cannot see learners of other centres (DD-1), so a move they start creates a new person, which head office later merges (D-STU-5). Ending the old centre's registrations is the Stage 3 transfer ticket's job (see Risks).
 *   **Fees and receipts** (Stage 4) reference `registration.id`. **Certificates** reference `register_no`.
 
 ## Decisions
 
 Accepted by the owner on 2026-10-28; each stays PRO until the design is approved. DD-2 and DD-7 stay PMC under NP-2/NP-7/NP-8 until the numbering owners sign. How each was reached is in the review reports.
 
-1.  **DD-1: The duplicate check looks only within the caller's scope.** Cross-centre duplicates are left to head office's merge process (D-MIG-4), so no centre learns about another centre's learners.
+1.  **DD-1: The duplicate check looks only within the caller's scope.** Cross-centre duplicates are left to head office's merge process (D-STU-5), so no centre learns about another centre's learners.
 2.  **DD-2: Register No is one network-wide series (period `ALL`); Admission No is network-wide per academic year.** Per-centre counters with a year-only prefix would issue the same number at two centres.
 3.  **DD-3: Stage 2 ships functions, not screens.** `admit()` and `changeIdentity()` are tested directly; the first screen is Stage 3.
 4.  **DD-4: Linking an existing person at a new centre needs `student.admit` at both centres**: the new one and one where the person is already admitted. HO users qualify everywhere, regional users within their region. A move started by a single-centre user creates a new person, merged later.
@@ -218,8 +218,9 @@ Accepted by the owner on 2026-10-28; each stays PRO until the design is approved
 | NP-8 | NP register (§C-02.1) | Seed values at cutover; gapless or not | Cutover script seeds from legacy; numbers released on rollback |
 | D-SEC-4 | IT and Legal | Aadhaar, religion, caste, disability; PII erasure | Not stored |
 | D-ADM-1, D-ADM-2 | `04-manager-decision-register.md` | Enquiries, lead source, counting | Not built (Stage 3) |
-| D-MIG-4 | `04-manager-decision-register.md` | Merging duplicate persons | Duplicates allowed; merged later |
-| D-YEAR-3 | `04-manager-decision-register.md` | Academic year boundaries, `admittedOn` check | Checked text `YYYY-YY` only |
+| D-STU-5 (new, item 2) | `04-manager-decision-register.md` | Merging duplicate persons | Duplicates allowed; merged later by a reviewed process |
+| D-MIG-4 | `04-manager-decision-register.md` | Master dedupe maps (religion, caste, designation, course names), an input to merging | Not used in Stage 2 |
+| R-028 (master), D-YEAR-3 (AY vs FY) | `04-manager-decision-register.md` | Academic year boundaries, `admittedOn` check | Checked text `YYYY-YY` only; AY and FY both kept |
 | G-FIN | Finance | Fees on registrations | Stage 4 |
 
 ## Alternatives Considered
@@ -285,8 +286,8 @@ Accepted by the owner on 2026-10-28; each stays PRO until the design is approved
 | A ticket raised at one centre targets another centre's person | Wrong learner renamed | `changeIdentity` and handler `validate` bind the person to the ticket's centre | T-PER-005 |
 | Admission numbers reissue legacy ones (before cutover, or a past year) | Duplicate numbers on printed forms | Chained years (DD-7); `SeriesMissing` until the cutover script seeds | T-PER-003 |
 | Register No starts at 1 beside legacy numbers | Clashing certificates | `mustExist`; seeded at cutover | T-PER-003 |
-| Concurrent or double-submitted admits of one learner | Duplicate persons, burnt numbers | Advisory lock on the match key. **Accepted:** learners with a null key (no date of birth or mobile) can still be duplicated, and are merged later (D-MIG-4) | T-PER-002 |
-| Move started by a single-centre user | Duplicate person | **Accepted** (DD-4); merged later (D-MIG-4) | T-PER-001 |
+| Concurrent or double-submitted admits of one learner | Duplicate persons, burnt numbers | Advisory lock on the match key. **Accepted:** learners with a null key (no date of birth or mobile) can still be duplicated, and are merged later (D-STU-5) | T-PER-002 |
+| Move started by a single-centre user | Duplicate person | **Accepted** (DD-4); merged later (D-STU-5) | T-PER-001 |
 | After a move, the old centre's registrations stay ACTIVE | Active learners double-counted per centre | **Accepted for Stage 2** (no users, no move screen). The Stage 3 transfer ticket ends them (TRANSFER) | T-PER-001 asserts they are untouched |
 | Renaming `ticket_number_series` is not an expand migration | Ticket raise fails if the old app runs against 0011 | Migration 0011 and the app deploy together. No production system exists yet | T-TKT-002 |
 | One row per counter (`REGISTER`, each `ADMISSION` year) | Every admission in the network queues on it for the rest of its transaction | At about 44,000 admissions a year (R-029 current values) the queue is negligible inside the 5 s transaction timeout (`src/server/db.ts`) | n/a |
@@ -317,11 +318,12 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 
 *   Adds a T-PER group:
     *   T-PER-001: one person, several admissions and registrations; persons and registrations counted separately (with T-XM-01). An HO user, and a regional user within their region, admit an existing person at a second centre.
+    *   T-NUM-010 (existing ID, first CI test): the first new number equals the legacy current value + 1.
     *   T-PER-002: a likely duplicate is flagged in the caller's scope, never across centres, including single-name learners and swapped name order; a bulk insert gets its match key.
     *   T-PER-003: Admission No network-wide per academic year and Register No network-wide, never clashing between centres; allocated in the admission transaction; a rollback releases them; academic years chain.
     *   T-PER-004: scope. A centre sees only its own admissions and registrations, and a person only through one of them; another centre's record raises the same error as a missing one.
     *   T-PER-005: identity changes go through one function that returns before and after, and only for a person admitted at the given centre.
-*   Adds T-PER-001…005 to R-029's `tests` column, T-PER-001/002/004 to R-150's, and T-PER-005 to R-095's.
+*   Adds T-PER-001…005 to R-029's `tests` column (keeping T-NUM-007 and T-NUM-010), T-PER-001/002/004 to R-150's, and T-PER-005 to R-095's.
 *   Re-runs `python -I docs/audit/tools/build_matrix.py docs/audit` and `python -I docs/requirements/tools/build_frd.py .`, and commits the regenerated CSV and FRD (both are CI gates).
 
 #### 2. `docs/audit/04-manager-decision-register.md` (Modify)
@@ -329,7 +331,8 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 *   Records, against existing rows:
     *   D-STU-4: the core uses its default as a parameter.
     *   The NP-1…NP-8 row: Register No as one network-wide series, Admission No network-wide per academic year with chained years (DD-2, DD-7).
-*   Both stay PMC.
+*   Adds a new row after D-STU-4: `D-STU-5 | Merging duplicate person records | Admissions/PRO | person-core design | Duplicates allowed at entry; merged later by a reviewed process (D-MIG-4 maps are an input) | People counted twice | T-PER-001, T-PER-002`, and updates the open-decision count.
+*   All stay PMC.
 
 #### 2a. `docs/designs/ticket-engine/ticket-engine.md` (Modify)
 
@@ -339,6 +342,8 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 
 *   Models `Person`, `Admission` and `Registration`; enums `Gender` and `RegistrationStatus`; `TicketNumberSeries` renamed to `GlobalNumberSeries` with a `series` column and a composite key.
 *   `Admission` has `@@unique([id, centreId])`, and `Registration` a compound relation on (admissionId, centreId) to it, so the composite foreign key is part of the schema.
+*   Relations, all `onDelete: Restrict` like the ticket models: `Person.admissions`, `Admission.person`, `Admission.centre`, `Admission.registrations`, `Registration.admission` (the composite one) and `Registration.centre` (its own foreign key to `centre`), with the matching back-relation fields on `Centre`.
+*   `GlobalNumberSeries` has `@@id([series, period])`, which Prisma names `global_number_series_pkey`.
 *   `matchKey` is a plain nullable column set by a trigger, because Prisma cannot mirror a generated column and the drift gate would fail.
 *   Written first, because item 4's table DDL is generated from it.
 
@@ -351,15 +356,15 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 *   **Counter rename, hand-edited**, because Prisma would generate a drop and create, which loses the counter:
     1.  `alter table app.ticket_number_series rename to global_number_series`.
     2.  Add `series text not null default 'TICKET'`, then drop the default.
-    3.  Replace the primary key with (series, period), named as Prisma expects.
+    3.  Drop `ticket_number_series_pkey` and add `global_number_series_pkey` primary key (series, period).
 *   **Hand-written part:**
     1.  **`app.person_match_key(given, family, dob, mobile)`**, an immutable SQL function returning text or null:
-        *   `name` = `array_to_string(array(select w from regexp_split_to_table(lower(coalesce(given, '') || ' ' || coalesce(family, '')), '[^[:alpha:]]+') w where w <> '' order by w), ' ')`;
-        *   the result is `name || '|' || yyyymmdd || '|' || mobile`, where `yyyymmdd` is built from `extract(year/month/day …)` and `mobile` is the stored 10 digits;
+        *   `name` = `array_to_string(array(select w from regexp_split_to_table(lower(coalesce(given, '') || ' ' || coalesce(family, '')), '[^[:alpha:]\u0300-\u036f\u0900-\u0dff]+') w where w <> '' order by w), ' ')`; the class keeps Indic combining marks. CI runs the Malayalam case on the local database only; `lc_ctype` on Supabase may differ, so the evidence entry records one manual run there;
+        *   the result is `name || '|' || yyyymmdd || '|' || mobile`, where `yyyymmdd` is `(extract(year from dob) * 10000 + extract(month from dob) * 100 + extract(day from dob))::int::text` (zero-padded by construction; `to_char` is not immutable) and `mobile` is the stored 10 digits;
         *   null when `name` is empty, the date of birth is null, or the mobile is not exactly 10 digits.
 
         A trigger function `app.person_set_match_key()` sets `match_key` on insert and on update of those fields.
-    2.  A check on admission: `academic_year ~ '^\d{4}-\d{2}$' and right(academic_year, 2)::int = (left(academic_year, 4)::int + 1) % 100`.
+    2.  A check on admission: `case when academic_year ~ '^\d{4}-\d{2}$' then right(academic_year, 2)::int = (left(academic_year, 4)::int + 1) % 100 else false end` (the `case` keeps a malformed value from reaching the casts, so it fails as a check violation, not 22P02).
     3.  RLS on `admission` and `registration` with the 0002 loop.
     4.  RLS on `person` (ENABLE and FORCE), with three policies:
         *   select and update: `exists (select 1 from app.admission a where a.person_id = person.id)`; `admission`'s own policy limits that subquery to the caller's centres, so no new privileged function is needed;
@@ -369,15 +374,20 @@ There is no web phase: Stage 2 ships no screen (DD-3).
         *   select and insert on the three tables;
         *   update on the six identity columns of `person` only;
         *   `global_number_series` keeps the grants the renamed table had (select, insert, update).
-    6.  Permissions `student.view` and `student.admit`, `on conflict (key) do nothing`.
+    6.  Permissions `student.view` and `student.admit` with the descriptions above and `sensitive = false`, `on conflict (key) do nothing`.
     7.  No seed for `REGISTER` or `ADMISSION` (the cutover script seeds them; DD-2, DD-7).
 
 #### 5. `tests/fixtures.ts` (Modify)
 
 *   `reset()`:
     *   truncates `person`, `admission`, `registration` and `global_number_series` (replacing `ticket_number_series` in the list);
-    *   re-inserts the two student permissions;
-    *   adds role 17 `student_admin` (the next free role id after the ticket roles 10–16), with `student.view` and `student.admit`. It is held at centre A by new user `sa` (token `tok-stuA`), at centre B by new user `sb` (`tok-stuB`), at the region of A and B by new user `sr` (`tok-stuR`, the regional case), and at ALL scope by the existing `hoAll` (the HO move case);
+    *   re-inserts the two student permissions (same descriptions and `sensitive = false`);
+    *   adds role 17 `student_admin` (the next free role id after the ticket roles 10–16), with `student.view` and `student.admit`;
+    *   adds four users holding it, exported as `ST = { sa, sb, sr, sh }` in the style of `TK`, with tokens `tok-stuA`, `tok-stuB`, `tok-stuR`, `tok-stuH`:
+        *   `sa` (`…0000000000e1`) at centre A;
+        *   `sb` (`…0000000000e2`) at centre B (region 2), the out-of-scope user for both moves;
+        *   `sr` (`…0000000000e3`) at REGION 1, which covers A and A2 only (fixtures line 4), the regional case;
+        *   `sh` (`…0000000000e4`) at ALL scope, the HO move case. `hoAll` is not used: `tests/audit.test.ts:54` asserts its exact roles;
     *   seeds `global_number_series ('REGISTER', 'ALL', 2064112)` and `('ADMISSION', '2026-27', 43887)`, as the cutover script would.
 *   Existing users and assignments are unchanged.
 
@@ -401,15 +411,17 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 *   **`admit`**, as in the Technical Plan.
     *   **Validation:**
         *   `given_name` 1–100 characters after trimming; `family_name` up to 100;
-        *   date of birth, when given, in the past;
+        *   date of birth, when given, a valid `'YYYY-MM-DD'` before today in Asia/Kolkata;
         *   mobile, when given, exactly 10 digits after removing spaces, `-` and a leading `+91` or `0`, stored as those digits;
         *   email, when given, contains one `@`;
         *   at least one course, each course code non-empty, and `joinDate <= endDate` when `endDate` is given.
     *   **`existingId`:** `select 1 from app.admission where person_id = $1 and centre_id = any(app.scoped_centre_ids('student.admit'))`; no row gives `PersonError("notfound")`.
     *   **Lock:** `select pg_advisory_xact_lock(hashtext(app.person_match_key(…)))` when the key is not null, before `findMatches`.
     *   **Returns** `{ personId, admissionId, admissionNo, registrations: [{ id, courseCode, registerNo }] }`.
+    *   **Audit:** `targetType: "person"`, `targetId: personId`, detail `{ admissionId, admissionNo, registrations: [{ id, registerNo }], dismissedCandidates? }`; `dismissedCandidates` is omitted when empty.
+*   **`personDb(fn)`**, in the style of `ticketDb()` (`src/server/tickets/engine.ts`): maps 22P02, the academic-year check (23514), the composite foreign key (23503) and the two unique number keys (23505) to `PersonError("invalid", …)`, and 42501 to `Forbidden`, so no raw Prisma error escapes.
 *   **`assertAdmittedAt(tx, centreId, personId)`** (exported): `PersonError("notfound")` unless the person has an admission at `centreId` visible to the caller.
-*   **`changeIdentity(tx, centreId, personId, changes)`**: validates as above. It calls `assertAdmittedAt`, locks the row (`for update`), updates only the given identity fields, and returns `{ before, after }`.
+*   **`changeIdentity(tx, centreId, personId, changes)`**: `changes` is `Partial<{ givenName, familyName, gender, dateOfBirth, mobile, email }>`; `null` clears a field except `givenName`. It validates as above, calls `assertAdmittedAt`, locks the row (`for update`), updates only the given fields, and returns `{ before, after }`, each holding only the changed fields.
 *   **`getPerson`**, as in the Technical Plan.
 *   **Audit name:** `person.admit`, written as a string literal on the `action:` line, so the catalogue gate can read it.
 
@@ -418,7 +430,11 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 *   `numbering.ts`: `allocateTicketNumber(tx, period)` becomes `allocateGlobal(tx, series, period, { mustExist?, previous? })` on `global_number_series`, plus `SeriesMissing`.
     *   With no option it is the same upsert as today.
     *   With `mustExist`, it updates an existing row and throws `SeriesMissing` when the row is missing.
-    *   With `previous`, a missing row is inserted only if the `(series, previous)` row exists; otherwise `SeriesMissing`. Two first-of-year callers meet in the upsert's `on conflict`.
+    *   With `previous`:
+        1.  `update app.global_number_series set current = current + 1 where series = $1 and period = $2 returning current`;
+        2.  only if that returns no row: `insert into app.global_number_series (series, period, current) select $1, $2, 1 where exists (select 1 from app.global_number_series where series = $1 and period = $3) on conflict (series, period) do update set current = global_number_series.current + 1 returning current` (two first-of-year callers meet in the `on conflict`);
+        3.  if that also returns no row, `SeriesMissing`.
+    *   `SeriesMissing(series, period)` exposes both, so tests can assert on them.
 *   `engine.ts`: calls `allocateGlobal(tx, "TICKET", TICKET_POLICY.numberPeriod)`.
 *   `tests/tickets.test.ts`: the T-TKT-002 queries read `global_number_series where series = 'TICKET'`.
 
@@ -426,10 +442,13 @@ There is no web phase: Stage 2 ships no screen (DD-3).
 
 T-PER-001…005 against the Docker database, plus:
 *   two centres admitting in the same academic year get distinct, consecutive Admission Nos (in T-PER-003);
-*   `2027-28` opens at 1 after the seeded `2026-27`; `2025-26` and `2028-29` throw `SeriesMissing`; a missing `REGISTER` row throws `SeriesMissing` (in T-PER-003);
-*   an HO user admits an existing person at a second centre, giving one person and two admissions, and the first centre's registrations stay ACTIVE; a regional user `sr` links a centre-A person at centre B; a centre user at the second centre can neither see nor pass that person (in T-PER-001);
-*   two concurrent admits of the same new learner: the second throws `PossibleDuplicate` (in T-PER-002);
-*   matching with `family_name` null, and with given and family names swapped; a bulk `insert … select` gets `match_key` (in T-PER-002);
+*   in this order: `2028-29` and `2025-26` throw `SeriesMissing`; then `2027-28` opens at 1 after the seeded `2026-27`; then `2028-29` opens at 1, showing the chain; a missing `REGISTER` row throws `SeriesMissing` (in T-PER-003);
+*   T-NUM-010: with the fixture seeds, the first admission gets Register No `2064113` and Admission No `GTEC262743888`;
+*   rollback (T-PER-003): the admin pre-inserts a registration with `register_no` `2064114`; an admit with two courses then fails on the unique key after both allocations. The `ADMISSION` and `REGISTER` `current` values are unchanged, and no person, admission or audit row exists;
+*   moves (in T-PER-001), in this order: `sa` admits a person at A; `sb` cannot see the person, and passing it as `existingId` gives `PersonError("notfound")`; `sh` admits them at B, giving one person and two admissions, and the A registrations stay ACTIVE; `sr` admits them at A2;
+*   raw scope (in T-PER-004): under `sb`, `select id from app.person` returns no centre-A person, and an update of a centre-A person changes 0 rows;
+*   two concurrent admits of the same new learner, with `Promise.allSettled`: exactly one fulfils, the other rejects with `PossibleDuplicate`, and one person row exists (in T-PER-002);
+*   matching with `family_name` null, with given and family names swapped, and with a Malayalam name; a bulk `insert … select` gets `match_key` (in T-PER-002);
 *   `confirmNew` records `dismissedCandidates` in the audit row;
 *   a registration whose `centre_id` differs from its admission's is refused by the composite foreign key;
 *   an academic year in the wrong format, or with non-consecutive years, is refused by `admit` and, on a direct insert, by the database check;
@@ -443,7 +462,7 @@ T-PER-001…005 against the Docker database, plus:
 
 #### 10. `docs/STATUS.md` and `docs/audit/12-evidence-and-verification-log.md` (Modify)
 
-*   An evidence entry with the CI run and test counts; STATUS completed items and test count.
+*   An evidence entry with the CI run, the test counts, and the five mutation checks with the test that failed for each; STATUS completed items and test count.
 
 ### Verification Plan
 
