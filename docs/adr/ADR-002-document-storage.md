@@ -67,6 +67,16 @@ The manual Supabase run (design, Verification Plan) confirms:
 
 It also records the Data API check in §4. The results go in the evidence log.
 
+**Result (2026-10-28, E-027, `evidence/manual-supabase-run-2026-10-28T130635.txt`):**
+*   **Calls:** all three call shapes work through `src/server/storage.ts`.
+*   **Range:** honoured (206, `bytes 0-15/64`).
+*   **Overwrite:** a second PUT to the same key is refused (400), and so is a new upload link for an existing key.
+*   **Limits:** the bucket's type limit refuses `text/plain` (400), and the anonymous public URL is refused (400).
+*   **Upload link:** valid for **7,200 seconds** (2 hours), set by Supabase.
+*   **Data API check (§4):** passed. The REST listing shows no `app` tables, and a request for schema `app` is refused (406, PGRST106).
+*   **End to end:** the app (production build, test handler, real storage) completed upload, raise, approval at two levels and download over HTTP, and the downloaded bytes matched.
+*   **Not yet checked:** a real browser following the download redirect under the CSP `form-action` rule, and the browser PUT under CORS. The CSP header carries the storage origin.
+
 ## 7. Approval
 
 | Role | Name | Decision | Date |

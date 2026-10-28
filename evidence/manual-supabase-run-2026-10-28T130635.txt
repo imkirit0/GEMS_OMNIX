@@ -1,0 +1,67 @@
+Manual Supabase run (ticket engine P5; design Verification Plan E2E; ADR-002 §6), 2026-10-28.
+Project: the existing GEMS OMNIX Supabase project (same project ref as .env DATABASE_URL). Bucket: ticket-documents.
+Keys were provided by the owner in chat; they must be rotated after this run (STATUS §5).
+
+== scripts/storage-setup.mjs (first run, then second run)
+created private bucket ticket-documents { public: false, file_size_limit: 10485760, allowed_mime_types: [ 'application/pdf', 'image/jpeg', 'image/png' ] }
+bucket ticket-documents already matches { ... }
+
+== Part 1: scripts/manual-supabase-storage-probe.mts (STORAGE_DRIVER unset; through src/server/storage.ts)
+{
+  "uploadUrlIsAbsoluteOnProject": true,
+  "uploadUrlValiditySeconds": 7200,
+  "put1": 200,
+  "secondPutSameUrl": 400,
+  "newUploadUrlSameKey": "refused: storage upload sign failed: 400",
+  "rangeStatus": 206,
+  "contentRange": "bytes 0-15/64",
+  "headFirstBytesArePdf": true,
+  "headTotalSizeMatches": true,
+  "contentUnchangedAfterOverwriteAttempts": true,
+  "headMissingIsNull": true,
+  "downloadUrlIsAbsoluteOnProject": true,
+  "downloadStatus": 200,
+  "downloadBytesMatch": true,
+  "textPlainUpload": 400,
+  "publicUrlStatus": 400,
+  "restRootStatus": 200,
+  "openApiMentionsAppTables": false,
+  "appSchemaRequestStatus": 406,
+  "appSchemaRequestCode": "PGRST106",
+  "cleanup": "200, 2 key(s)"
+}
+
+== Part 2: scripts/manual-supabase-run.mts against `next start -p 3106` (production build, TICKET_TEST_HANDLER=1,
+== STORAGE_DRIVER unset, real Supabase Storage, local Docker database reset with the test fixtures)
+{
+  "cspConnectSrcHasStorage": true,
+  "cspFormActionHasStorage": true,
+  "raiseFormStatus": 200,
+  "raiseFormShowsField": true,
+  "uploadRequest": 200,
+  "uploadUrlOnStorage": true,
+  "putToStorage": 200,
+  "raise": "303 -> /tickets/dc9d8f97-1729-4bf0-8564-93657bfcbded",
+  "raiseAgainSameFormId": "303 (redirect to the existing ticket, no second ticket)",
+  "ticket": { "number": "TK-26/FNC/1", "status": "OPEN", "version": 1 },
+  "ticketsCreated": 1,
+  "document": { "content_type": "application/pdf", "size_bytes": 74 },
+  "approveLevel1": "303 -> (no error)",
+  "approveLevel2": "303 -> (no error)",
+  "afterApproval": { "status": "APPROVED", "current_level": 2, "version": 3 },
+  "domainChangeApplied": 1,
+  "download": "303 -> signed storage URL",
+  "downloadedBytesMatch": true,
+  "audit": [
+    { "action": "ticket.approve", "outcome": "OK", "n": 2 },
+    { "action": "ticket.document.download", "outcome": "OK", "n": 1 },
+    { "action": "ticket.raise", "outcome": "OK", "n": 1 },
+    { "action": "ticket.upload.request", "outcome": "OK", "n": 1 }
+  ],
+  "cleanupStorage": 200
+}
+Server log: 0 lines containing "error".
+
+Not covered by this run: a real browser (the upload component's PUT under CORS, and the browser following the
+download's 303 under CSP form-action). The run used HTTP calls the way the browser makes them, and confirmed the
+CSP header carries the storage origin.

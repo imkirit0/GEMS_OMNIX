@@ -912,3 +912,34 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/scan-client-bundle.mjs | 4ab0b777240aebec979235526d36a0ede29f9343c03b64bb29282d5702c51e22 |
 | scripts/storage-setup.mjs | 1310b9d5767ceafc00787e46b2156efc80ed0404a93b28294e93c053a6909247 |
 | evidence/ci-p4-2026-10-28T125409.txt | 1b0efedfa2830ff4b8dcdf7112e7d6432cc6ba7b8d0bfde078546ee6c4cf54a6 |
+
+## E-027 Ticket engine build phase P5: manual Supabase run (2026-10-28)
+- **Request:** "do next step". The owner put the Supabase settings in place. The `.env.local` save did not land, so the owner pasted the keys in chat and Claude wrote them to the git-ignored `.env.local`. **The keys must be rotated** (STATUS §5).
+- **Project:** the same Supabase project as the existing `.env` database URL. The new bucket is `ticket-documents`, created by `scripts/storage-setup.mjs`: private, 10,485,760 bytes, PDF/JPEG/PNG. A second run reported "already matches".
+- **Part 1** (`scripts/manual-supabase-storage-probe.mts`, through `src/server/storage.ts`):
+  - signed upload 200; upload link valid **7,200 s**;
+  - second PUT to the same key 400, and a new upload link for an existing key refused (400);
+  - Range 206 `bytes 0-15/64`; `head()` signature and size correct; a missing object gives null;
+  - signed download 200 with identical bytes;
+  - `text/plain` refused by the bucket (400); public URL refused (400);
+  - **DD-15 Data API check: passed.** The OpenAPI listing shows no `app` tables, and `Accept-Profile: app` gives 406 PGRST106.
+  - Test objects deleted.
+- **Part 2** (`scripts/manual-supabase-run.mts` against `next start`, with the production build, `TICKET_TEST_HANDLER=1`, real storage and the local database reset to the fixtures):
+  - the CSP carries the storage origin in `connect-src` and `form-action`;
+  - the raise form shows the handler field;
+  - upload request 200, PUT to Supabase 200;
+  - raise 303 to the ticket `TK-26/FNC/1`, with the document stored as `application/pdf`, 74 bytes; resubmitting the same form id redirects and creates no second ticket;
+  - approvals at level 1 and level 2 without errors: APPROVED, version 3, domain change applied once;
+  - the download is a 303 to a signed storage URL, with identical bytes;
+  - audit: `upload.request` 1, `raise` 1, `approve` 2, `document.download` 1, all OK;
+  - the uploaded object was deleted; the server log has no errors.
+- **Not covered:** a real browser (the upload component's PUT under CORS, and following the download 303 under CSP `form-action`). Recorded as open in STATUS.
+- The DD-7 harness (test handler) was switched on only for this local run. The scripts read secrets from the environment and contain none; the evidence file contains no keys (checked).
+
+**Requirements VER: still 0.** No production handler exists; the R-094 rows need a domain module's handler and its tests.
+
+| File | SHA-256 |
+|---|---|
+| evidence/manual-supabase-run-2026-10-28T130635.txt | 6f3ad2e1721117b239c59e4aed24e534575c285f955bb018daca2451523b17d4 |
+| scripts/manual-supabase-storage-probe.mts | ef70f7f50313bcced5beaa0031dd3cb1d8e3fed999f2ae2b7d5831d0b3e59add |
+| scripts/manual-supabase-run.mts | cf91d42a5a2ee526b25254f8c4f213315d945654510427d0f6ba484011a5a9ac |
