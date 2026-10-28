@@ -878,3 +878,37 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | tests/tickets.test.ts | fc90aa139b31fd5289a10f92338adcf91a0830cf67eefbbb3efe49c07e5c1bb6 |
 | evidence/ci-p3-2026-10-28T124459.txt | 84abc47fa30b121db8255c7ac2906e4fcb0f46f8c7a6b2b4509bcb6cb4525798 |
 | evidence/mutation-p5-2026-10-28T124459.txt | 38d969cd5f0464a8a45f316bf4838f380df69993549990fffb6f4e7037679463 |
+
+## E-026 Ticket engine build phase P4: routes, screens, CSP, HTTP-level checks (2026-10-28)
+- **Request:** "do next step", which ran P4 after P3 was green.
+- **Commits `00ab8a0` and `6fbab77`:**
+  - **Routes**, each exporting `POST = safeRoute(...)`: the JSON upload request, raise (idempotent form id; `getAll("uploadId")`), act, administrator reassign, and document download (a same-origin POST answered by 303 to a signed URL); ticket-type create and save, which dispatches on `op`.
+  - **Pages:** ticket list; the two-step raise form, including re-raise; ticket detail with history, documents and the act and reassign forms; the approvals queue; ticket-type administration; the upload client component; home links.
+  - **`adminPost`:**
+    - maps ticket errors (`?error=ticket.<reason>`, plus a `detail` key for stale) and `TicketNotFound` → 404, `TicketDuplicate` → redirect;
+    - uses the `RbacError` key;
+    - `back` can be a function of the posted fields.
+  - The ticket message texts were added. The shared `forbidden` text is now generic, and the RBAC hint is shown on the four RBAC pages.
+  - `pageRead` maps `TicketNotFound` to 404.
+  - `buildCsp` (`src/server/csp.ts`) adds the storage origin to `connect-src` and `form-action` only when `SUPABASE_URL` is set.
+  - `scripts/storage-setup.mjs` reads its limits from `policy.ts`. Checked that Node 24 imports a `.ts` file from `.mjs` (`10485760 application/pdf,image/jpeg,image/png`).
+  - The bundle scan adds `SUPABASE_SERVICE_KEY` and `sb_secret_` keys, and decodes JWTs to look for `role = service_role`. The decoder was checked against a constructed service-role token, which is detected, and an anon token, which is ignored.
+- **Tests:**
+  - a CSP unit test (`tests/sec.test.ts`);
+  - all seven new POST routes in the same-origin loop, with the ticket tables counted (`tests/admin-http.test.ts`);
+  - in the real-server smoke, a ticket at a hidden centre gives a 404 page identical to a missing one, and the own-centre ticket gives 200.
+- **First CI run:** exit 1. Only the new smoke parity check failed, and the cause was in the check, not the app. Fetched by hand from a running `next start`, the two pages were identical. The smoke's shared `normal()` strips digits after `"k":"`, which cut ticket uuids that start with digits, so the failure was intermittent. The fix, in `6fbab77`, replaces uuids first.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: T-DOC-001 0 errors; no drift; typecheck; **111 passed + 3 todo** (9 files); build; bundle scan (11 files, 9 values, 6 patterns, nothing found); real-server smoke **18/18**.
+- **Not yet:** P5, the manual Supabase run and its evidence, which needs a Supabase project and service key.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| src/server/admin-http.ts | d257343193d67edd7a66e85d3f908f635a0829908f293d74a089e5001c4e8c3c |
+| src/server/csp.ts | 769c5e87fcaed3b84473990c7e34aadfe93aefa7b53f66a32a5ea85b089113df |
+| src/server/page-read.ts | 97c9a307e139732ccb9028489cb777018809cdc63d132af795e4a572b474e43d |
+| scripts/smoke-security.mjs | 1e83bf0a29c4e81118f1d23e03107486cebecb38823528675588b6afded4f3fb |
+| scripts/scan-client-bundle.mjs | 4ab0b777240aebec979235526d36a0ede29f9343c03b64bb29282d5702c51e22 |
+| scripts/storage-setup.mjs | 1310b9d5767ceafc00787e46b2156efc80ed0404a93b28294e93c053a6909247 |
+| evidence/ci-p4-2026-10-28T125409.txt | 1b0efedfa2830ff4b8dcdf7112e7d6432cc6ba7b8d0bfde078546ee6c4cf54a6 |
