@@ -1,7 +1,7 @@
 # Catalogue masters pages (Stage 3, fifth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (no new decisions).
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (no new decisions); step 7: [`critic_report.md`](critic_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -42,7 +42,7 @@ The catalogue skeleton (E-034) built the course category, course division, centr
 
 ## Technical Plan (Architecture)
 
-Z- and C- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5) and [`comprehension_report.md`](comprehension_report.md) (step 6).
+Z-, C- and D- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6) and [`critic_report.md`](critic_report.md) (step 7).
 
 ### What this changes elsewhere (Z1)
 
@@ -77,13 +77,13 @@ Z- and C- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (st
 | `GET /admin/catalogue/centres` | Centres the user sees with their class; for managers a class select (active classes, the current one even if inactive, and "(none)") and a reason per row |
 | `POST /admin/catalogue/centres/save` | `op` = `class` (`centreId`, `classId` `''` → `null`, `reason`) |
 
-*   Every POST goes through `adminPost` (same origin, step-up, `?error=&detail=`), returning to its page with `?saved=1`. Errors show "Some values were invalid. Check: <label>" or the `ADMIN_MESSAGES` text. The course pages' `CourseErrors` becomes one shared component `AdminErrors({ error, detail, labels })` (moved to `app/admin/catalogue/admin-errors.tsx`), used by the course pages with `COURSE_FIELD_LABELS` and by the new pages with `{ code: "Code", name: "Name", reason: "Reason", startsOn: "Start date", endsOn: "End date", classId: "Class" }` (Z2; no "Kind" label: an unknown slug is a 404 before any call, Z3).
+*   Every POST goes through `adminPost` (same origin, step-up, `?error=&detail=`), returning to its page with `?saved=1`. Errors show "Some values were invalid. Check: <label>" or the `ADMIN_MESSAGES` text. The course pages' `CourseErrors` becomes one shared component `AdminErrors` (Contracts below), used by the course pages with `COURSE_FIELD_LABELS` and by the new pages with `MASTER_FIELD_LABELS` (Z2, D8; no "Kind" label: an unknown slug is a 404 before any call, Z3; a tampered `id` shows the generic line).
 *   The home page's "Courses" link becomes "Catalogue" (`/admin/catalogue`), still shown to catalogue managers only; the index page itself is readable by every signed-in user.
 
 ### Contracts (step 6, C1–C13)
 
-*   **`setCentreClass` (C1, C5, C11):** validation `id("centreId", …)`, `classId` `null` or `id("classId", …)`, `reasonOf()`. Lock: `select c.centre_class_id as "classId", (select code from app.centre_class where id = c.centre_class_id) as "classCode" from app.centre c where c.id = ${centreId} for update`. This uses a scalar subquery, not a left join, because `FOR UPDATE` cannot lock the nullable side of an outer join. `liveRef` returns the row's code (`select code from ${t} where id = … and active for share`); existing callers ignore it. `after.classCode` is that code, or `null` when clearing. The function returns `undefined` (`.then(done)`). It is a network-wide action: `targetId` is `String(centreId)` and `target_centre_id` is null (`adminWrite` has no centre).
-*   **Routes (C2, C3):** the slug map is `SLUGS = { categories: { kind: "course_category", title: "Course categories" }, divisions: { kind: "course_division", title: "Course divisions" }, classes: { kind: "centre_class", title: "Centre classes" } }`, checked with `Object.hasOwn`. An unknown slug gets `notFound()` on the page, and `new Response("Not found", { status: 404 })` from the POST route **before** `adminPost`. That makes it 404 whatever the Origin. Each route's `back` is its GET page; success goes to `<page>?saved=1`. Any other `op` throws `RbacError("invalid", "unknown operation")`. Toggle forms post the opposite of the current state as `"1"`/`"0"`.
+*   **`setCentreClass` (C1, C5, C11):** validation `id("centreId", …)`, `classId` `null` or `id("classId", …)`, `reasonOf()`. Lock: `select c.centre_class_id as "classId", (select code from app.centre_class where id = c.centre_class_id) as "classCode" from app.centre c where c.id = ${centreId} for no key update`. The lock is `no key update`, not `update` (D2): it still serialises two managers, but does not block the `for key share` lock that inserting an admission at that centre takes, which would otherwise stall admissions everywhere behind the global ADMISSION counter (as `people.ts` already does). This uses a scalar subquery, not a left join, because a row lock cannot cover the nullable side of an outer join. `liveRef` returns the row's code (`select code from ${t} where id = … and active for share`); existing callers ignore it. `after.classCode` is that code, or `null` when clearing. The function returns `undefined` (`.then(done)`). It is a network-wide action: `targetId` is `String(centreId)` and `target_centre_id` is null (`adminWrite` has no centre).
+*   **Routes (C2, C3):** the slug map is `SLUGS = { categories: { kind: "course_category", title: "Course categories" }, divisions: { kind: "course_division", title: "Course divisions" }, classes: { kind: "centre_class", title: "Centre classes" } }`, checked with `Object.hasOwn`. An unknown slug gets `notFound()` on the page, and `new Response("Not found", { status: 404 })` from the POST route **before** `adminPost`. That makes it 404 whatever the Origin. Each route's `back` is its GET page; success goes to `<page>?saved=1`. Any other `op` throws `RbacError("invalid", "unknown operation")`. Toggle forms post the opposite of the current state as `"1"`/`"0"`; any other value throws `RbacError("invalid", "active: invalid")` / `"open: invalid"` (D3; the course route keeps its existing mapping). Each route is `export const POST = safeRoute(handle)`, with the slug 404 inside `handle` (D5: request id and IP on the audit rows, the generic error page).
 
 | Route | `op` | Call |
 |---|---|---|
@@ -95,6 +95,7 @@ Z- and C- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (st
 | years | `open` | `setAcademicYearOpen(s, f.code, f.open === "1", f.reason ?? "")` |
 | centres | `class` | `setCentreClass(s, Number(f.centreId), f.classId === "" ? null : Number(f.classId), f.reason ?? "")` |
 
+*   **Centres listed (D1):** `listCentreClasses` keeps the existing centre list's second gate: `where app.has_permission('catalogue.manage', null) or c.id = any (app.scoped_centre_ids('org.centre.view'))` on top of RLS, so a user with a role at a centre but no `org.centre.view` sees no centres there.
 *   **Reads (C6, C7):** `listAcademicYears` selects `starts_on::text as "startsOn"` and `ends_on::text as "endsOn"`. `listMasters` runs `table(kind)` before `withScope`, so an unknown kind needs no session.
 *   **Rendering (C8, C9, C12):**
     *   Masters table: Code, Name, Status ("Active"/"Inactive").
@@ -104,14 +105,16 @@ Z- and C- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (st
     *   The index runs `pageRead(canManageCatalogue)` only to require a session, and shows all six links to everyone.
     *   Refusals without a field prefix ("nothing to change", "already …") show the generic line, as on the course pages.
     *   Smoke: a non-manager's body has no `method="post"`; GET `/admin/catalogue/masters/nope` returns 404.
-*   **Errors component (C13):** `AdminErrors({ error, detail, labels }: { error?: string; detail?: string; labels: Record<string, string> })` lives in `app/admin/catalogue/admin-errors.tsx`, which also exports `MASTER_FIELD_LABELS` (Code, Name, Reason, Start date, End date, Class, `centreId`: Centre). `CourseErrors` is removed; `COURSE_FIELD_LABELS` stays in `course-form.tsx`. The text is unchanged.
+*   **Errors component (C13):** `AdminErrors({ error, detail, labels }: { error?: string; detail?: string; labels: Record<string, string> })` looks values up with `Object.hasOwn` (D4: `?error=__proto__` must not render `Object.prototype`, a 500 in `CourseErrors` today) and lives in `app/admin/catalogue/admin-errors.tsx`, which also exports `MASTER_FIELD_LABELS` (Code, Name, Reason, Start date, End date, Class, `centreId`: Centre). `CourseErrors` is removed; `COURSE_FIELD_LABELS` stays in `course-form.tsx`. The text is unchanged.
 *   **Tests (C4):** new file `tests/catalogue-masters.test.ts`, using the `course-master.test.ts` harness (`reset`, `setStepUp(CA, 0)`, the `as()` gems_app client, gate off in `afterEach`).
     *   **T-MS-001:** inserts category `IT` and division `OLD`, deactivates `OLD`, then expects divisions `[GEN active, OLD inactive]` and years `2028-29 … 2024-25`. `canManage` is true for `tok-catA` and false for `T.uA`.
     *   **T-MS-002:**
         *   Inserts classes `A++` (id 2) and `OLD` (id 3, inactive) by admin SQL, and audits set (null→METRO), change (METRO→A++) and clear (A++→null) as `{ target_type: "centre", target_id: "1", reason, before: { classCode }, after: { classCode } }`.
         *   Kept class: after `setMasterActive` deactivates A++, the centre still has it and `listCentreClasses` lists it with `active: false`.
         *   Availability: links DCA to METRO, turns the gate on, sets C.A to METRO, and expects `admit(ST_TOKEN.sa, …)` to succeed.
-        *   Non-manager: `T.uA`.
+        *   Non-manager: `T.uA` is Forbidden, with one DENIED `catalogue.centre.class` audit row (D9).
+        *   Who sees which centres (D1): `tok-tkViewer` (a role at A, no `org.centre.view`) gets no centres; `T.uA` gets only KL2-25; the manager gets all three.
+    *   **T-MS-003** also posts `classId=''` to clear a class and `active=x` (gives `detail=active`) (D3, D9).
     *   **Audit coverage:** the literal `"catalogue.centre.class"` appears in the test, on an `action:` line in `catalogue.ts`, and in `tests/audit-catalogue.ts`.
 *   **Also changes (C10):** T-SEC-007's title (`tests/sec.test.ts`) gains "(except a centre's class, 0017)".
 
@@ -158,6 +161,9 @@ Real-server smoke: the masters, years and centres pages return 200 for a non-man
 | A class change during an admission | The admission uses the class read when it ran | Accepted, as catalogue DD-13 (no admission lock) | none |
 | The update policy opens other centre columns | A manager could change centre data | Only `centre_class_id` is granted; other columns give 42501 | T-MS-002 |
 | Duplicate-code text shared by every master | — | One generic message (DD-10) | T-MS-003 |
+| Deactivating a class stops its centres selling once availability is enforced (D6) | Every centre on that class refused at admission | The deactivate form carries a reason and step-up; the course-master switch stays off until classes are set | T-CM-003 |
+| No centre has a class at cutover (D7) | Enforcing availability would refuse every admission | The ETL imports no class; enforcement stays off until every ACTIVE centre has an active class (a go-live check query in the runbook) | none |
+| Year codes and dates are not cross-checked (D10) | A typo such as `2026-27` from `2062-06-01` is accepted | Accepted: dates are reference data (catalogue DD-6, DD-3 here) | none |
 
 ## Detailed Implementation Plan
 
