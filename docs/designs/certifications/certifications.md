@@ -1,7 +1,7 @@
 # Certifications and special-case availability (Stage 3, seventh piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-4 were taken as the recommended options under the owner's standing instruction of 2026-10-29 ("agree on the recommended option and work on everything planned"); build approval follows the EGM review (steps 5–9). Steps 5–7 ran in parallel: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (no new decisions); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
+*   **Status:** Approved for build on 2026-10-29 after the EGM review (steps 5–9), under the owner's standing instruction of 2026-10-29. DD-1…DD-4 are recommended options taken under the same instruction. Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (steps 5–7 in parallel), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`. Statements in the Technical Plan without a class are PRO; every seeded or fixed list is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -288,13 +288,21 @@ return courses.filter((c) => c.centreIds !== null ? c.centreIds.includes(centre.
 
 ## Detailed Implementation Plan
 
-Outline; EGM step 9 writes the file-by-file plan:
+The file-by-file plan (K1–K4, each ending green) and the mutation checks are in [`implementation_readiness_report.md`](implementation_readiness_report.md) (EGM step 9). These notes from that step are binding:
 
-| Phase | Items |
-|---|---|
-| K1 Documents | T-CC-001…004 in audit 09; matrix links on R-092, R-090, R-090.01 |
-| K2 Server | Migration 0019; Prisma; certification functions; `setCourseCertifications`; `setCourseCentres`; reads; availability rule in `admit()`, `admitOptions`, `offeredCourses`; fixtures and gates; tests |
-| K3 Pages | Certifications page and route; course page sections and route ops; index link; label maps; tests |
-| K4 Evidence | Smoke; mutation checks; E-entry |
+*   **Text helper (R1):** only the `ownText` function moves into `details.ts`, which already has `CONTROL`, `LONE_SURROGATE` and `CONTROL_IN_ADDRESS`; `enquiry.ts` imports it from there.
+*   **Hidden-centre count (R2):** `hiddenCentres` is cast `::int`.
+*   **Update policy (R3):** `course_centre_update` sets both `using` and `with check`.
+*   **Old wording (R4):** the T-CM-003 row in audit 09 and the two DD-7 comments are amended.
+*   **Smoke data (R5):** SMKC is named at SMK-A; the viewer's course page shows "Only named centres may sell it" and "SMK-A".
+*   **Audit columns (R6):** certification audits carry `id, code, name, type, description, active`.
+*   **Region and area (R7):** they stay a Non-Goal; the R-090.01 matrix row gets only test ids.
+*   **Course lock (R8):** accepted as is.
+*   **Nothing to change (R9):** values are compared after normalising.
+*   **Fixture ids (R10):** as listed in the report.
+*   **Extra assertions:**
+    *   an SQL update of `code` gives 42501;
+    *   more than 500 centres is refused;
+    *   `mandatory:<id>=0` reads as false.
 
 *Drafted with EGM (draft step followed manually)*
