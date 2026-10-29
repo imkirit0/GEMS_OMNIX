@@ -152,6 +152,8 @@ describe("correction tickets: identity handlers (T-COR)", () => {
     expect(await stored(id)).toEqual({ admissionNo: anu.no, personId: anu.id, field: "givenName", oldValue: "Anu", newValue: "Anuja" });
     expect(await raiseFnc({ admissionNo: "ADM-NOPE", newValue: "X" })).toBe("invalid:admission.unknown");
     expect(await raiseFnc({ admissionNo: other.no, newValue: "X" })).toBe("invalid:admission.unknown"); // another centre's
+    await grant(TK.raiser, TK_ROLE.member, C.B); // now B's admissions are visible to the raiser: the centre filter must still refuse
+    expect(await raiseFnc({ admissionNo: other.no, newValue: "X" })).toBe("invalid:admission.unknown");
     expect(await raiseFnc({ admissionNo: "", newValue: "X" })).toBe("invalid:admissionNo.required");
     expect(await raiseFnc({ admissionNo: anu.no, newValue: "" })).toBe("invalid:newValue.required");
     expect(await raiseFnc({ admissionNo: anu.no, newValue: "Anu" })).toBe("invalid:newValue.same");
