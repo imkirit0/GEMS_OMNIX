@@ -1,0 +1,77 @@
+Course batches mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-30, local Docker database.
+Code mutations: applied, the named test run (vitest -t), restored. Database mutations of 0021: applied as SQL, the named test run,
+restored; then no drift. 27: migration text. 48: next build, fresh database, next start, smoke.
+
+Code (first run):
+CAUGHT 28 no student.view on writes
+CAUGHT 29 no trading gate
+CAUGHT 30 name before code
+CAUGHT 31 time accepts 24:00
+CAUGHT 32 no time order
+CAUGHT 33 no below-placed
+CAUGHT 34 no nothing-to-change (update)
+CAUGHT 35 no already-state
+CAUGHT 36 reason optional
+CAUGHT 37 no 23505 mapping
+MISSED 38 target lock without centre
+MISSED 39 registration lock without centre
+MISSED 39b no ACTIVE check in app
+CAUGHT 40 placed rows not skipped
+CAUGHT 41 audit unsorted
+CAUGHT 41b audit before empty
+CAUGHT 42 list without status filter
+CAUGHT 43 listBatches without authorize
+CAUGHT 43b placements without authorize
+CAUGHT 43c batchCentres on any scope
+CAUGHT 43d distinct ids unchecked
+CAUGHT 43e place cap 201
+CAUGHT 43f guard full message lost
+CAUGHT 44 action not catalogued
+CAUGHT 45 route reads one registrationId
+CAUGHT 46 empty batchId not null
+CAUGHT 47 unknown op ignored
+CAUGHT 47b no same-origin
+
+38, 39, 39b were MISSED. T-CB-002 gained a regional manager placing another centre's learner and a dropped learner's removal. Rerun:
+MISSED 38 target lock without centre
+CAUGHT 39 registration lock without centre
+CAUGHT 39b no ACTIVE check in app
+38 is equivalent: a batch of another centre is refused with the same message by RLS (hidden), the guard (fails closed) or the composite key.
+
+Database (first run):
+CAUGHT 8 guard without permission
+CAUGHT 9 guard checks student.view
+CAUGHT 10 trigger on update only
+CAUGHT 11 no non-ACTIVE rule
+CAUGHT 12 hidden batch passes
+CAUGHT 13 no inactive check
+CAUGHT 14 > instead of >=
+CAUGHT 15 no re-check on status
+CAUGHT 15b trigger not on status
+MISSED 16 no batch lock
+CAUGHT 17 guard stable
+CAUGHT 18 guard security definer
+CAUGHT 19 message without the name
+CAUGHT 20 select policy visible_centre_ids
+CAUGHT 21 insert policy true
+CAUGHT 22 update policy student.view
+CAUGHT 23 no delete policy
+CAUGHT 24 no force
+CAUGHT 25 code in the update grant
+CAUGHT 26 no batch_id update grant
+CAUGHT 26b course_code update grant
+16 was MISSED: the concurrency test let the second writer run after the first commit. It now waits until the second writer is blocked on the lock. Rerun (7, 6 and 5 re-run after their restore SQL was fixed):
+CAUGHT 16 no batch lock
+CAUGHT 7 FK on batch_id alone
+CAUGHT 6 no per-centre unique
+CAUGHT 5 unique on code only
+CAUGHT 1-4 drop batch_code_check
+CAUGHT 1-4 drop batch_name_check
+CAUGHT 1-4 drop batch_time_check
+CAUGHT 1-4 drop batch_capacity_check
+
+Migration text:
+CAUGHT 27 no system_admin grant
+
+Real server:
+MISSED 48 batches page without the centre check: equivalent; listBatches refuses the centre (Forbidden, a 404), guarded by mutation 43.
