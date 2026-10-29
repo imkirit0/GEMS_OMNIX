@@ -1,6 +1,6 @@
 // Admission and person mapping rule, one pass (design: "Admission and Person, One Pass"):
 // a person is written only together with an importable admission.
-import { ACADEMIC_YEAR_RULE, academicYearOk, ADMITTED_THIS_YEAR, isoDate, normCode, PersonError, type StoredIdentity } from "../../src/server/people";
+import { ACADEMIC_YEAR_RULE, academicYearOk, ADMITTED_THIS_YEAR, isoDate, normCode, PersonError, type StoredIdentity } from "../../src/server/person-rules";
 import { targetName } from "../ids";
 import { SOURCE_SYSTEM, type Ctx, type RawRow, type Result, type RuleError, type Rule } from "../types";
 
@@ -20,7 +20,7 @@ function dateError(column: string, v: string | null, e: unknown): RuleError {
 }
 
 export const admission = {
-  id: "admission", version: 3, owner: "Admissions, PRO", sourceTable: TABLE, entities: ["person", "admission"],
+  id: "admission", version: 4, owner: "Admissions, PRO", sourceTable: TABLE, entities: ["person", "admission"],
   description: "Legacy admissions to person + admission in one pass; duplicates merged by app.person_match_key (synthetic stand-in for D-MIG-4 maps)",
   dispositions: { person: ["IMPORTED", "MERGED", "REJECTED"], admission: ["IMPORTED", "REJECTED"] },
   parent: { person: centreParent, admission: centreParent },

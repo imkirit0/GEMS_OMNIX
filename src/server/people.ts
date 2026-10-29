@@ -7,6 +7,10 @@ import { Forbidden, scopedAction } from "./action";
 import { withScope, type Tx } from "./db";
 import { allocateGlobal } from "./numbering";
 import { limitSearch } from "./rate-limit";
+import { ACADEMIC_YEAR_RULE, academicYearOk, ADMITTED_THIS_YEAR, identityField, IDENTITY_KEYS, invalid, isoDate, normCode,
+  istToday, optText, PersonError, type Gender, type Identity, type StoredIdentity } from "./person-rules";
+export * from "./person-rules";
+import { DETAIL_COLUMN, DETAIL_KEYS, detailField, type DetailKey, type Details } from "./details";
 
 // PMC (NP-2, NP-5, NP-7, NP-8): format pieces are parameters until the numbering owners sign.
 export const PERSON_POLICY = {
@@ -15,20 +19,8 @@ export const PERSON_POLICY = {
   registerPad: 0,
 } as const;
 
-export type Gender = "MALE" | "FEMALE" | "OTHER";
-export type Identity = {
-  givenName: string; familyName?: string | null; gender?: Gender | null;
-  dateOfBirth?: string | null; mobile?: string | null; email?: string | null; // dates are 'YYYY-MM-DD'
-};
 export type Course = { courseCode: string; joinDate: string; endDate?: string };
 
-export class PersonError extends Error {
-  override name = "PersonError";
-  /** field and rule are set by invalid(): the admission form routes the error to its input by them */
-  constructor(readonly reason: "invalid" | "notfound", message: string = reason, readonly field?: string, readonly rule?: string) {
-    super(message);
-  }
-}
 /** The form's admissionId was already used (admission-screens DD-10): nothing new was admitted. */
 export class AdmissionExists extends Error {
   override name = "AdmissionExists";
@@ -40,77 +32,12 @@ export class PossibleDuplicate extends Error {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const invalid = (field: string, rule: string) => new PersonError("invalid", `${field}: ${rule}`, field, rule);
 
-// ---------- Validation (design item 7) ----------
-
-export const istToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10); // Asia/Kolkata, no DST
-
-export function isoDate(field: string, v: unknown): string {
-  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw invalid(field, "YYYY-MM-DD");
-  const d = new Date(`${v}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) throw invalid(field, "not a date");
-  return v;
-}
-
-const optText = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
-
-// One field of an identity; null clears it (except givenName). Returns the stored form.
-export function identityField(k: keyof Identity, v: unknown): string | null {
-  if (k === "givenName") {
-    const s = typeof v === "string" ? v.trim() : "";
-    if (s.length < 1 || s.length > 100) throw invalid("givenName", "1-100 characters");
-    return s;
-  }
-  if (v == null) return null;
-  switch (k) {
-    case "familyName": {
-      const s = optText(v);
-      if (s && s.length > 100) throw invalid("familyName", "at most 100 characters");
-      return s;
-    }
-    case "gender":
-      if (v !== "MALE" && v !== "FEMALE" && v !== "OTHER") throw invalid("gender", "MALE, FEMALE or OTHER");
-      return v;
-    case "dateOfBirth": {
-      const s = isoDate("dateOfBirth", v);
-      if (s >= istToday()) throw invalid("dateOfBirth", "must be in the past");
-      return s;
-    }
-    case "mobile": {
-      const digits = typeof v === "string" ? v.replace(/[\s-]/g, "").replace(/^(\+91|0)/, "") : "";
-      if (!/^\d{10}$/.test(digits)) throw invalid("mobile", "10 digits");
-      return digits;
-    }
-    case "email": {
-      const s = optText(v);
-      if (s && s.split("@").length !== 2) throw invalid("email", "one @");
-      return s;
-    }
-  }
-}
-
-export const IDENTITY_KEYS = ["givenName", "familyName", "gender", "dateOfBirth", "mobile", "email"] as const;
-export type StoredIdentity = Record<(typeof IDENTITY_KEYS)[number], string | null>;
 
 function identity(p: Identity): StoredIdentity {
   return Object.fromEntries(IDENTITY_KEYS.map((k) => [k, identityField(k, p[k])])) as StoredIdentity;
 }
 
-export const ACADEMIC_YEAR_RULE = "YYYY-YY, consecutive years";
-export const ADMITTED_THIS_YEAR = "already admitted at this centre this year"; // admission-screens DD-16, shared with the ETL rule
-export function academicYearOk(y: string): boolean {
-  return /^\d{4}-\d{2}$/.test(y) && Number(y.slice(5)) === (Number(y.slice(0, 4)) + 1) % 100;
-}
-// Catalogue codes (docs/designs/catalogue-skeleton, DD-8). Every writer of a code and every ETL rule uses this one function.
-const ASCII_SPACE = /[\t\n\v\f\r ]+/g;
-/** ASCII input: trim ASCII whitespace, collapse inner runs to one space, upper-case. Non-ASCII input is returned
- *  unchanged, so it fails the code check instead of being folded (ß would become SS). Non-strings give "". */
-export const normCode = (v: unknown): string => {
-  if (typeof v !== "string") return "";
-  if (/[^\x00-\x7f]/.test(v)) return v;
-  return v.replace(ASCII_SPACE, " ").replace(/^ | $/g, "").toUpperCase();
-};
 export const CODE_RULE = /^[!-~]+( [!-~]+)*$/; // the <table>_code_check of migration 0012, mirrored for field errors
 
 export const previousYear = (y: string) => `${Number(y.slice(0, 4)) - 1}-${y.slice(2, 4)}`; // 2026-27 -> 2025-26
@@ -137,6 +64,10 @@ async function personDb<T>(run: () => Promise<T>): Promise<T> {
     const code = cause?.originalCode;
     const constraint = /constraint "([^"]+)"/.exec(cause?.originalMessage ?? "")?.[1];
     if (code === "23514" && constraint === "admission_academic_year_check") throw invalid("academicYear", ACADEMIC_YEAR_RULE);
+    // a detail check the app's own validation should have caught: a field error, never the failing row (learner-details D8)
+    const detailCheck = code === "23514" ? /^person_detail_(\w+)_check$/.exec(constraint ?? "")?.[1] : undefined;
+    const detailKey = detailCheck && DETAIL_KEYS.find((k) => DETAIL_COLUMN[k] === detailCheck);
+    if (detailKey) throw invalid(detailKey, "invalid");
     if (code === "23505" && (constraint === "admission_admission_no_key" || constraint === "registration_register_no_key"))
       throw new PersonError("invalid", "number already issued");
     // an admissionId used where this caller's RLS cannot see it, or a concurrent submit of one form (DD-10)
@@ -148,6 +79,44 @@ async function personDb<T>(run: () => Promise<T>): Promise<T> {
     throw e;
   }
 }
+
+
+// ---------- Details (docs/designs/learner-details) ----------
+// Static SQL over all 20 columns: no caller-supplied name reaches SQL (design D11, R17).
+const readDetails = async (tx: Tx, personId: string) => (await tx.$queryRaw<(Details & { version: number })[]>`
+  select current_address as "currentAddress",
+         current_place as "currentPlace",
+         current_pincode as "currentPincode",
+         permanent_address as "permanentAddress",
+         permanent_place as "permanentPlace",
+         permanent_pincode as "permanentPincode",
+         nationality as "nationality",
+         blood_group as "bloodGroup",
+         employment_status as "employmentStatus",
+         qualification as "qualification",
+         father_name as "fatherName",
+         father_occupation as "fatherOccupation",
+         father_phone as "fatherPhone",
+         mother_name as "motherName",
+         mother_occupation as "motherOccupation",
+         mother_phone as "motherPhone",
+         guardian_name as "guardianName",
+         guardian_relation as "guardianRelation",
+         guardian_phone as "guardianPhone",
+         guardian_occupation as "guardianOccupation",
+         version
+  from app.person_detail where person_id = ${personId}::uuid`)[0];
+const insertDetails = (tx: Tx, personId: string, d: Partial<Details>) => tx.$executeRaw`
+  insert into app.person_detail (person_id, current_address, current_place, current_pincode, permanent_address, permanent_place, permanent_pincode, nationality, blood_group, employment_status, qualification, father_name, father_occupation, father_phone, mother_name, mother_occupation, mother_phone, guardian_name, guardian_relation, guardian_phone, guardian_occupation)
+  values (${personId}::uuid, ${d.currentAddress ?? null}, ${d.currentPlace ?? null}, ${d.currentPincode ?? null}, ${d.permanentAddress ?? null}, ${d.permanentPlace ?? null}, ${d.permanentPincode ?? null}, ${d.nationality ?? null}, ${d.bloodGroup ?? null}, ${d.employmentStatus ?? null}, ${d.qualification ?? null}, ${d.fatherName ?? null}, ${d.fatherOccupation ?? null}, ${d.fatherPhone ?? null}, ${d.motherName ?? null}, ${d.motherOccupation ?? null}, ${d.motherPhone ?? null}, ${d.guardianName ?? null}, ${d.guardianRelation ?? null}, ${d.guardianPhone ?? null}, ${d.guardianOccupation ?? null})`;
+
+/** Every given key through detailField; null clears; unknown keys are not read. */
+function validDetails(d: Partial<Details> | undefined): Partial<Details> {
+  if (d == null) return {};
+  if (typeof d !== "object") throw invalid("details", "invalid");
+  return Object.fromEntries(DETAIL_KEYS.filter((k) => k in d).map((k) => [k, detailField(k, d[k])])) as Partial<Details>;
+}
+const anyDetail = (d: Partial<Details>) => DETAIL_KEYS.some((k) => d[k] != null);
 
 // ---------- Reads ----------
 
@@ -174,6 +143,9 @@ export type PersonView = {
   person: { id: string; givenName: string; familyName: string | null; gender: Gender | null; dateOfBirth: string | null; mobile: string | null; email: string | null };
   admissions: { id: string; centreId: number; centreCode: string; academicYear: string; admissionNo: string; admittedOn: string;
     registrations: { id: string; courseCode: string; courseName: string; registerNo: string; status: string; joinDate: string; endDate: string | null }[] }[];
+  details: Details | null; // null without a row (learner-details C2)
+  detailsVersion: number; // 0 without a row
+  editCentreId: number | null; // the earliest admission at a centre where the caller holds student.admit (Z1, C10)
 };
 
 export async function getPerson(session: string | undefined, id: string): Promise<PersonView> {
@@ -195,7 +167,13 @@ export async function getPerson(session: string | undefined, id: string): Promis
              date_of_birth::text as "dateOfBirth", mobile, email
       from app.person where id = ${id}::uuid`;
     if (!person) throw new PersonError("notfound");
-    return { person, admissions: admissions.map((a) => ({ ...a, registrations: a.registrations ?? [] })) };
+    const row = await readDetails(tx, id);
+    const [edit] = await tx.$queryRaw<{ centreId: number }[]>`
+      select centre_id as "centreId" from app.admission
+      where person_id = ${id}::uuid and centre_id = any (app.scoped_centre_ids('student.admit')) order by created_at, id limit 1`;
+    const details = row ? (Object.fromEntries(DETAIL_KEYS.map((k) => [k, row[k]])) as Details) : null;
+    return { person, admissions: admissions.map((a) => ({ ...a, registrations: a.registrations ?? [] })),
+      details, detailsVersion: row?.version ?? 0, editCentreId: edit?.centreId ?? null };
   });
 }
 
@@ -255,6 +233,8 @@ export type AdmitInput = {
   confirmNew?: string[];
   /** the form's id, used as the admission's primary key so a resubmitted form never admits twice (DD-10) */
   admissionId?: string;
+  /** contact and family details (learner-details); for an existing person saved only when none exist (DD-13) */
+  details?: Partial<Details>;
 };
 export type Admitted = { personId: string; admissionId: string; admissionNo: string; registrations: { id: string; courseCode: string; registerNo: string }[] };
 
@@ -276,11 +256,15 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
   // the FAILED audit rows below carry this person id even when, for a fresh identity, it was never created
   const admissionId = input.admissionId?.toLowerCase() ?? randomUUID();
   const registrationIds = list.map(() => randomUUID());
+  const details = validDetails(input.details);
   let dismissed: string[] = [];
+  let written: DetailKey[] = []; // detail keys saved with this admission, for the audit (D18, I10)
 
   return scopedAction(session, { action: "person.admit", permission: "student.admit", centreId: input.centreId,
     targetType: "person", targetId: personId }, (tx) => personDb(async () => {
     dismissed = []; // withScope may retry this callback
+    written = [];
+    let saveDetails = anyDetail(details);
     // the form lock and existence check first (DD-10): two submits of one form queue here, so the second sees the first
     // ponytail: shares the one-argument key space with the match-key lock; a collision only makes two admits wait
     await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`admit-form:${admissionId}`}))`;
@@ -313,11 +297,21 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
         select 1 as ok from app.admission
         where person_id = ${personId}::uuid and centre_id = any (app.scoped_centre_ids('student.admit')) limit 1`;
       if (!hit) throw new PersonError("notfound");
+      if (saveDetails) {
+        // the lock updateDetails takes, so a concurrent first edit queues (I5); existing details are never overwritten (DD-13)
+        await tx.$executeRaw`select 1 from app.person where id = ${personId}::uuid for no key update`;
+        saveDetails = !(await readDetails(tx, personId));
+      }
     }
     const seq = await allocateGlobal(tx, "ADMISSION", input.academicYear, { previous: previousYear(input.academicYear) });
     const admissionNo = `${PERSON_POLICY.admissionPrefix(input.academicYear)}${String(seq).padStart(PERSON_POLICY.admissionPad, "0")}`;
     await tx.$executeRaw`insert into app.admission (id, person_id, centre_id, academic_year, admission_no, admitted_on)
       values (${admissionId}::uuid, ${personId}::uuid, ${input.centreId}, ${input.academicYear}, ${admissionNo}, ${admittedOn}::date)`;
+    if (saveDetails) {
+      // after the admission, so the insert policy (student.admit where the person is admitted) passes
+      await insertDetails(tx, personId, details);
+      written = DETAIL_KEYS.filter((k) => details[k] != null);
+    }
     const registrations = [];
     for (const [i, c] of list.entries()) {
       const registerNo = String(await allocateGlobal(tx, "REGISTER", "ALL", { mustExist: true })).padStart(PERSON_POLICY.registerPad, "0");
@@ -331,6 +325,7 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     admissionId: r.admissionId, admissionNo: r.admissionNo,
     registrations: r.registrations.map(({ id, registerNo }) => ({ id, registerNo })),
     ...(dismissed.length > 0 ? { dismissedCandidates: dismissed } : {}),
+    ...(written.length > 0 ? { detailFields: written } : {}),
   }), (e) => { // DD-15: the refusals that show or probe another record; no names or dates in the row
     if (e instanceof PossibleDuplicate) return { action: "person.admit", extra: { reason: "duplicate", candidates: e.candidates.map((c) => c.id) } };
     if (e instanceof AdmissionExists) return { action: "person.admit", extra: { reason: "already_submitted", admissionId } };
@@ -368,4 +363,59 @@ export async function changeIdentity(tx: Tx, centreId: number, personId: string,
       where id = ${personId}::uuid`;
     return { before: Object.fromEntries(keys.map((k) => [k, row[k]])) as Partial<StoredIdentity>, after };
   });
+}
+
+const DIGITS = /^\d+$/;
+
+/**
+ * Edit a learner's contact and family details (learner-details DD-3, DD-10): student.admit at centreId, where the person
+ * is admitted; an optimistic version (DD-8); keys absent from changes stay as they are, null clears. Audited by the
+ * names of the changed fields only (DD-14). Identity is never touched here.
+ */
+export async function updateDetails(session: string | undefined, personId: string, centreId: string | number, version: string | number,
+  changes: Partial<Details>): Promise<{ version: number; changed: DetailKey[] }> {
+  const centre = String(centreId), ver = String(version);
+  if (!UUID.test(personId) || !DIGITS.test(centre) || !DIGITS.test(ver)) throw new PersonError("notfound");
+  const [c, v] = [Number(centre), Number(ver)];
+  if (!Number.isSafeInteger(c) || !Number.isSafeInteger(v)) throw new PersonError("notfound");
+  const d = validDetails(changes);
+  return scopedAction(session, { action: "person.details.update", permission: "student.admit", centreId: c, targetType: "person", targetId: personId },
+    (tx) => personDb(async () => {
+      await assertAdmittedAt(tx, c, personId);
+      await tx.$executeRaw`select 1 from app.person where id = ${personId}::uuid for no key update`; // first edits queue (Z5, D10)
+      const row = await readDetails(tx, personId);
+      if ((row?.version ?? 0) !== v) throw invalid("details", "changed since you opened them; reload the page");
+      const changed = DETAIL_KEYS.filter((k) => k in d && (d[k] ?? null) !== (row ? row[k] : null));
+      if (changed.length === 0) throw invalid("details", "nothing to change");
+      const set = (k: DetailKey) => changed.includes(k);
+      if (!row) {
+        await insertDetails(tx, personId, Object.fromEntries(changed.map((k) => [k, d[k]])) as Partial<Details>);
+        return { version: 1, changed };
+      }
+      const n = await tx.$executeRaw`update app.person_detail set
+      current_address = case when ${set("currentAddress")} then ${d.currentAddress ?? null} else current_address end,
+      current_place = case when ${set("currentPlace")} then ${d.currentPlace ?? null} else current_place end,
+      current_pincode = case when ${set("currentPincode")} then ${d.currentPincode ?? null} else current_pincode end,
+      permanent_address = case when ${set("permanentAddress")} then ${d.permanentAddress ?? null} else permanent_address end,
+      permanent_place = case when ${set("permanentPlace")} then ${d.permanentPlace ?? null} else permanent_place end,
+      permanent_pincode = case when ${set("permanentPincode")} then ${d.permanentPincode ?? null} else permanent_pincode end,
+      nationality = case when ${set("nationality")} then ${d.nationality ?? null} else nationality end,
+      blood_group = case when ${set("bloodGroup")} then ${d.bloodGroup ?? null} else blood_group end,
+      employment_status = case when ${set("employmentStatus")} then ${d.employmentStatus ?? null} else employment_status end,
+      qualification = case when ${set("qualification")} then ${d.qualification ?? null} else qualification end,
+      father_name = case when ${set("fatherName")} then ${d.fatherName ?? null} else father_name end,
+      father_occupation = case when ${set("fatherOccupation")} then ${d.fatherOccupation ?? null} else father_occupation end,
+      father_phone = case when ${set("fatherPhone")} then ${d.fatherPhone ?? null} else father_phone end,
+      mother_name = case when ${set("motherName")} then ${d.motherName ?? null} else mother_name end,
+      mother_occupation = case when ${set("motherOccupation")} then ${d.motherOccupation ?? null} else mother_occupation end,
+      mother_phone = case when ${set("motherPhone")} then ${d.motherPhone ?? null} else mother_phone end,
+      guardian_name = case when ${set("guardianName")} then ${d.guardianName ?? null} else guardian_name end,
+      guardian_relation = case when ${set("guardianRelation")} then ${d.guardianRelation ?? null} else guardian_relation end,
+      guardian_phone = case when ${set("guardianPhone")} then ${d.guardianPhone ?? null} else guardian_phone end,
+      guardian_occupation = case when ${set("guardianOccupation")} then ${d.guardianOccupation ?? null} else guardian_occupation end,
+      version = version + 1
+      where person_id = ${personId}::uuid and version = ${v}`;
+      if (n !== 1) throw invalid("details", "changed since you opened them; reload the page");
+      return { version: v + 1, changed };
+    }), (r) => ({ fields: r.changed }));
 }

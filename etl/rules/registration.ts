@@ -1,5 +1,5 @@
 // Registration mapping rule (design: "Entities in P8"): legacy course rows under their imported admission.
-import { isoDate, normCode, PersonError } from "../../src/server/people";
+import { isoDate, normCode, PersonError } from "../../src/server/person-rules";
 import { targetName } from "../ids";
 import { SOURCE_SYSTEM, type Ctx, type RawRow, type Result, type RuleError, type Rule } from "../types";
 
@@ -13,7 +13,7 @@ const admissionParent = (row: RawRow) => {
 };
 
 export const registration = {
-  id: "registration", version: 3, owner: "Certification", sourceTable: TABLE, entities: ["registration"],
+  id: "registration", version: 4, owner: "Certification", sourceTable: TABLE, entities: ["registration"],
   description: "Legacy course rows to registrations under their imported admission; status by STATUS_MAP",
   dispositions: { registration: ["IMPORTED", "REJECTED"] },
   parent: { registration: admissionParent },

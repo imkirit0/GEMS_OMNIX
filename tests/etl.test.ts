@@ -68,6 +68,14 @@ describe("migration framework units", () => {
     expect(old.get("2")!["registration"]).toMatchObject({ disposition: "IMPORTED", target: { row: { course_code: "OLD" } } });
   });
 
+  test("the hash covers what the rules load: person-rules.ts imports nothing; rules import only it, ids and types", () => {
+    expect(fs.readFileSync("src/server/person-rules.ts", "utf8")).not.toMatch(/^\s*import\b/m);
+    for (const f of fs.readdirSync("etl/rules")) {
+      const from = [...fs.readFileSync(path.join("etl/rules", f), "utf8").matchAll(/from "([^"]+)"/g)].map((m) => m[1]);
+      expect(from.filter((m) => !["../../src/server/person-rules", "../ids", "../types"].includes(m!)), f).toEqual([]);
+    }
+  });
+
   test("T-MIG-005 K5 and strictness and run status are pure functions", () => {
     const row = (k: string, d: KeyMapRow["disposition"]): KeyMapRow => ({ entity: "e", source_key: k, disposition: d, target_table: "t", target_id: k, survivor_target_id: null, reason: null });
     expect(k5([row("a", "SPLIT"), row("a", "SPLIT"), row("b", "SPLIT")], { e: 2 })[0]).toMatchObject({ expected: 2, actual: 1, passed: false });
@@ -199,7 +207,7 @@ describe("refusals and confinement (G5, G6)", () => {
     await asAdmin(async (db) => { await db.query(RESET_SQL); await db.query(`update migration.rule set code_hash = 'x' where rule_id = 'centre'`); });
     const e = await run({ mode: "dry", asOf: AS_OF, artifactDir: tmp() }).catch((x) => x);
     expect(e).toBeInstanceOf(RunRefused);
-    expect((e as RunRefused).reasons).toEqual(["rule centre v3: code changed; give it a new version"]);
+    expect((e as RunRefused).reasons).toEqual(["rule centre v4: code changed; give it a new version"]);
   });
 
   test("an existing counter and a non-empty database are refused", async () => {

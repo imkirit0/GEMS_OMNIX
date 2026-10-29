@@ -3,5 +3,5 @@
 -- so the sequence dry run -> approve -> reset -> cutover run works on one database.
 truncate raw.legacy_centre, raw.legacy_admission, raw.legacy_course_row,
   migration.key_map, migration.exception, migration.reconciliation, migration.run,
-  app.registration, app.admission, app.person;
+  app.registration, app.admission, app.person_detail, app.person;
 delete from app.global_number_series where series in ('REGISTER', 'ADMISSION');

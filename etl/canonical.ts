@@ -27,7 +27,7 @@ export function fingerprint(value: string | null, salt: string): string | null {
 }
 
 /** The rule's own file plus the code it reaches; repo-relative POSIX paths, read from the repository root. */
-export const HASHED_WITH_EVERY_RULE = ["src/server/people.ts", "etl/ids.ts"];
+export const HASHED_WITH_EVERY_RULE = ["src/server/person-rules.ts", "etl/ids.ts"]; // learner-details Z3: exactly what the rules import
 export function codeHash(ruleFile: string): string {
   const files = [...new Set([ruleFile, ...HASHED_WITH_EVERY_RULE])].sort(codePointCompare);
   const h = createHash("sha256");

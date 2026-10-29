@@ -17,7 +17,7 @@ export const AUDIT_CATALOGUE = [
   "ticket.category.create", "ticket.type.create", "ticket.type.update", "ticket.type.levels", "ticket.type.viewers",
   "ticket.type.activate", "ticket.type.deactivate",
   // person core (src/server/people.ts)
-  "person.admit",
+  "person.admit", "person.details.update",
   // catalogue (src/server/catalogue.ts)
   "catalogue.create", "catalogue.update", "catalogue.activate", "catalogue.deactivate",
   // migration runs (etl/run.ts)

@@ -57,13 +57,15 @@ describe("database isolation (T-RLS)", () => {
     }
   });
 
-  test("T-RLS-002 person (no centre_id) has ENABLE+FORCE RLS with select, insert and update policies and no delete", async () => {
-    const [r] = await asAdmin((db) => db.query(`
-      select c.relrowsecurity rls, c.relforcerowsecurity force,
-             array(select distinct cmd from pg_policies p where p.schemaname = 'app' and p.tablename = 'person') cmds
-      from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'app' and c.relname = 'person'`).then((q) => q.rows));
-    expect(r.rls && r.force).toBe(true);
-    expect([...r.cmds].sort()).toEqual(["INSERT", "SELECT", "UPDATE"]);
+  test("T-RLS-002 person and person_detail (no centre_id) have ENABLE+FORCE RLS with select, insert and update policies and no delete", async () => {
+    for (const t of ["person", "person_detail"]) {
+      const [r] = await asAdmin((db) => db.query(`
+        select c.relrowsecurity rls, c.relforcerowsecurity force,
+               array(select distinct cmd from pg_policies p where p.schemaname = 'app' and p.tablename = $1) cmds
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'app' and c.relname = $1`, [t]).then((q) => q.rows));
+      expect(r.rls && r.force, t).toBe(true);
+      expect([...r.cmds].sort(), t).toEqual(["INSERT", "SELECT", "UPDATE"]);
+    }
   });
 
   test("T-RLS-005 definer functions: inventory, fixed search_path, owner bypasses RLS; scope truth table", async () => {

@@ -15,7 +15,7 @@ import { centre } from "./rules/centre";
 import { registration } from "./rules/registration";
 import { SOURCE_SYSTEM, type Ctx, type RawRow, type Result, type Rule, type RuleError } from "./types";
 
-/** The fixed rule registry: each rule with its file, which (with people.ts and ids.ts) forms its code hash. */
+/** The fixed rule registry: each rule with its file, which (with person-rules.ts and ids.ts) forms its code hash. */
 export const RULES: { rule: Rule; file: string }[] = [
   { rule: centre, file: "etl/rules/centre.ts" },
   { rule: admission, file: "etl/rules/admission.ts" },

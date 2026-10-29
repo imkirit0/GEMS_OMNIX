@@ -15,21 +15,21 @@ datasource db {
 // ---------- Organisation (FR-033.04/.05, FR-022/023; hierarchy semantics open: D-ORG-5) ----------
 
 model Region {
-  id      Int     @id @default(autoincrement())
-  code    String  @unique
-  name    String
-  areas   Area[]
-  scopes  RoleAssignment[]
+  id     Int              @id @default(autoincrement())
+  code   String           @unique
+  name   String
+  areas  Area[]
+  scopes RoleAssignment[]
 
   @@map("region")
   @@schema("app")
 }
 
 model Area {
-  id       Int      @id @default(autoincrement())
-  regionId Int      @map("region_id")
+  id       Int              @id @default(autoincrement())
+  regionId Int              @map("region_id")
   name     String
-  region   Region   @relation(fields: [regionId], references: [id])
+  region   Region           @relation(fields: [regionId], references: [id])
   centres  Centre[]
   scopes   RoleAssignment[]
 
@@ -46,17 +46,17 @@ enum CentreStatus {
 }
 
 model Centre {
-  id           Int          @id @default(autoincrement())
-  code         String       @unique
-  name         String
-  areaId       Int          @map("area_id")
-  centreClassId Int?        @map("centre_class_id") // FR-033.06; set by the Stage 3 centre form (catalogue DD-7)
+  id              Int              @id @default(autoincrement())
+  code            String           @unique
+  name            String
+  areaId          Int              @map("area_id")
+  centreClassId   Int?             @map("centre_class_id") // FR-033.06; set by the Stage 3 centre form (catalogue DD-7)
   // D-ORG-1 default (UNAPPROVED): centres are created inactive and activated through a checklist
-  status       CentreStatus @default(INACTIVE)
-  area         Area         @relation(fields: [areaId], references: [id])
-  centreClass  CentreClass? @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  scopes       RoleAssignment[]
-  numberSeries NumberSeries[]
+  status          CentreStatus     @default(INACTIVE)
+  area            Area             @relation(fields: [areaId], references: [id])
+  centreClass     CentreClass?     @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  scopes          RoleAssignment[]
+  numberSeries    NumberSeries[]
   tickets         Ticket[]
   ticketLevels    TicketLevel[]
   ticketEvents    TicketEvent[]
@@ -79,43 +79,43 @@ enum UserStatus {
 }
 
 model AppUser {
-  id          String           @id @default(uuid()) @db.Uuid
-  login       String           @unique
-  displayName String           @map("display_name")
-  status      UserStatus       @default(ACTIVE)
-  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  id                      String             @id @default(uuid()) @db.Uuid
+  login                   String             @unique
+  displayName             String             @map("display_name")
+  status                  UserStatus         @default(ACTIVE)
+  createdAt               DateTime           @default(now()) @map("created_at") @db.Timestamptz
   // Authentication (ADR-001, candidate B). Hash is argon2id; TOTP secret is AES-256-GCM (AUTH_ENC_KEY).
-  passwordHash  String?  @map("password_hash")
-  requiresTotp  Boolean  @default(false) @map("requires_totp")
-  totpSecretEnc String?  @map("totp_secret_enc")
-  totpLastStep  BigInt?  @map("totp_last_step") // last accepted 30 s step: replay protection
+  passwordHash            String?            @map("password_hash")
+  requiresTotp            Boolean            @default(false) @map("requires_totp")
+  totpSecretEnc           String?            @map("totp_secret_enc")
+  totpLastStep            BigInt?            @map("totp_last_step") // last accepted 30 s step: replay protection
   // second-factor brute-force guard (TOTP + recovery codes), across challenges
-  secondFactorFailures    Int       @default(0) @map("second_factor_failures")
-  secondFactorLockedUntil DateTime? @map("second_factor_locked_until") @db.Timestamptz
-  assignments   RoleAssignment[]
-  sessions      AppSession[]
-  challenges    AuthChallenge[]
-  recoveryCodes AuthRecoveryCode[]
-  resets        AuthReset[]
-  ticketTypeLevels  TicketTypeLevel[]
-  ticketTypeViewers TicketTypeViewer[]
-  ticketsRaised     Ticket[]      @relation("ticketRaisedBy")
-  ticketsAssigned   Ticket[]      @relation("ticketAssignedUser")
-  ticketLevels      TicketLevel[]
-  ticketEventsActed TicketEvent[] @relation("ticketEventActor")
-  ticketEventsTo    TicketEvent[] @relation("ticketEventToUser")
-  ticketUploads     TicketUpload[]
+  secondFactorFailures    Int                @default(0) @map("second_factor_failures")
+  secondFactorLockedUntil DateTime?          @map("second_factor_locked_until") @db.Timestamptz
+  assignments             RoleAssignment[]
+  sessions                AppSession[]
+  challenges              AuthChallenge[]
+  recoveryCodes           AuthRecoveryCode[]
+  resets                  AuthReset[]
+  ticketTypeLevels        TicketTypeLevel[]
+  ticketTypeViewers       TicketTypeViewer[]
+  ticketsRaised           Ticket[]           @relation("ticketRaisedBy")
+  ticketsAssigned         Ticket[]           @relation("ticketAssignedUser")
+  ticketLevels            TicketLevel[]
+  ticketEventsActed       TicketEvent[]      @relation("ticketEventActor")
+  ticketEventsTo          TicketEvent[]      @relation("ticketEventToUser")
+  ticketUploads           TicketUpload[]
 
   @@map("app_user")
   @@schema("app")
 }
 
 model Role {
-  id          Int              @id @default(autoincrement())
-  key         String           @unique
-  name        String
-  permissions RolePermission[]
-  assignments RoleAssignment[]
+  id                Int                @id @default(autoincrement())
+  key               String             @unique
+  name              String
+  permissions       RolePermission[]
+  assignments       RoleAssignment[]
   ticketTypeLevels  TicketTypeLevel[]
   ticketTypeViewers TicketTypeViewer[]
   ticketLevels      TicketLevel[]
@@ -178,11 +178,11 @@ model RoleAssignment {
 // Opaque session token; only its SHA-256 is stored. The scope of every DB transaction derives from it.
 // ADR-001 (authentication) decides how sessions are created; this table is what RLS trusts.
 model AppSession {
-  tokenHash Bytes     @id @map("token_hash")
-  userId    String    @map("user_id") @db.Uuid
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  expiresAt DateTime  @map("expires_at") @db.Timestamptz
-  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  tokenHash  Bytes     @id @map("token_hash")
+  userId     String    @map("user_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz
   stepUpAt   DateTime? @map("step_up_at") @db.Timestamptz
   lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz // idle timeout
   user       AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -549,19 +549,51 @@ enum RegistrationStatus {
 // Network-wide: no centre_id. Visible only through an admission in scope (RLS, migration 0011).
 // No Aadhaar, religion, caste or disability until D-SEC-4 is signed.
 model Person {
-  id          String     @id @db.Uuid
-  givenName   String     @map("given_name")
-  familyName  String?    @map("family_name")
+  id          String        @id @db.Uuid
+  givenName   String        @map("given_name")
+  familyName  String?       @map("family_name")
   gender      Gender?
-  dateOfBirth DateTime?  @map("date_of_birth") @db.Date
+  dateOfBirth DateTime?     @map("date_of_birth") @db.Date
   mobile      String?
   email       String?
-  matchKey    String?    @map("match_key") // set by trigger app.person_set_match_key()
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  matchKey    String?       @map("match_key") // set by trigger app.person_set_match_key()
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
   admissions  Admission[]
+  detail      PersonDetail?
 
   @@index([matchKey])
   @@map("person")
+  @@schema("app")
+}
+
+// Contact and family details, one row per person at most (docs/designs/learner-details; checks, RLS and grants in 0015).
+// Identity stays on person, changed only by changeIdentity(); details are edited by updateDetails().
+model PersonDetail {
+  personId           String  @id @map("person_id") @db.Uuid
+  currentAddress     String? @map("current_address")
+  currentPlace       String? @map("current_place")
+  currentPincode     String? @map("current_pincode")
+  permanentAddress   String? @map("permanent_address")
+  permanentPlace     String? @map("permanent_place")
+  permanentPincode   String? @map("permanent_pincode")
+  bloodGroup         String? @map("blood_group")
+  employmentStatus   String? @map("employment_status")
+  qualification      String? @map("qualification")
+  fatherName         String? @map("father_name")
+  fatherOccupation   String? @map("father_occupation")
+  fatherPhone        String? @map("father_phone")
+  motherName         String? @map("mother_name")
+  motherOccupation   String? @map("mother_occupation")
+  motherPhone        String? @map("mother_phone")
+  guardianName       String? @map("guardian_name")
+  guardianRelation   String? @map("guardian_relation")
+  guardianPhone      String? @map("guardian_phone")
+  guardianOccupation String? @map("guardian_occupation")
+  nationality        String?
+  version            Int     @default(1)
+  person             Person  @relation(fields: [personId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("person_detail")
   @@schema("app")
 }
 
