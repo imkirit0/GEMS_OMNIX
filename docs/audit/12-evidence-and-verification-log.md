@@ -1576,7 +1576,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 - **Mutation checks** (`evidence/mutation-course-batches-2026-10-30.txt`): 58 in total (28 code, 28 database, 1 migration text, 1 real-server).
   - 56 are CAUGHT. Four were MISSED at first: three became CAUGHT after the tests were tightened, and 38 stayed MISSED.
   - 2 are equivalent, both blocked by a second layer: 38 (another centre's batch, refused by RLS, the guard or the key) and 48 (the page's centre check, which the server's own `student.view` gate backs).
-- **Checks:** a fresh clone of `e48e0fc` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0: no drift; 0 type errors; **191 passed + 3 todo** (21 files); build and bundle scan; admin journey and all security smoke checks passed (`evidence/ci-course-batches-2026-10-30.txt`).
+- **Checks:** a fresh clone of `e48e0fc` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0: no drift; 0 type errors; **191 passed + 3 todo** (21 files); build and bundle scan; admin journey and all security smoke checks passed (`evidence/ci-course-batches-2026-10-30.txt`). Confirmed on GitHub: run 40948572482 for `c8412dd` succeeded.
 - **Limits and next steps:**
   - Custom batches and time slots, weekdays, faculty, attendance and reports come later (Stage 7).
   - Lowering capacity is checked only in the app.
