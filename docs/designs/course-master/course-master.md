@@ -181,7 +181,7 @@ One `adminWrite` with the literal action `catalogue.course.classes` (`targetType
 4.  **DD-4: Admin list and edit pages** (design owner, 2026-10-29).
 5.  **DD-5: Department is free text** until a department master exists.
 6.  **DD-6: A Keltron course must carry a share between 0 and 100;** other courses carry none.
-7.  **DD-7: With enforcement on, a centre without a class may sell no course** (fail closed), so switching it on requires every centre to have a class.
+7.  **DD-7: With enforcement on, a centre without a class may sell no course** (fail closed), so switching it on requires every centre to have a class. *(Amended by certifications DD-3, 2026-10-29: a centre without a class sells exactly the courses that name it.)*
 8.  **DD-8: The pages live under `/admin/catalogue/courses`;** the course list is readable by any signed-in user, edits need `catalogue.manage`.
 9.  **DD-9: Availability by centre class only;** special cases by region, area or centre (R-090.01) come later.
 10. **DD-10: Duration fields are stored as given** (type plus up to four counts); the summary shown is computed, not stored.

@@ -1,7 +1,7 @@
 # Certifications and special-case availability (Stage 3, seventh piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-4 were taken as the recommended options under the owner's standing instruction of 2026-10-29 ("agree on the recommended option and work on everything planned"); build approval follows the EGM review (steps 5–9).
+*   **Status:** Proposed. DD-1…DD-4 were taken as the recommended options under the owner's standing instruction of 2026-10-29 ("agree on the recommended option and work on everything planned"); build approval follows the EGM review (steps 5–9). Steps 5–7 ran in parallel: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`. Statements in the Technical Plan without a class are PRO; every seeded or fixed list is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -149,6 +149,94 @@ A centre without a class can therefore still sell a course that names it. The ag
 *   **Errors.** `AdminErrors` with labels `certifications: "Certifications"`, `centres: "Special-case centres"`, `type: "Type"` and `description: "Description"`, added to the label maps.
 *   **Mapping.** For `op=certifications`, the items are built from `data.getAll("certificationId")`, with `mandatory` set where `f["mandatory:<id>"] === "1"`. For `op=centres`, the ids are `data.getAll("centreId").map(Number)`.
 
+### Contracts (steps 5–7: Z-, C- and D- findings; binding for the build)
+
+Steps 5, 6 and 7 ran in parallel on commit `1f1043e`; their findings are merged here. See [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md) and [`critic_report.md`](critic_report.md).
+
+*   **Course-master DD-7 is amended (Z2, C1, D1).**
+    *   Old rule: a centre without a class sells nothing.
+    *   New rule: such a centre sells exactly the courses that name it.
+    *   Course-master DD-7 gets an "amended by certifications DD-3" note, and the comments in `people.ts` and `course-offer.ts` are updated.
+    *   `OfferCourse` becomes `{ code; name; classCodes: string[]; centreIds: number[] | null }` (required).
+    *   `offeredCourses` loses its early `return []`:
+
+        ```ts
+        if (!enforced || !centre) return courses;
+        const k = centre.classCode;
+        return courses.filter((c) => c.centreIds !== null ? c.centreIds.includes(centre.id) : k !== null && c.classCodes.includes(k));
+        ```
+*   **`admitOptions` (C2, D3, D4).** Both arrays become correlated subqueries; no extra join, so no fan-out:
+    *   `classCodes`: `array(select k.code from app.course_centre_class cc join app.centre_class k on k.id = cc.centre_class_id and k.active where cc.course_id = co.id order by k.code)`.
+    *   `centreIds`: `case when exists (select 1 from app.course_centre x where x.course_id = co.id) then array(select x.centre_id from app.course_centre x where x.course_id = co.id and x.centre_id = any (app.scoped_centre_ids('student.admit')) order by x.centre_id) else null end`.
+    *   Only the caller's own named centres are sent to the browser. An empty array stays `[]`: the course is not sellable here. It never becomes `null`, which would mean the class rule applies.
+*   **`getCourse` shape (C3, C4, Z1, C5, D2).** It returns:
+
+    ```ts
+    { course: CourseRow & { classes; certifications: { id, code, name, type, mandatory, active }[] (by code);
+        centres: { id, code, name }[] (by code; the visible ones); specialCase: boolean; hiddenCentres: number },
+      categories, divisions, classes, certificationPicklist: { id, code, name, type, active }[], centrePicklist: { id, code, name }[], canManage }
+    ```
+
+    *   `centres` joins `app.centre`, so it lists only centres visible under its RLS. Centre names are scope data.
+    *   `specialCase` and `hiddenCentres` are counted from `course_centre`, which is readable by everyone: `hiddenCentres` is the named centres minus the visible ones.
+    *   The page shows "Only named centres may sell it", the visible list, and "and N centres outside your scope" when `hiddenCentres > 0`.
+    *   Non-managers get both picklists as `[]`.
+    *   `COURSE_BASE` and `COURSE_COLS` do not change, so the whole-row audits stay as they are.
+    *   `CourseListRow` gains `specialCase` via `exists (select 1 from app.course_centre x where x.course_id = co.id) as "specialCase"`.
+    *   Existing tests stay green unchanged:
+        *   T-CM-001 (audits);
+        *   T-CM-003, whose counts stay [2, 8] because no fixture course has named centres;
+        *   T-CM-005;
+        *   T-ADM-001 (centres).
+*   **Certification checks and messages (C8, Z3).**
+
+    | Check | Rule |
+    |---|---|
+    | `certification_code_check` | The 0012 code rule |
+    | `certification_name_check` | `name = btrim(name) and char_length(name) between 1 and 200` |
+    | `certification_type_check` | `type in ('VOUCHER','LICENCE')` |
+    | `certification_description_check` | `description = btrim(description)`, `char_length` 1–1000, and no characters in the 0015 `ctl_address` set |
+
+    *   The app validates in the order code, name, type, description.
+    *   For the description it trims, then checks the length (`description: 1-1000 characters`), then the characters (`description: invalid characters`, also for lone surrogates).
+    *   One shared multiline-text helper replaces the copy in `enquiry.ts` (Z3): `ownText` and its character sets move to `src/server/text-rules.ts`, which imports nothing, and both modules import it.
+    *   Prisma maps `type` as `String`.
+*   **Shapes and returns (C10).**
+    *   An item that is not a non-null object gives `certifications: invalid`.
+    *   `createCertification` returns `{ id, code }`. The other writes return `undefined`.
+    *   `updateCertification` audits the whole row before and after.
+    *   `setCertificationActive` refuses with "already active" / "already inactive".
+    *   It stays its own function (Z4: `createMaster` cannot fill `type`).
+*   **Routes (C6, C7, D6).**
+    *   `POST /admin/catalogue/certifications/save` takes the fields `op`, `id`, `code`, `name`, `type` (select), `description`, `active`, `reason`.
+
+        | `op` | Call |
+        |---|---|
+        | create | `description` is `f.description?.trim() ? f.description : undefined` |
+        | update | `{ name, type, description: trimmed ? f.description : null }`; an unchanged form gives "nothing to change" |
+        | active | `flag("active", f.active)` |
+
+    *   Course `op=certifications`: `items = data.getAll("certificationId").map((v) => ({ certificationId: Number(v), mandatory: f[\`mandatory:${v}\`] === "1" }))`. The Mandatory checkbox has `value="1"`. A Mandatory ticked without Carries is ignored.
+    *   Course `op=centres`: `data.getAll("centreId").map(Number)`.
+*   **Labels and parity (C11).**
+    *   `MASTER_FIELD_LABELS` gains `type` and `description`; `COURSE_FIELD_LABELS` gains `certifications` and `centres`.
+    *   An unknown certification id redirects with `?error=notfound`; the course page keeps its 404 parity.
+    *   Centre ids are read without a lock: centres are never deleted, and the FK guards them.
+    *   A non-manager's SQL insert into a link table gives 42501; their delete affects 0 rows.
+*   **Caps (D7).** At most 500 named centres per course, against 386 legacy centres (E-021). A larger network raises the cap in one constant.
+*   **RLS comment (D5).** Migration 0019 and the T-RLS-002 test say why `course_centre_select` is `using (true)`: it is catalogue data, and centre names stay gated by `app.centre`.
+*   **Fixtures (Z5).** `reset()` adds only `app.certification` to its truncate; the link tables cascade from `course`.
+*   **T-CC-003 setup (C9, D3, Z6).**
+    *   Token: `ST_TOKEN.sr` (centres A and A2).
+    *   Classes: A gets METRO; A2 has none.
+    *   `course_centre_class`: (DCA, METRO) and (TALLY, METRO).
+    *   Named centres: DCA → [A2]; PYTHON → [A]; CCNA → [B] (outside `sr`'s scope).
+    *   `admitOptions` `centreIds` are `{ CCNA: [], DCA: [2], DTP: null, PYTHON: [1], TALLY: null }`.
+    *   Agreement over A and A2 × the five courses: accepted 3 (DCA@A2, PYTHON@A, TALLY@A), refused 7. Each branch (named and class) has at least one accepted and one refused.
+    *   DCA@A is refused although the class matches.
+    *   `listCourses` marks DCA, PYTHON and CCNA `specialCase`.
+    *   A user scoped to centre A sees DCA's centres as `[]` with `hiddenCentres: 1`.
+
 ### Tests (`tests/certifications.test.ts`, the course-master harness)
 
 | ID | Goal | What it does | Expected |
@@ -175,7 +263,7 @@ A centre without a class can therefore still sell a course that names it. The ag
 
 1.  **DD-1: Certifications are a master page with a fixed type list (VOUCHER, LICENCE),** behind `catalogue.manage` (recommended option, owner's standing instruction, 2026-10-29).
 2.  **DD-2: One course–certification link with a `mandatory` flag,** edited on the course page and audited as codes (recommended option, standing instruction, 2026-10-29).
-3.  **DD-3: Special cases are named centres; a course with named centres is offered only there (the class rule no longer applies to it);** region and area later; enforcement stays behind the existing switch (recommended option, standing instruction, 2026-10-29).
+3.  **DD-3: Special cases are named centres; a course with named centres is offered only there (the class rule no longer applies to it);** region and area later; enforcement stays behind the existing switch; this amends course-master DD-7 (a centre without a class sells exactly the courses that name it) (recommended option, standing instruction, 2026-10-29).
 4.  **DD-4: No exams or fees here** (recommended option, standing instruction, 2026-10-29).
 
 ## Alternatives Considered
