@@ -1308,7 +1308,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Admissions/PRO (6), PRO (1), Academics (1)
 - **Workflows (05):** WF-X15 Bulk imports; WF-X2 ID card generation; WF1 Enquiry to admission; WF7 Student data & course change
 - **Open decisions (04):** D-ADM-1, D-ADM-2, D-ADM-3, D-ADM-4, D-FEE-4, D-SCH-2, D-SEC-4, D-SEC-5, D-STU-1, D-STU-2, D-STU-3, D-STU-4
-- **Distinct acceptance tests (09):** 18
+- **Distinct acceptance tests (09):** 22
 
 #### FR-095: Student correction tickets (FNC, LNC, MNC, GPC, FPC, SMS, GDR, EMC, GNC, NC), CSC, CC
 
@@ -1369,7 +1369,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Admissions/PRO |
 | Open decisions | D-SEC-4 |
-| Acceptance tests | T-AUD-005 |
+| Acceptance tests | T-AUD-005, T-LD-001, T-LD-002, T-LD-003, T-LD-004 |
 | Workflows | WF1 Enquiry to admission |
 | Data migration | IMPORTED with normalisation |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

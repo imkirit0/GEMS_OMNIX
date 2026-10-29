@@ -149,7 +149,15 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-ADM-003 | Errors keep the values | Field errors land on the right input and course row; other errors are form messages; DOB and mobile required for a new person; a lost connection at COMMIT says "submit again" and keeps the form id; an Origin-less post is refused |
 | T-ADM-004 | List and view scope | Only learners at centres in the caller's `student.view` scope; out-of-scope and malformed ids give 404; search terms travel only in POST bodies; LIKE characters literal; the search rate limit applies; no mobile in the list |
 | T-ADM-005 | Cross-site action posts | On the real server, a foreign-Origin and an Origin-less post write nothing; a same-origin post admits and answers 303 |
-| T-ADM-006 | Never admit twice | A resubmitted form (in turn, concurrently, before hydration) admits once and says "already saved", naming no one outside the caller's scope; one admission per person, centre and academic year; only the two action functions are exported |
+| T-ADM-006 | Never admit twice | A resubmitted form (in turn, concurrently, before hydration) admits once and says "already saved", naming no one outside the caller's scope; one admission per person, centre and academic year; only the three action functions are exported |
+
+### T-LD: learner details (`docs/designs/learner-details/learner-details.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-LD-001 | Details at admission | Saved with the admission for a new person (pincode, employment status, qualification required; "same as current" copies); for an existing learner saved only when none exist, otherwise ignored; the admit audit lists the fields written |
+| T-LD-002 | Editing details | A `student.view` and `student.admit` holder at a centre where the learner is admitted edits them; a stale version is refused; clearing works, required fields stay required; a missing input keeps its value; the audit row carries field names only; other callers get the 404 path |
+| T-LD-003 | Scope and integrity | Other centres cannot read or change details, also by direct SQL; identity and match key never change; concurrent first edits save once |
+| T-LD-004 | Values | App and database accept and refuse the same values (nationality: format only in the database), independent of the database locale; the migration reset clears details |
 
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
