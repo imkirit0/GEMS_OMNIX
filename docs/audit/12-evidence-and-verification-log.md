@@ -1185,3 +1185,32 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 |---|---|
 | tests/sql/audit-fault.sql | cb60220ec58b8bd029cb31bebe300864856115ce12e512355e2889045d89d392 |
 | evidence/ci-clean-clone-2026-10-29.txt | 6b397afb90a931784271eb42cb2e2d0928ec7900eac3532dd064b02ea2b3ebad |
+
+## E-037 Admission screens built (first Stage 3 piece) (2026-10-29)
+- **Request:** the design owner approved `docs/designs/admission-screens/admission-screens.md` for build (2026-10-29, "Approve, build it") after EGM review steps 5–9 (reports in the same folder; 16 owner decisions DD-1…DD-16). Built in phases A1–A4.
+- **A1 (documents):** audit 09 T-ADM-001…006; matrix links on R-150, R-001, R-229; CSV and FRD regenerated (0 errors).
+- **A2 (server):** migration `0014_admission_unique` (unique index `admission_person_centre_year_key`, DD-16; no drift). `people.ts`: `PersonError` gains `field`/`rule`; `AdmissionExists`; `AdmitInput.admissionId` (the form id as the admission's primary key, lower-cased; form lock `hashtext('admit-form:'||id)` and existence check first in the transaction, DD-10) and `confirmNew: string[]` (only shown candidates are dismissed); `personDb` maps `admission_pkey` and the DD-16 key; failure hook audits `person.admit` FAILED for `duplicate` (candidate ids) and `already_submitted` (DD-15); `getPerson` adds centre code and course name; `admitOptions()`, `listAdmissions()` (student.view scope, exact numbers, escaped name prefix, mobile, 100 rows, search rate limit), `istToday` exported. `pageRead()` maps `PersonError` notfound to 404; `hasOrigin()` for actions; `src/server/admission-form.ts` (`submitAdmission`: form mapping, errors to inputs or form messages, DOB/mobile required for a new person, "submit again" on a COMMIT-time connection loss). ETL: admission rule rejects a second admission of one person at one centre and year; all rules v3; P8 merge pairs pinned to different centres and a planted Vani pair. Existing tests adapted: T-PER-001 re-admits in 2027-28; `confirmNew` call sites; the duplicate refusal's FAILED row asserted.
+- **A3 (pages):** `/students` (newest 100; search by Server Action only, DD-13), `/students/new` (client form with `useActionState`, hidden form id from the state, "Admit" as the first submit button, duplicate list after it), `/students/[personId]`; "Students" link on the home page; actions files export only `admitAction` and `searchAction`.
+- **Tests:** `tests/admission-screens.test.ts`, 7 tests (T-ADM-001…004, 006, incl. a connection terminated at COMMIT by a deferred constraint trigger, the primary-key and existence-check paths of the guard, the `student.view` filters with an extra ticket role, the rate limit). Real server (`scripts/smoke-security.mjs`), 10 new checks: multipart action posts with the rendered $ACTION_* fields: foreign Origin 500 (Next), no Origin 404 (app), nothing written; same Origin 303 to the learner, one OK audit row; no personal data in the redirect; the same form re-posted before hydration says "already saved"; duplicate list with "Admit" first; learner 404 parity (other centre = missing; malformed 404); list without a GET search form.
+- **Mutation checks** (`evidence/mutation-admission-screens-2026-10-29.txt`): 20 vitest mutations, 1 database mutation and 3 real-server mutations, all caught; control run passed. A first real-server round wrongly reported two misses because a stale `next start` still held port 3101; repeated after stopping it by port.
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **147 passed + 3 todo** (13 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-admission-screens-2026-10-29.txt`).
+- **Limits:** unstyled pages (DD-2); existing person fields only (DD-1); no documents, fees, edits or enquiry conversion; the search scans the caller's admissions (index when a search exceeds 1 s); not yet on Supabase (migrations 0012–0014, the `gems_etl` grant).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0014_admission_unique/migration.sql | c9ad36d6e6615a0d1187789a4a3614324193a397b5d20e2c5fc54a9142bab6e2 |
+| src/server/people.ts | 18b3d43e3eed87f989face8ab282ee446cf7a21aba10c120d21177c5d9333bfb |
+| src/server/admission-form.ts | c765605bf8c9c8e3c89c46275943a25c40f4d28eb4a4e534be52d42bc7b65338 |
+| src/server/page-read.ts | 3c705f868b342a2815f8e016349997ed79075a17f78c6efcdd8689adc53ef0bf |
+| src/server/auth/http.ts | c1cfb1fdbaacb89fbf7b13cfa4b4914f3ad50b9a1b0344debee0c51e3d5a163b |
+| app/students/new/actions.ts | 816ab70c4047217a3350e64c94f0625556954270cbc6ec6226c9a4b6a8c8bbfd |
+| app/students/new/form.tsx | 82ad3e07d125ffae15254dad3d3a47addd3acfb18f80b01cc8b224afb8fff003 |
+| app/students/actions.ts | d244dab73f546b749dc5938db33a5772344c88b1a1fcc8915dabe593cbb02878 |
+| etl/rules/admission.ts | 060cd96cb697935eda7fe577dfbe457d68c715e7e245d1c9471113c34989828c |
+| etl/fixture.ts | c9d4d35862f241af7264cc45e883212ee94e576304574713422ab17b44e5b03d |
+| tests/admission-screens.test.ts | 68cd3b28e66d1a38cfd6c5d6e94046fe5a12ac66399f3d290eb46fab28bd7cc5 |
+| scripts/smoke-security.mjs | 8d943207a71d59aa76840e5efaa76516ad2fd168ccdada05e548ad227d67be10 |
+| evidence/mutation-admission-screens-2026-10-29.txt | 184bcaff55e26eb1de653ef2d3709c4b67d431f49dc454437d1f767e804e08d0 |
+| evidence/ci-admission-screens-2026-10-29.txt | d78597f3cf75df21c53bf8572ece2953059a459a21d2eda89f62cc724d56dfc5 |
