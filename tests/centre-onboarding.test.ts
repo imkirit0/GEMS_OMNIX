@@ -1,9 +1,12 @@
-// Centre onboarding: T-CO-001…003 (audit 09; docs/designs/centre-onboarding/centre-onboarding.md). T-CO-004 (routes) is
-// tests/centre-routes.test.ts.
+// Centre onboarding: T-CO-001…004 (audit 09; docs/designs/centre-onboarding/centre-onboarding.md). The /centres/new 404
+// for non-holders is a real-server smoke check (scripts/smoke-security.mjs).
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import pg from "pg";
+import { POST as createRoute } from "../app/centres/create/route";
+import { POST as saveRoute } from "../app/centres/[id]/save/route";
+import { POST as geoRoute } from "../app/centres/geography/save/route";
 import { Forbidden } from "../src/server/action";
-import { auth } from "../src/server/auth/http";
+import { auth, SESSION_COOKIE } from "../src/server/auth/http";
 import * as co from "../src/server/centres";
 import * as enq from "../src/server/enquiry";
 import { AdmissionExists, admit, admitOptions, getPerson, type AdmitInput } from "../src/server/people";
@@ -229,5 +232,48 @@ describe("T-CO centre onboarding", () => {
     expect(await enq.createEnquiry(SH, { ...enquiry, centreId: C.B })).toMatchObject({ id: expect.any(String) });
     await sql(`update app.centre set status = 'ACTIVE' where id = $1`, [C.A]);
     expect(await enq.createEnquiry(SH, enquiry)).toMatchObject({ id: expect.any(String) });
+  });
+
+  test("T-CO-004 routes: create, details, status and geography; step-up, origin, field details, unknown ops and ids", async () => {
+    const ORIGIN = "https://gems.test";
+    const post = (path: string, body: Record<string, string>, origin = ORIGIN, tok = M) => new Request(`${ORIGIN}${path}`, {
+      method: "POST", body: new URLSearchParams(body),
+      headers: { "content-type": "application/x-www-form-urlencoded", cookie: `${SESSION_COOKIE}=${tok}`, origin } });
+    const where = (r: Response) => { const u = new URL(r.headers.get("location") ?? "/", ORIGIN); return u.pathname + u.search; };
+    const form = { code: "kl9-05", name: "Routed", areaId: "2", email: "", phone: "98000 00005", address: "", category: "", gstSupply: "",
+      gstin: "", ownership: "OWN", agreementFrom: "", agreementTo: "", openedOn: "" };
+    expect(where(await createRoute(post("/centres/create", form)))).toBe("/centres/4?saved=1");
+    expect((await audit("org.centre.create"))[0].after).toMatchObject({ code: "KL9-05", email: null, phone: "9800000005", ownership: "OWN", gstEnabled: false });
+    expect(where(await createRoute(post("/centres/create", form)))).toBe("/centres/new?error=org.centre.duplicate");
+    expect(where(await createRoute(post("/centres/create", { ...form, code: "KL9-06", gstin: "x" })))).toBe("/centres/new?error=invalid&detail=gstin");
+    expect(where(await createRoute(post("/centres/create", { ...form, code: "KL9-06" }, ORIGIN, R1)))).toBe("/centres/new?error=forbidden");
+    expect((await createRoute(post("/centres/create", { ...form, code: "KL9-06" }, "https://evil.example"))).status).toBe(403);
+
+    const save = (id: string, b: Record<string, string>, origin?: string) => saveRoute(post(`/centres/${id}/save`, b, origin), { params: Promise.resolve({ id }) });
+    expect(where(await save("4", { op: "details", ...form, name: "Routed two", gstEnabled: "1" }))).toBe("/centres/4?saved=1");
+    expect((await audit("org.centre.update"))[0]).toMatchObject({ before: { name: "Routed", gstEnabled: false }, after: { name: "Routed two", gstEnabled: true } });
+    expect(where(await save("4", { op: "details", ...form, name: "Routed two", gstEnabled: "1" }))).toBe("/centres/4?error=invalid"); // nothing to change
+    expect(where(await save("4", { op: "details", ...form, phone: "" }))).toBe("/centres/4?error=invalid&detail=phone");
+    expect(where(await save("4", { op: "active", active: "1", reason: "go" }))).toBe("/centres/4?error=org.centre.checklist&detail=status");
+    expect(where(await save("4", { op: "active", active: "x", reason: "go" }))).toBe("/centres/4?error=invalid&detail=active");
+    expect(where(await save("1", { op: "active", active: "0", reason: "closing" }))).toBe("/centres/1?saved=1");
+    expect(where(await save("99", { op: "details", ...form }))).toBe("/centres/99?error=notfound");
+    expect(where(await save("4", { op: "nope" }))).toBe("/centres/4?error=invalid&detail=op");
+    expect((await save("x1", { op: "details" })).status).toBe(404);
+    expect((await save("4", { op: "details", ...form }, "https://evil.example")).status).toBe(403);
+
+    const geo = (b: Record<string, string>) => geoRoute(post("/centres/geography/save", b));
+    const G = "/centres/geography";
+    expect(where(await geo({ op: "region.create", code: "r3", name: "Region 3" }))).toBe(`${G}?saved=1`);
+    expect(where(await geo({ op: "region.create", code: "R3", name: "x" }))).toBe(`${G}?error=org.region.duplicate`);
+    expect(where(await geo({ op: "region.update", id: "3", name: "Region three" }))).toBe(`${G}?saved=1`);
+    expect(where(await geo({ op: "area.create", regionId: "3", name: "C1" }))).toBe(`${G}?saved=1`);
+    expect(where(await geo({ op: "area.create", regionId: "3", name: "C1" }))).toBe(`${G}?error=org.area.duplicate`);
+    expect(where(await geo({ op: "area.create", regionId: "x", name: "C2" }))).toBe(`${G}?error=invalid&detail=regionId`);
+    expect(where(await geo({ op: "area.update", id: "1", name: "" }))).toBe(`${G}?error=invalid&detail=name`);
+    expect(where(await geo({ op: "region.move" }))).toBe(`${G}?error=invalid&detail=op`);
+    await setStepUp(M, 3600);
+    expect(where(await geo({ op: "area.update", id: "1", name: "A one" }))).toBe(`/stepup?next=${encodeURIComponent(G)}`);
+    expect(where(await save("4", { op: "active", active: "0", reason: "r" }))).toBe(`/stepup?next=${encodeURIComponent("/centres/4")}`);
   });
 });

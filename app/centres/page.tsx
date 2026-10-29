@@ -1,5 +1,5 @@
 import { pageRead } from "@/server/page-read";
-import { listCentres } from "@/server/centres";
+import { canManageCentres, listCentres } from "@/server/centres";
 import { exportAllowed, RateLimited } from "@/server/exports";
 
 type Params = { q?: string; region?: string | string[]; area?: string | string[]; centre?: string | string[] };
@@ -8,15 +8,16 @@ const ids = (v?: string | string[]) => (v === undefined ? undefined : [v].flat()
 // Centre master list (FR-022). Only centres in the viewer's scope; URL filters can only narrow the list.
 export default async function Centres({ searchParams }: { searchParams: Promise<Params> }) {
   const p = await searchParams;
-  const [centres, canExport] = await pageRead((s) => Promise.all([
+  const [centres, canExport, canManage] = await pageRead((s) => Promise.all([
     // over the search limit: say so on the page (a page cannot answer 429 itself)
     listCentres(s, { q: p.q, regionIds: ids(p.region), areaIds: ids(p.area), centreIds: ids(p.centre) })
       .catch((e: unknown) => (e instanceof RateLimited ? null : Promise.reject(e))),
     exportAllowed(s, "centres"),
+    canManageCentres(s),
   ]));
   return (
     <main>
-      <p><a href="/">Home</a></p>
+      <p><a href="/">Home</a>{canManage && <> · <a href="/centres/new">New centre</a></>} · <a href="/centres/geography">Regions and areas</a></p>
       <h1>Centres</h1>
       <form method="get">
         <label>Search code or name <input name="q" defaultValue={p.q ?? ""} /></label>

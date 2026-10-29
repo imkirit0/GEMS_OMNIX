@@ -267,6 +267,10 @@ export async function updateArea(session: string | undefined, id: number, g: { n
     }), (x) => x).then(() => undefined);
 }
 
+/** For the "New centre" and "Regions and areas" links. */
+export const canManageCentres = (session: string | undefined) => withScope(session, async (tx) =>
+  (await tx.$queryRaw<{ ok: boolean }[]>`select app.has_permission('org.centre.manage', null) as ok`)[0]!.ok);
+
 /** Regions and areas for every signed-in user (select is open); canManage for the forms. */
 export const listGeography = (session: string | undefined) => withScope(session, async (tx) => ({
   regions: await tx.$queryRaw<{ id: number; code: string; name: string }[]>`select id, code, name from app.region order by code`,

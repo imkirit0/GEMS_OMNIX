@@ -171,6 +171,23 @@ try {
   check("T-CC a non-manager's course page names the special-case centre in scope", specialPage.includes("Only named centres may sell it")
     && specialPage.includes("SMK-A"));
 
+  // ---------- centre onboarding (T-CO: head office only creates and edits; the view shows the new fields) ----------
+  await db.query(`update app.centre set phone = '4842300001', ownership = 'OWN' where id = $1`, [ids.A]);
+  const centrePage = await get(`/centres/${ids.A}`, viewer);
+  const centreBody = await centrePage.text();
+  check("T-CO the centre view shows the new fields to a viewer, without forms", centrePage.status === 200 && centreBody.includes("4842300001")
+    && centreBody.includes("Own") && !centreBody.includes('method="post"'), String(centrePage.status));
+  const newCentre = await get("/centres/new", viewer);
+  check("T-CO the new-centre page is 404 for a non-manager", newCentre.status === 404, String(newCentre.status));
+  const geoPage = await get("/centres/geography", viewer);
+  const geoBody = await geoPage.text();
+  check("T-CO regions and areas readable by a non-manager, without forms", geoPage.status === 200 && geoBody.includes("Smoke A1")
+    && !geoBody.includes('method="post"'), String(geoPage.status));
+  const foreignCentre = await fetch(`${BASE}/centres/create`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${viewer}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ code: "EVIL", name: "Evil", areaId: "1", phone: "9800000000" }) });
+  check("T-CO centre create from a foreign origin is refused", foreignCentre.status === 403, String(foreignCentre.status));
+
   // ---------- catalogue masters pages (T-MS: everyone reads, no forms for non-managers; slugs; origin) ----------
   for (const [path, marker] of [["/admin/catalogue/masters/categories", "SMK"], ["/admin/catalogue/years", "2026-27"], ["/admin/catalogue/centres", "SMK-A"]]) {
     const r = await get(path, viewer);
