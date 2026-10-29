@@ -1332,7 +1332,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - Every route, including the error line rendered with crafted values.
   - Real server: 6 new checks (three pages readable without forms, manager forms, unknown slugs 404, a foreign-origin class change 403).
 - **Mutation checks** (`evidence/mutation-catalogue-masters-2026-10-29.txt`): 42 mutations (33 code, 6 database, 1 drift, 2 real-server), all caught. Five were not run, with the reasons in the file.
-- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **173 passed + 3 todo** (17 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-catalogue-masters-2026-10-29.txt`).
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **173 passed + 3 todo** (17 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-catalogue-masters-2026-10-29.txt`). Confirmed on GitHub: run 40870402557 for `eb349fc` succeeded.
 - **Limits:**
   - Class changes need no approval ticket until D-ORG-2 is signed.
   - The other R-020 masters wait.
