@@ -116,26 +116,29 @@ describe("T-CAT catalogue skeleton", () => {
 
     const audit = async (action: string) => (await rows(action)).filter((r) => r.outcome === "OK")
       .map((r) => ({ type: r.target_type, id: r.target_id, reason: r.reason, before: r.before, after: r.after }));
+    // course rows are audited whole, with the course-master fields at their defaults (course-master Z2, R1)
+    const D = cat.COURSE_DEFAULTS;
+    const javaSe = { id: 6, code: "JAVA", name: "Java SE", categoryId: 1, divisionId: 1, ...D };
     expect(await audit("catalogue.create")).toEqual([
       { type: "course_category", id: null, reason: null, before: null, after: { id: 2, code: "IT", name: "IT", active: true } },
-      { type: "course", id: null, reason: null, before: null, after: { id: 6, code: "JAVA", name: "Java", categoryId: 1, divisionId: 1, active: true } },
+      { type: "course", id: null, reason: null, before: null, after: { id: 6, code: "JAVA", name: "Java", categoryId: 1, divisionId: 1, active: true, ...D } },
       { type: "academic_year", id: "2029-30", reason: null, before: null, after: { code: "2029-30", startsOn: "2029-06-01", endsOn: "2030-05-31", open: true } },
     ]);
     expect(await audit("catalogue.update")).toEqual([
       { type: "course_category", id: "2", reason: null, before: { id: 2, code: "IT", name: "IT", active: true },
         after: { id: 2, code: "IT", name: "Information Technology", active: true } },
-      { type: "course", id: "6", reason: null, before: { id: 6, code: "JAVA", name: "Java", categoryId: 1, divisionId: 1, active: true },
-        after: { id: 6, code: "JAVA", name: "Java SE", categoryId: 1, divisionId: 1, active: true } },
+      { type: "course", id: "6", reason: null, before: { id: 6, code: "JAVA", name: "Java", categoryId: 1, divisionId: 1, active: true, ...D },
+        after: { ...javaSe, active: true } },
       { type: "academic_year", id: "2029-30", reason: null, before: { code: "2029-30", startsOn: "2029-06-01", endsOn: "2030-05-31", open: true },
         after: { code: "2029-30", startsOn: "2029-06-01", endsOn: "2030-04-30", open: true } },
     ]);
     expect(await audit("catalogue.deactivate")).toEqual([
       { type: "course_category", id: "2", reason: "merged", before: { active: true }, after: { active: false } },
-      { type: "course", id: "6", reason: "retired", before: { active: true }, after: { active: false } },
+      { type: "course", id: "6", reason: "retired", before: { ...javaSe, active: true }, after: { ...javaSe, active: false } },
       { type: "academic_year", id: "2029-30", reason: "closed for admissions", before: { open: true }, after: { open: false } },
     ]);
     expect(await audit("catalogue.activate")).toEqual([
-      { type: "course", id: "6", reason: "back in the catalogue", before: { active: false }, after: { active: true } },
+      { type: "course", id: "6", reason: "back in the catalogue", before: { ...javaSe, active: false }, after: { ...javaSe, active: true } },
     ]);
 
     // no permission: Forbidden, audited as DENIED; a stale step-up; an unknown kind before any database access

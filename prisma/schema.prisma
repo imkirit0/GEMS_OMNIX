@@ -665,30 +665,64 @@ model CourseDivision {
 }
 
 model CentreClass {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
+  id        Int                 @id @default(autoincrement())
+  code      String              @unique
   name      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  active    Boolean             @default(true)
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz
   centres   Centre[]
+  courses   CourseCentreClass[]
 
   @@map("centre_class")
   @@schema("app")
 }
 
 model Course {
-  id            Int            @id @default(autoincrement())
-  code          String         @unique
-  name          String
-  categoryId    Int            @map("category_id")
-  divisionId    Int            @map("division_id")
-  active        Boolean        @default(true)
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  category      CourseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  division      CourseDivision @relation(fields: [divisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  registrations Registration[]
+  id                Int                 @id @default(autoincrement())
+  code              String              @unique
+  name              String
+  categoryId        Int                 @map("category_id")
+  divisionId        Int                 @map("division_id")
+  active            Boolean             @default(true)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  category          CourseCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  division          CourseDivision      @relation(fields: [divisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  registrations     Registration[]
+  // course master (docs/designs/course-master/course-master.md); checks and grants in 0016
+  displayName       String?             @map("display_name")
+  department        String?
+  durationType      String?             @map("duration_type")
+  durationMonths    Int?                @map("duration_months")
+  durationWeeks     Int?                @map("duration_weeks")
+  durationDays      Int?                @map("duration_days")
+  durationHours     Int?                @map("duration_hours")
+  capacity          Int?
+  examMinDays       Int?                @map("exam_min_days")
+  sortOrder         Int                 @default(0) @map("sort_order")
+  visible           Boolean             @default(true)
+  materialsRequired Boolean             @default(false) @map("materials_required")
+  marklistRequired  Boolean             @default(false) @map("marklist_required")
+  noRegFee          Boolean             @default(false) @map("no_reg_fee")
+  itMagic           Boolean             @default(false) @map("it_magic")
+  keltron           Boolean             @default(false)
+  internshipKeltron Boolean             @default(false) @map("internship_keltron")
+  selected          Boolean             @default(false)
+  keltronShare      Decimal?            @map("keltron_share") @db.Decimal(5, 2)
+  classes           CourseCentreClass[]
 
   @@map("course")
+  @@schema("app")
+}
+
+// R-091: the centre classes a course may be sold at (course-master DD-2)
+model CourseCentreClass {
+  courseId      Int         @map("course_id")
+  centreClassId Int         @map("centre_class_id")
+  course        Course      @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centreClass   CentreClass @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([courseId, centreClassId])
+  @@map("course_centre_class")
   @@schema("app")
 }
 

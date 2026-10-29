@@ -1,0 +1,51 @@
+Course master mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-29, local Docker database.
+Code mutations: each applied, the named test run (vitest -t), the file restored. Database mutations of 0016 (15-18):
+applied to the local database as SQL, the named test run, the SQL restored, then no drift. 19: the drift gate
+(prisma migrate diff --exit-code). Page mutations (22-23): next build, fresh database, next start on 3101,
+scripts/smoke-security.mjs, the server stopped by port before and after. git status clean of mutations afterwards.
+Numbering follows the report's table; 4b, 7b and 26 are extra.
+
+CAUGHT 1 admit without visible
+CAUGHT 2 admitOptions without visible
+CAUGHT 3 availability join without k.active
+CAUGHT 4 enforceAvailability committed true
+CAUGHT 4b enforceAvailability true vs T-ADM-001
+CAUGHT 5 no class sells all
+CAUGHT 6 no float8 cast
+CAUGHT 7 share omitted from COURSE_COLS
+CAUGHT 7b share omitted vs T-CAT-003
+CAUGHT 8 getCourse share without case
+CAUGHT 9 share in listCourses
+CAUGHT 10 Keltron on the input, not the merged row
+CAUGHT 11 share rounded, not refused
+CAUGHT 12 inactive class newly added
+CAUGHT 13 assigned deactivated class refused
+CAUGHT 14 computed action name
+CAUGHT 20 adminPost without detail
+CAUGHT 21 detail for every message
+CAUGHT 24 durationSummary plural
+CAUGHT 25 durationHours range
+CAUGHT 26 form filter ignores enforcement
+CAUGHT 15 setup_delete using (true)
+CAUGHT 16 no force RLS
+CAUGHT 17 drop course_display_name_check
+CAUGHT 17 drop course_department_check
+CAUGHT 17 drop course_duration_type_check
+CAUGHT 17 drop course_duration_months_check
+CAUGHT 17 drop course_duration_weeks_check
+CAUGHT 17 drop course_duration_days_check
+CAUGHT 17 drop course_duration_hours_check
+CAUGHT 17 drop course_capacity_check
+CAUGHT 17 drop course_exam_min_days_check
+CAUGHT 17 drop course_sort_order_check
+CAUGHT 17 drop course_keltron_share_check
+CAUGHT 18 share not in the column grant
+CAUGHT 19 onUpdate Cascade (drift gate)
+CAUGHT 22 share shown to non-managers  | FAIL  T-CM-005 a non-manager's course page holds no share, in HTML or the RSC payload  (200)
+CAUGHT 23 /new reachable by a non-manager  | FAIL  T-CM an unknown course and the new-course page are 404 for a non-manager  (404 200)
+
+Result: 38 mutations (21 code incl. 4b, 7b and 26; 14 database; 1 drift; 2 real-server), all CAUGHT, none MISSED.
+Found while writing the tests, before any mutation run: the design's course_keltron_share_check let a KELTRON
+course with no share pass (a null check passes); fixed with 'keltron_share is not null' (T-CM-001).
+Not covered by an automated test: the admission form's client-side filtering after hydration (offeredCourses is
+unit-tested and agrees with admit(); admit() is the gate).

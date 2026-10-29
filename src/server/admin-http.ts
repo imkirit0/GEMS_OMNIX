@@ -30,7 +30,11 @@ export async function adminPost(req: Request, backTo: string | ((fields: Record<
   } catch (e) {
     if (e instanceof StepUpRequired) return seeOther(req, `/stepup?next=${encodeURIComponent(back)}`);
     if (e instanceof Forbidden) return seeOther(req, withError(back, "forbidden"));
-    if (e instanceof RbacError) return seeOther(req, withError(back, e.key ?? e.reason));
+    if (e instanceof RbacError) {
+      // "<field>: <rule>" names the field, which a page may label (course-master I8); never the rule text itself
+      const field = e.reason === "invalid" ? /^([A-Za-z]+):/.exec(e.message)?.[1] : undefined;
+      return seeOther(req, withError(back, e.key ?? e.reason) + (field ? `&detail=${field}` : ""));
+    }
     if (e instanceof TicketError) {
       const to = withError(back, `ticket.${e.reason}`);
       // the page looks a detail up in the handlers' fixed lists only, never shows it as such (DD-12)
@@ -58,6 +62,7 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "ticket.setup.duplicate": "A ticket type with that code already exists.",
   "ticket.setup.numbering": "Ticket types cannot be switched on until the ticket numbering policy is signed and its counter is set.",
   "ticket.setup.storage": "A type that needs documents cannot be switched on until document storage is approved (ADR-002) and its safeguards are in place.",
+  "catalogue.duplicate": "A course with that code already exists.",
   duplicate: "That login or key already exists.",
   notfound: "Not found.",
   invalid: "Some values were invalid. Check the scope fields.",

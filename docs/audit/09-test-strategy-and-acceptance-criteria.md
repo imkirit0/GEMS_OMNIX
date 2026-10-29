@@ -159,6 +159,16 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-LD-003 | Scope and integrity | Other centres cannot read or change details, also by direct SQL; identity and match key never change; concurrent first edits save once |
 | T-LD-004 | Values | App and database accept and refuse the same values (nationality: format only in the database), independent of the database locale; the migration reset clears details |
 
+### T-CM: course master (`docs/designs/course-master/course-master.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-CM-001 | Course fields | Create and update with every field; absent keeps, null clears; each field's message; Keltron and its share checked on the merged row; shares 1.1, 1.15, 4.35 and 100 accepted, 12.345 refused; direct inserts break each named check (23514 with the constraint name); whole-row audit with defaults; the duration summary |
+| T-CM-002 | Centre classes | A manager sets, changes and clears a course's classes, audited as codes; an inactive or unknown class newly added is refused, one deactivated after assignment is kept; duplicates and the same set refused; non-managers refused, also by direct SQL on a real row; RLS enabled and forced |
+| T-CM-003 | Availability | With the switch off every active, visible course is admitted; with it on only courses linked to the centre's active class, none for a centre without a class; `admit()` and the form's filter agree on every fixture centre and course; the committed switch is off |
+| T-CM-004 | Admin routes | Create, details, classes and active post through `adminPost` with step-up and same-origin; a field error carries `detail=<field>`, a prefix-less one none |
+| T-CM-005 | The share | A manager reads the KELTRON share; other users get none, from the course read and the list |
+| T-CM-006 | Invisible courses | Not offered and refused by `admit()` ("no such course"); an existing registration stays |
+
 ### T-COR: correction tickets (`docs/designs/correction-tickets/correction-tickets.md`)
 | ID | Test | Expected |
 |---|---|---|

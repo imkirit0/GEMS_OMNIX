@@ -11,6 +11,11 @@ import { ACADEMIC_YEAR_RULE, academicYearOk, ADMITTED_THIS_YEAR, identityField, 
   istToday, optText, PersonError, type Gender, type Identity, type StoredIdentity } from "./person-rules";
 export * from "./person-rules";
 import { DETAIL_COLUMN, DETAIL_KEYS, detailField, type DetailKey, type Details } from "./details";
+import type { OfferCentre, OfferCourse } from "./course-offer";
+
+// Course availability (course-master DD-2): recorded now, enforced only when this switch is on. Committed false;
+// tests that switch it reset it in afterEach.
+export const CATALOGUE_GATES = { enforceAvailability: false };
 
 // PMC (NP-2, NP-5, NP-7, NP-8): format pieces are parameters until the numbering owners sign.
 export const PERSON_POLICY = {
@@ -198,12 +203,18 @@ export async function getPerson(session: string | undefined, id: string): Promis
 /** What the admission form offers (admission-screens design). No centre with student.admit: Forbidden (the page 404s). */
 export async function admitOptions(session: string | undefined) {
   return withScope(session, async (tx) => {
-    const centres = await tx.$queryRaw<{ id: number; code: string; name: string }[]>`
-      select id, code, name from app.centre where id = any (app.scoped_centre_ids('student.admit')) order by code`;
+    const centres = await tx.$queryRaw<OfferCentre[]>`
+      select c.id, c.code, c.name, k.code as "classCode" from app.centre c left join app.centre_class k on k.id = c.centre_class_id
+      where c.id = any (app.scoped_centre_ids('student.admit')) order by c.code`;
     if (centres.length === 0) throw new Forbidden("student.admit denied");
     const years = await tx.$queryRaw<{ code: string }[]>`select code from app.academic_year where open order by code`;
-    const courses = await tx.$queryRaw<{ code: string; name: string }[]>`select code, name from app.course where active order by code`;
-    return { centres, years, courses, today: istToday() };
+    // classCodes: the active classes a course may be sold at, the same joins as admit() (DD-15, DD-16)
+    const courses = await tx.$queryRaw<OfferCourse[]>`
+      select co.code, co.name, coalesce(array_agg(k.code order by k.code) filter (where k.id is not null), '{}') as "classCodes"
+      from app.course co left join app.course_centre_class cc on cc.course_id = co.id
+        left join app.centre_class k on k.id = cc.centre_class_id and k.active
+      where co.active and co.visible group by co.id order by co.code`;
+    return { centres, years, courses, today: istToday(), enforced: CATALOGUE_GATES.enforceAvailability };
   });
 }
 
@@ -288,13 +299,25 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`admit-form:${admissionId}`}))`;
     const [used] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from app.admission where id = ${admissionId}::uuid`;
     if (used) throw new AdmissionExists();
-    // the catalogue: the year must be open and every course active; plain reads, no lock (catalogue DD-13)
+    // the catalogue: the year must be open and every course active and visible (course-master DD-12); plain reads,
+    // no lock (catalogue DD-13)
     const [year] = await tx.$queryRaw<{ open: boolean }[]>`select open from app.academic_year where code = ${input.academicYear}`;
     if (!year?.open) throw invalid("academicYear", "not open");
     const live = new Set((await tx.$queryRaw<{ code: string }[]>`
-      select code from app.course where code = any (${list.map((c) => c.courseCode)}::text[]) and active`).map((r) => r.code));
+      select code from app.course where code = any (${list.map((c) => c.courseCode)}::text[]) and active and visible`).map((r) => r.code));
     const missing = list.findIndex((c) => !live.has(c.courseCode));
     if (missing >= 0) throw invalid(`courses[${missing}].courseCode`, "no such course");
+    if (CATALOGUE_GATES.enforceAvailability) {
+      // the courses this centre's active class may sell; a centre without a class sells none (DD-7, DD-15)
+      const offered = new Set((await tx.$queryRaw<{ code: string }[]>`
+        select co.code from app.course co
+          join app.course_centre_class cc on cc.course_id = co.id
+          join app.centre_class k on k.id = cc.centre_class_id and k.active
+          join app.centre ce on ce.centre_class_id = k.id
+        where ce.id = ${input.centreId} and co.code = any (${list.map((c) => c.courseCode)}::text[])`).map((r) => r.code));
+      const refused = list.findIndex((c) => !offered.has(c.courseCode));
+      if (refused >= 0) throw invalid(`courses[${refused}].courseCode`, "not offered at this centre");
+    }
     if (fresh) {
       const [{ key } = { key: null }] = await tx.$queryRaw<{ key: string | null }[]>`
         select app.person_match_key(${fresh.givenName}, ${fresh.familyName}, ${fresh.dateOfBirth}::date, ${fresh.mobile}) as key`;

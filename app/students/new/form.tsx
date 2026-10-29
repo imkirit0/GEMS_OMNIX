@@ -1,25 +1,35 @@
 "use client";
 // The admit form (admission-screens design). Works before hydration: the browser posts it as a plain form and the
 // page re-renders with the action's returned state. Values live only in the POST body and that state, never a URL.
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import type { AdmitFormState } from "@/server/admission-form";
+import { offeredCourses } from "@/server/course-offer";
 import { DETAILS_NOTE } from "@/server/details";
+import type { admitOptions } from "@/server/people";
 import DetailsFields from "../details-fields";
 import { admitAction } from "./actions";
 
-type Options = { centres: { id: number; code: string; name: string }[]; years: { code: string }[];
-  courses: { code: string; name: string }[]; today: string };
+type Options = Awaited<ReturnType<typeof admitOptions>>;
 
 export default function AdmitForm({ options, initial, countries }: { options: Options; initial: AdmitFormState; countries: [string, string][] }) {
   const [state, action, pending] = useActionState(admitAction, initial);
   const v = (name: string, fallback = "") => state.values[name] ?? fallback;
   const err = (name: string) => state.fieldErrors[name] && <span role="alert"> {state.fieldErrors[name]}</span>;
   const row = { display: "block" } as const;
+  // course-master DD-16 (R6): with availability enforced, list only the chosen centre's courses. Before hydration, and
+  // with no centre chosen, every course is listed; admit() is the gate. A course select remounts when the centre
+  // changes, so a choice no longer offered is cleared without controlled state.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  const [centreId, setCentreId] = useState(v("centreId", options.centres.length === 1 ? String(options.centres[0]!.id) : ""));
+  const centre = hydrated ? options.centres.find((c) => String(c.id) === centreId) : null;
+  const offered = offeredCourses(options.courses, centre, options.enforced);
+  const course = (n: number) => { const c = v(`course.${n}.courseCode`); return offered.some((o) => o.code === c) ? c : ""; };
   return (
     // remounted per state, so every input shows the returned values
     <form action={action} key={JSON.stringify(state)}>
       <input type="hidden" name="admissionId" value={state.admissionId} />
-      <label style={row}>Centre <select name="centreId" defaultValue={v("centreId", options.centres.length === 1 ? String(options.centres[0]!.id) : "")}>
+      <label style={row}>Centre <select name="centreId" defaultValue={centreId} onChange={(e) => setCentreId(e.target.value)}>
         <option value="">Choose…</option>
         {options.centres.map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}
       </select>{err("centreId")}</label>
@@ -41,9 +51,9 @@ export default function AdmitForm({ options, initial, countries }: { options: Op
       {[1, 2, 3].map((n) => (
         <fieldset key={n}>
           <legend>Course {n}</legend>
-          <label>Course <select name={`course.${n}.courseCode`} defaultValue={v(`course.${n}.courseCode`)}>
+          <label>Course <select name={`course.${n}.courseCode`} key={`${n}:${hydrated}:${centreId}`} defaultValue={course(n)}>
             <option value="" />
-            {options.courses.map((c) => <option key={c.code} value={c.code}>{c.code} {c.name}</option>)}
+            {offered.map((c) => <option key={c.code} value={c.code}>{c.code} {c.name}</option>)}
           </select>{err(`course.${n}.courseCode`)}</label>{" "}
           <label>Join date <input type="date" name={`course.${n}.joinDate`} defaultValue={v(`course.${n}.joinDate`)} />{err(`course.${n}.joinDate`)}</label>{" "}
           <label>End date <input type="date" name={`course.${n}.endDate`} defaultValue={v(`course.${n}.endDate`)} />{err(`course.${n}.endDate`)}</label>

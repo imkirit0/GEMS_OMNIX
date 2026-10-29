@@ -130,6 +130,31 @@ try {
   await db.query(`insert into app.course (code, name, category_id, division_id) select 'SMKC', 'Smoke course', c.id, d.id
     from app.course_category c, app.course_division d where c.code = 'SMK' and d.code = 'SMK' on conflict do nothing`);
   await db.query(`insert into app.academic_year (code, starts_on, ends_on) values ('2026-27', '2026-06-01', '2027-05-31') on conflict do nothing`);
+
+  // ---------- course master (T-CM-005 over HTTP: the KELTRON share reaches catalogue managers only) ----------
+  await db.query(`update app.course set keltron = true, keltron_share = 37.5 where code = 'SMKC'`);
+  const smkc = (await db.query(`select id from app.course where code = 'SMKC'`)).rows[0].id;
+  const catRole = (await db.query(`insert into app.role (key, name) values ('smoke_catalogue', 'Smoke catalogue admin') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'catalogue.manage')`, [catRole]);
+  const catId = (await db.query(`insert into app.app_user (id, login, display_name) values (gen_random_uuid(), 'smoke.catalogue', 'Smoke Catalogue') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind) values ($1, $2, 'ALL')`, [catId, catRole]);
+  const catTok = randomBytes(32).toString("base64url");
+  await db.query(`insert into app.app_session (token_hash, user_id, expires_at, step_up_at) values ($1, $2, now() + interval '1 hour', now())`, [sha(catTok), catId]);
+  const courseList = await get("/admin/catalogue/courses", viewer);
+  check("T-CM course list readable by any signed-in user", courseList.status === 200 && (await courseList.text()).includes("SMKC"), String(courseList.status));
+  const coursePage = await get(`/admin/catalogue/courses/${smkc}`, viewer);
+  const cpBody = await coursePage.text(); // the HTML carries the RSC payload inline (self.__next_f), so one check covers both
+  check("T-CM-005 a non-manager's course page holds no share, in HTML or the RSC payload", coursePage.status === 200
+    && cpBody.includes("self.__next_f") && cpBody.includes("SMKC") && !cpBody.includes("37.5"), String(coursePage.status));
+  const managerPage = await (await get(`/admin/catalogue/courses/${smkc}`, catTok)).text();
+  check("T-CM-005 a catalogue manager sees the share in the form", managerPage.includes('name="keltronShare"') && managerPage.includes("37.5"));
+  const [unknownCourse, newCourse] = [await get("/admin/catalogue/courses/987654321", viewer), await get("/admin/catalogue/courses/new", viewer)];
+  check("T-CM an unknown course and the new-course page are 404 for a non-manager", unknownCourse.status === 404 && newCourse.status === 404,
+    `${unknownCourse.status} ${newCourse.status}`);
+  const foreignCreate = await fetch(`${BASE}/admin/catalogue/courses/create`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${catTok}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ code: "EVIL", name: "Evil", categoryId: "1", divisionId: "1", sortOrder: "0" }) });
+  check("T-CM course create from a foreign origin is refused", foreignCreate.status === 403, String(foreignCreate.status));
   await db.query(`insert into app.global_number_series (series, period, current) values ('REGISTER', 'ALL', 1), ('ADMISSION', '2026-27', 0) on conflict do nothing`);
   const studentRole = (await db.query(`insert into app.role (key, name) values ('smoke_student', 'Smoke student admin') returning id`)).rows[0].id;
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'student.view'), ($1, 'student.admit')`, [studentRole]);

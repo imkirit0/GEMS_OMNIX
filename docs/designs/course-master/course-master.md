@@ -1,7 +1,7 @@
 # Course master (Stage 3, fourth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-11…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14…DD-17); step 7: [`critic_report.md`](critic_report.md) (DD-18); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-13 revised); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions).
+*   **Status:** Approved for build by the design owner on 2026-10-29, after the EGM review (steps 5–9); built the same day (evidence E-040). The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-11…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14…DD-17); step 7: [`critic_report.md`](critic_report.md) (DD-18); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-13 revised); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -64,7 +64,7 @@ New columns on `app.course`, all nullable or defaulted so existing rows stay val
 | `sort_order` | int, not null, default 0 | 0–100000 |
 | `visible` | boolean, not null, default true | DD-12 |
 | `materials_required`, `marklist_required`, `no_reg_fee`, `it_magic`, `keltron`, `internship_keltron`, `selected` | boolean, not null, default false | stored only in this piece |
-| `keltron_share` | numeric(5,2), null | one check `course_keltron_share_check`: `(keltron and keltron_share between 0 and 100) or (not keltron and keltron_share is null)` (DD-6, DD-11; I5) |
+| `keltron_share` | numeric(5,2), null | one check `course_keltron_share_check`: `(keltron and keltron_share is not null and keltron_share between 0 and 100) or (not keltron and keltron_share is null)` (DD-6, DD-11; I5; `is not null` added at build: without it a KELTRON course with no share makes the check null, and a null check passes, found by T-CM-001) |
 
 *   **Grants (Z1):** `grant update (<the 19 new columns>) on app.course to gems_app`. The table-level select stays as it is.
 *   **`app.course_centre_class`** (`course_id` → `course`, `centre_class_id` → `centre_class`, both restrict; primary key on the pair): RLS `setup_select` (`using (true)`), `setup_insert` and `setup_delete` on `catalogue.manage`, as 0009; `grant select, insert, delete` to `gems_app`.

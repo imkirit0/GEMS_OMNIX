@@ -52,7 +52,8 @@ describe("admission screens (T-ADM)", () => {
     expect(await admin(`select role_id from app.role_permission where permission_key = 'student.admit'
       except select role_id from app.role_permission where permission_key = 'student.view'`)).toEqual([]);
     const o = await admitOptions(sa);
-    expect(o.centres).toEqual([{ id: C.A, code: "KL2-25", name: "Centre A" }]);
+    expect(o.centres).toEqual([{ id: C.A, code: "KL2-25", name: "Centre A", classCode: null }]);
+    expect(o.enforced).toBe(false); // course-master DD-2: the availability switch is committed off
     expect(o.years.map((y) => y.code)).toEqual(["2024-25", "2025-26", "2026-27", "2027-28", "2028-29"]);
     expect(o.courses.map((c) => c.code)).toEqual(["CCNA", "DCA", "DTP", "PYTHON", "TALLY"]);
     expect(o.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
