@@ -1,7 +1,7 @@
 # Enquiry to admission (Stage 3, sixth piece)
 
 *   **Author:** gtm
-*   **Status:** Draft. The design owner decided DD-1…DD-4 on 2026-10-29; DD-5…DD-14 are proposed.
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-14 on 2026-10-29; build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Every seeded list value is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -148,16 +148,16 @@ The `enquiry` table's fields and checks:
 2.  **DD-2: Core funnel plus bulk changes and a follow-up calendar;** export later (design owner, 2026-10-29).
 3.  **DD-3: `enquiry.view` and `enquiry.manage`, centre-scoped;** enrolling also needs `student.admit` there; the system administrator holds them (design owner, 2026-10-29).
 4.  **DD-4: Enquiry path, enquiry type and status are editable masters** (design owner, 2026-10-29).
-5.  **DD-5 (proposed): Qualification reuses the learner-details list** (fixed in code), so an enquiry pre-fills the admission's details without mapping.
-6.  **DD-6 (proposed): Each status has a fixed kind** (`OPEN`, `ENROLLED`, `LOST`, `JUNK`) that the rules use; names, colours and order are editable. Only Enroll sets an ENROLLED status.
-7.  **DD-7 (proposed): The Enquiry No is the record id,** not a numbering series. Enquiries are not financial documents; NP stays out of it (PMC).
-8.  **DD-8 (proposed): Follow-ups are an append-only log;** the enquiry keeps the latest next follow-up date and last contact for lists and the calendar.
-9.  **DD-9 (proposed): Enroll pre-fills the admission form, and the admission links back in the same transaction;** one enquiry enrols once.
-10. **DD-10 (proposed): The same mobile warns, it does not block** (an enquiry may be a sibling or a returning learner).
-11. **DD-11 (proposed): Up to three course preferences, courses only;** fees and schemes wait for Stage 4.
-12. **DD-12 (proposed): Edits carry a version** (as learner-details DD-8); bulk actions cap at 100 and are all-or-nothing.
-13. **DD-13 (proposed): The masters need a third permission, `enquiry.setup` at ALL scope,** separate from day-to-day work.
-14. **DD-14 (proposed): Audit rows of enquiry edits list field names only** (contact data is PII, as learner-details DD-14); follow-up notes are not copied into audit rows.
+5.  **DD-5: Qualification reuses the learner-details list** (fixed in code), so an enquiry pre-fills the admission's details without mapping (accepted by the design owner, 2026-10-29).
+6.  **DD-6: Each status has a fixed kind** (`OPEN`, `ENROLLED`, `LOST`, `JUNK`) that the rules use; names, colours and order are editable. Only Enroll sets an ENROLLED status (accepted by the design owner, 2026-10-29).
+7.  **DD-7: The Enquiry No is the record id,** not a numbering series. Enquiries are not financial documents; NP stays out of it (PMC) (accepted by the design owner, 2026-10-29).
+8.  **DD-8: Follow-ups are an append-only log;** the enquiry keeps the latest next follow-up date and last contact for lists and the calendar (accepted by the design owner, 2026-10-29).
+9.  **DD-9: Enroll pre-fills the admission form, and the admission links back in the same transaction;** one enquiry enrols once (accepted by the design owner, 2026-10-29).
+10. **DD-10: The same mobile warns, it does not block** (an enquiry may be a sibling or a returning learner) (accepted by the design owner, 2026-10-29).
+11. **DD-11: Up to three course preferences, courses only;** fees and schemes wait for Stage 4 (accepted by the design owner, 2026-10-29).
+12. **DD-12: Edits carry a version** (as learner-details DD-8); bulk actions cap at 100 and are all-or-nothing (accepted by the design owner, 2026-10-29).
+13. **DD-13: The masters need a third permission, `enquiry.setup` at ALL scope,** separate from day-to-day work (accepted by the design owner, 2026-10-29).
+14. **DD-14: Audit rows of enquiry edits list field names only** (contact data is PII, as learner-details DD-14); follow-up notes are not copied into audit rows (accepted by the design owner, 2026-10-29).
 
 ## Open Questions
 
