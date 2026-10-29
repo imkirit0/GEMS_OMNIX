@@ -1214,3 +1214,32 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/smoke-security.mjs | 8d943207a71d59aa76840e5efaa76516ad2fd168ccdada05e548ad227d67be10 |
 | evidence/mutation-admission-screens-2026-10-29.txt | 184bcaff55e26eb1de653ef2d3709c4b67d431f49dc454437d1f767e804e08d0 |
 | evidence/ci-admission-screens-2026-10-29.txt | d78597f3cf75df21c53bf8572ece2953059a459a21d2eda89f62cc724d56dfc5 |
+
+## E-038 Learner details built (second Stage 3 piece) (2026-10-29)
+- **Request:** the design owner approved `docs/designs/learner-details/learner-details.md` for build (2026-10-29, "Approve, build it") after EGM review steps 5–9 (reports in the same folder; 15 owner decisions; DD-9 revised by DD-14, DD-13/DD-14 revised at step 8). Built in phases D1–D4.
+- **D1:** audit 09 T-LD-001…004 (T-ADM-006 now three action functions); R-150.02 linked; CSV and FRD regenerated (0 errors).
+- **D2 (server):** migration `0015_person_detail` (table, restrict foreign key; checks named `person_detail_<column>_check` with the JS trim set written out, no regex flag, control-character clauses, `char_length`; nationality format only; RLS: select as person, insert/update only with `student.admit` at a centre where the person is admitted; no `person_id` update grant). `src/server/person-rules.ts` (exactly what the mapping rules import) re-exported by `people.ts`; `HASHED_WITH_EVERY_RULE` = `person-rules.ts`, `ids.ts`; rules v4; an import guard test. `src/server/details.ts` (lists incl. `NOT_KNOWN`, 249 ISO codes, `detailField`, `countryOptions`). `admit()` saves details for a new person after the admission, and for an existing person only when none exist (person lock), audited as `detailFields`; `getPerson()` adds `details`, `detailsVersion`, `editCentreId`; `updateDetails()` (digits-only centre and version, `assertAdmittedAt`, person lock, version guard, static SQL, audit `{ fields }` only); `personDb` maps detail check violations to field errors. `reset.sql` truncates `person_detail`; T-RLS-002 covers the new table.
+- **D3 (pages):** `DetailsFields` client component (imports only `details.ts`; empty first option on every select); admit form sections and the duplicate-list note; IN default via the initial state; the learner page's details and "Edit details" link; `/students/[personId]/details` with `saveDetailsAction` over `submitDetails()` (required on every edit; absent inputs keep their value). Existing tests and the smoke learner gained the three required fields.
+- **Tests:** `tests/learner-details.test.ts`, 7 tests (domain and form level, direct-SQL scope as gems_app, concurrent first edits, existing-learner admit racing a first edit, app/database agreement on list values and locale-sensitive samples, the check-violation mapping, the reset). Real server: 7 new checks (IN default; own edit page 200; other centre's edit page 404 identical to a missing one; a view-only user has no edit link and gets 404; Origin-less details post 404, nothing written; same-origin post 303 and the saved value shown).
+- **Mutation checks** (`evidence/mutation-learner-details-2026-10-29.txt`): 19 code, 7 database, 2 real-server mutations, all caught; control passed. Two would first have survived (no `notFound()` on the edit page; no version comparison); the missing view-only smoke user and the stale-version-without-row test were added, then both were caught.
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **155 passed + 3 todo** (14 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-learner-details-2026-10-29.txt`).
+- **Limits:** unstyled; previous marks, mother tongue, last school, state/district and the sensitive fields not included; no legacy details migrated; fixed lists are PMC; not yet on Supabase (migrations 0012–0015).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0015_person_detail/migration.sql | 6bc82dbe58bb78dd05cffcb729ede5660e0f58872706bdaea3176c6cff61ce88 |
+| src/server/person-rules.ts | 1a65e5535e56106a94e6b6fbdb13c1a6047bcd68bd5c13223c73a5fe067be930 |
+| src/server/details.ts | 55afab2ab46cdce0d36778a2c8864c35ab286d44f9fa3749a8a0c4c6f57f29eb |
+| src/server/people.ts | df48b6be84cd45ef9caf5a2c48a5cf3e741c1b6d8e2bb59907f0c755de7878c2 |
+| src/server/admission-form.ts | a146161e36ebab283163548927e1bec0ac62a68e7cb63cc175c44caf97a933aa |
+| app/students/details-fields.tsx | 91131603c280a3897b2a2e0889db778cdf3b47e3897dfc753249d60c5f28c1e0 |
+| app/students/[personId]/details/page.tsx | 9c5999e4e097c2478bfd871a1c2d7f1ffc61f3231f7ad7150ae12beef8bc0939 |
+| app/students/[personId]/details/actions.ts | 2cfd264b07658df1cf122d5924b9a9f9c1668172478e0a899f7f5fb8fbce731f |
+| etl/canonical.ts | 1efc7e07a0c789012409263b54628d601a706b4e1e70d4a22cd2e70e729b5657 |
+| scripts/etl/reset.sql | 0a45506a3b8158134fdea27654b776c14d04a5757f9664e84fcbce458b7eb985 |
+| tests/learner-details.test.ts | 7daca77bdbad47885cdfbb302ec41a938f1931456e0cb69cddc2b45581df41ac |
+| scripts/smoke-security.mjs | 1b5674d8599bc9e4defb88edb2a0d003ef0e6a2ca687c9fe45d83ef1dab5ee0b |
+| evidence/mutation-learner-details-2026-10-29.txt | e2aba3f5b4b6f9ff5e740fa620748b4a4e8ad5da5def2103515418893f85656d |
+| evidence/ci-learner-details-2026-10-29.txt | c456b7019e66d4aacf1cbeb3b1cec0a0e1e7ed85e339dd96f86491f22b5e93b5 |

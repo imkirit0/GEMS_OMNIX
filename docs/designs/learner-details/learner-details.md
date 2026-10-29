@@ -1,7 +1,7 @@
 # Learner details (Stage 3, second piece)
 
 *   **Author:** gtm
-*   **Status:** Approved for build by the design owner on 2026-10-29, after the EGM review (steps 5–9). The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-10…DD-12); step 7: [`critic_report.md`](critic_report.md) (DD-13…DD-15, DD-9 revised); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-11, DD-13, DD-14 revised).
+*   **Status:** Approved for build by the design owner on 2026-10-29, after the EGM review (steps 5–9); built the same day (evidence E-038). The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-10…DD-12); step 7: [`critic_report.md`](critic_report.md) (DD-13…DD-15, DD-9 revised); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-11, DD-13, DD-14 revised).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list below is PMC (a parameter until its owner signs). Input: [`input-brief.md`](input-brief.md).
