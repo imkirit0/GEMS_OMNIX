@@ -1,7 +1,7 @@
 # Catalogue masters pages (Stage 3, fifth piece)
 
 *   **Author:** gtm
-*   **Status:** Draft. The design owner decided DD-1…DD-4 on 2026-10-29; DD-5…DD-10 are proposed.
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -88,12 +88,12 @@ Real-server smoke: the masters, years and centres pages return 200 for a non-man
 2.  **DD-2: A catalogue manager sets a centre's class through an audited edit with step-up;** the audit rows are its history; D-ORG-2's ticket stays possible later (design owner, 2026-10-29).
 3.  **DD-3: Academic years: dates and open/closed only** (design owner, 2026-10-29).
 4.  **DD-4: Any signed-in user reads the pages; only `catalogue.manage` changes them** (design owner, 2026-10-29).
-5.  **DD-5 (proposed): A centre class change needs a reason,** like activate/deactivate (catalogue DD-9): it changes which courses a centre may sell.
-6.  **DD-6 (proposed): A centre's class may be cleared** (no class: the centre sells nothing once availability is enforced, course-master DD-7).
-7.  **DD-7 (proposed): An inactive class cannot be newly set;** a centre keeps a class deactivated after it was set (as course-master Z3).
-8.  **DD-8 (proposed): One shared page for the three code/name masters,** chosen by slug; years and centres' classes have their own pages.
-9.  **DD-9 (proposed): Lists show inactive entries,** marked "Inactive", ordered by code (years newest first).
-10. **DD-10 (proposed): The duplicate-code message names "a record"** now that masters and years have pages (course-master R14).
+5.  **DD-5: A centre class change needs a reason,** like activate/deactivate (catalogue DD-9): it changes which courses a centre may sell (accepted by the design owner, 2026-10-29).
+6.  **DD-6: A centre's class may be cleared** (no class: the centre sells nothing once availability is enforced, course-master DD-7) (accepted by the design owner, 2026-10-29).
+7.  **DD-7: An inactive class cannot be newly set;** a centre keeps a class deactivated after it was set (as course-master Z3) (accepted by the design owner, 2026-10-29).
+8.  **DD-8: One shared page for the three code/name masters,** chosen by slug; years and centres' classes have their own pages (accepted by the design owner, 2026-10-29).
+9.  **DD-9: Lists show inactive entries,** marked "Inactive", ordered by code (years newest first) (accepted by the design owner, 2026-10-29).
+10. **DD-10: The duplicate-code message names "a record"** now that masters and years have pages (course-master R14) (accepted by the design owner, 2026-10-29).
 
 ## Open Questions
 
