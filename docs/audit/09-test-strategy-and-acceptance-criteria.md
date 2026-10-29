@@ -212,6 +212,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-ENQ-005 | Scope and reads | Other centres' enquiries are invisible and unwritable, also by SQL; nothing can be deleted; every role that manages enquiries can view them; the counsellor and name functions answer only callers who may view the centre; list filters, POST-only search (number, mobile, name) and the follow-up calendar |
 | T-ENQ-006 | Enquiry setup | Paths and types through the shared masters with `enquiry.setup`; statuses keep their kind and code; the enrolled status is never duplicated or switched off; the last active status of a kind is kept, also under concurrent deactivation |
 
+### T-CB: course batches (`docs/designs/course-batches/course-batches.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-CB-001 | Batches | A holder of `batch.manage` and `student.view` at an active centre creates, edits, activates and deactivates its batches, audited with values; each field's message in order; codes unique per centre; capacity not below the learners placed; refused at an inactive centre, without `student.view` (audited DENIED), and at other centres, also by SQL; named checks; row security with four commands |
+| T-CB-002 | Placing learners | Only ACTIVE registrations of the centre go into an active batch of that centre, never beyond capacity, audited with register numbers; move, remove and nothing to change; the database guard refuses the same by SQL for every writer, including an insert with a batch, a status returning to ACTIVE, several rows in one statement and two concurrent sessions |
+| T-CB-003 | Routes | Batch and placement routes: same origin, field details, unknown operations, repeated ids and "no batch" |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

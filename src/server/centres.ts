@@ -217,7 +217,7 @@ export async function setCentreActive(session: string | undefined, id: number, a
 
 // ---------- Regions and areas (DD-4: add and rename; areas never move between regions) ----------
 
-const geoName = (v: unknown) => {
+export const geoName = (v: unknown) => {
   const n = typeof v === "string" ? v.trim() : "";
   if (n.length < 1 || n.length > 100) throw bad("name: 1-100 characters");
   return n;

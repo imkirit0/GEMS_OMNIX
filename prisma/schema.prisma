@@ -81,6 +81,8 @@ model Centre {
 
   specialCourses CourseCentre[]
 
+  batches Batch[]
+
   @@map("centre")
   @@schema("app")
 }
@@ -652,9 +654,34 @@ model Registration {
   admission   Admission          @relation(fields: [admissionId, centreId], references: [id, centreId], onDelete: Restrict)
   centre      Centre             @relation(fields: [centreId], references: [id], onDelete: Restrict)
   course      Course             @relation(fields: [courseCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  // course batches (docs/designs/course-batches): the batch is at the registration's own centre; guard trigger in 0021
+  batchId     Int?               @map("batch_id")
+  batch       Batch?             @relation(fields: [batchId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict, map: "registration_batch_fkey")
 
   @@index([admissionId])
+  @@index([batchId])
   @@map("registration")
+  @@schema("app")
+}
+
+// ---------- Course batches (docs/designs/course-batches; checks, RLS, guard and grants in migration 0021) ----------
+
+model Batch {
+  id            Int            @id @default(autoincrement())
+  centreId      Int            @map("centre_id")
+  code          String
+  name          String
+  startsAt      DateTime       @map("starts_at") @db.Time
+  endsAt        DateTime       @map("ends_at") @db.Time
+  capacity      Int
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  centre        Centre         @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  registrations Registration[]
+
+  @@unique([centreId, code])
+  @@unique([id, centreId])
+  @@map("batch")
   @@schema("app")
 }
 

@@ -267,6 +267,22 @@ try {
   check("T-ADM-004 list shows the own learner only, and has no GET search form", listHtml.includes("Learner") && !listHtml.includes("SMK-HIDDEN")
     && !/<form\b[^>]*method="get"/i.test(listHtml));
 
+  // ---------- course batches (T-CB: student.view reads, no forms without batch.manage; every bad parameter 404s) ----------
+  const placePage = await get(`/batches/place?centre=${ids.A}&course=SMKC`, stu);
+  const placeHtml = await placePage.text();
+  check("T-CB the place page lists the centre's learner, without forms for a viewer", placePage.status === 200 && placeHtml.includes("Learner")
+    && !placeHtml.includes('method="post"'), String(placePage.status));
+  const batchStatus = async (path, tok) => (await get(path, tok)).status;
+  const bad404 = [await batchStatus(`/batches?centre=${ids.B}`, stu), await batchStatus("/batches?centre=abc", stu),
+    await batchStatus(`/batches/place?centre=${ids.A}&course=NOPE`, stu), await batchStatus(`/batches/place?centre=${ids.A}&course=SMKC&batch=987654`, stu),
+    await batchStatus("/batches", viewer)];
+  check("T-CB other centre, malformed or unknown parameters, and no student.view: 404", bad404.every((x) => x === 404), bad404.join(","));
+  check("T-CB the home page links Batches for a learner viewer", (await (await get("/", stu)).text()).includes('href="/batches"'));
+  const foreignBatch = await fetch(`${BASE}/batches/save`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ op: "create", centreId: String(ids.A), code: "EVIL", name: "Evil", startsAt: "09:00", endsAt: "10:00", capacity: "5" }) });
+  check("T-CB batch save from a foreign origin is refused", foreignBatch.status === 403, String(foreignBatch.status));
+
   // ---------- learner details (T-LD-002 pages, DD-12 default, 404 parity, origin) ----------
   const newForm = await (await get("/students/new", stu)).text();
   check("T-LD-001 the admit form defaults nationality to India", /<option value="IN" selected="">/.test(newForm));

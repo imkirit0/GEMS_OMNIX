@@ -23,6 +23,8 @@ export const AUDIT_CATALOGUE = [
   // centre onboarding (src/server/centres.ts)
   "org.centre.create", "org.centre.update", "org.centre.activate", "org.centre.deactivate",
   "org.region.create", "org.region.update", "org.area.create", "org.area.update",
+  // course batches (src/server/batches.ts)
+  "batch.create", "batch.update", "batch.activate", "batch.deactivate", "batch.place",
   // enquiry (src/server/enquiry.ts)
   "enquiry.create", "enquiry.update", "enquiry.status", "enquiry.counsellor", "enquiry.followup",
   "enquiry.setup.status.create", "enquiry.setup.status.update", "enquiry.setup.status.activate", "enquiry.setup.status.deactivate",

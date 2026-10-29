@@ -67,6 +67,7 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "org.region.duplicate": "A region with that code already exists.",
   "org.area.duplicate": "That region already has an area with that name.",
   "org.centre.checklist": "Set the centre's class and complete its GST details before activating it.",
+  "batch.duplicate": "That centre already has a batch with that code.",
   "enquiry.setup.keep": "This status cannot be switched off: it is the enrolled status or the last active one of its kind.",
   duplicate: "That login or key already exists.",
   notfound: "Not found.",

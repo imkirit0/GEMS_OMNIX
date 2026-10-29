@@ -39,6 +39,9 @@ export const CA = { ca: "00000000-0000-0000-0000-0000000000f1" } as const;
 
 // Centre-onboarding fixture users: role 25 centre_manager (org.centre.manage). coM at ALL (the head office); coR1 at
 // REGION 1, which the permission's ALL-scope checks must refuse. Tokens tok-coM, tok-coR1.
+// Course-batches fixture users: role 26 batch_manager (batch.manage, student.view). bmA at centre A; bmR1 at REGION 1.
+// Tokens tok-bmA, tok-bmR1.
+export const BM = { a: "00000000-0000-0000-0000-0000000000f4", r1: "00000000-0000-0000-0000-0000000000f5" } as const;
 export const CO = { m: "00000000-0000-0000-0000-0000000000f2", r1: "00000000-0000-0000-0000-0000000000f3" } as const;
 
 // Enquiry fixture users (enquiry design C11): roles 22 enquiry_worker (view, manage), 23 enquiry_viewer (view),
@@ -81,7 +84,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       app.enquiry_followup, app.enquiry, app.enquiry_status, app.enquiry_type, app.enquiry_path,
       app.registration, app.admission, app.person_detail, app.person,
       app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category, app.rate_hit,
-      app.course, app.course_category, app.course_division, app.centre_class, app.academic_year, app.certification restart identity cascade`);
+      app.course, app.course_category, app.course_division, app.centre_class, app.academic_year, app.certification, app.batch restart identity cascade`);
     if ((await db.query(`select to_regclass('app.test_ticket_counter') t`)).rows[0].t) await db.query(`truncate app.test_ticket_counter`);
     await db.query("set session_replication_role = origin");
     await db.query(`insert into app.region (id, code, name) values (1, 'R1', 'Region 1'), (2, 'R2', 'Region 2')`);
@@ -97,14 +100,15 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('catalogue.manage', 'Maintain the catalogue: courses, masters, academic years', true),
       ('enquiry.view', 'View enquiries of a centre', false), ('enquiry.manage', 'Record and work enquiries of a centre', false),
       ('enquiry.setup', 'Maintain enquiry paths, types and statuses', true),
-      ('org.centre.manage', 'Create and edit centres, regions and areas; activate and deactivate centres', true)`);
+      ('org.centre.manage', 'Create and edit centres, regions and areas; activate and deactivate centres', true),
+      ('batch.manage', 'Create batches and place learners in them', false)`);
     await db.query(`insert into app.role (id, key, name) values (1, 'centre_admin', 'Centre admin'),
       (2, 'ho_viewer', 'HO viewer'), (3, 'rbac_admin', 'RBAC admin'),
       (10, 'tk_raiser', 'Ticket raiser'), (11, 'tk_level1', 'Ticket level 1'), (12, 'tk_level2', 'Ticket level 2'),
       (13, 'tk_approver', 'Ticket approver'), (14, 'tk_reviewer', 'Ticket reviewer'), (15, 'tk_type_admin', 'Ticket type admin'),
       (16, 'tk_member', 'Centre member (no permissions)'), (17, 'student_admin', 'Student admin'), (18, 'catalogue_admin', 'Catalogue admin'),
       (22, 'enquiry_worker', 'Enquiry worker'), (23, 'enquiry_viewer', 'Enquiry viewer'), (24, 'enquiry_setup', 'Enquiry setup'),
-      (25, 'centre_manager', 'Centre manager')`);
+      (25, 'centre_manager', 'Centre manager'), (26, 'batch_manager', 'Batch manager')`);
     await db.query(`insert into app.role_permission values
       (1, 'org.centre.view'), (1, 'numbering.series.allocate'), (2, 'org.centre.view'),
       (3, 'rbac.view'), (3, 'rbac.user.manage'), (3, 'rbac.role.manage'),
@@ -113,7 +117,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       (12, 'ticket.approve'), (12, 'ticket.view'), (12, 'ticket.document.view'),
       (13, 'ticket.approve'), (13, 'ticket.view'), (14, 'ticket.view'),
       (15, 'ticket.type.manage'), (15, 'rbac.view'), (17, 'student.view'), (17, 'student.admit'), (18, 'catalogue.manage'),
-      (22, 'enquiry.view'), (22, 'enquiry.manage'), (23, 'enquiry.view'), (24, 'enquiry.setup'), (25, 'org.centre.manage')`);
+      (22, 'enquiry.view'), (22, 'enquiry.manage'), (23, 'enquiry.view'), (24, 'enquiry.setup'), (25, 'org.centre.manage'), (26, 'batch.manage'), (26, 'student.view')`);
     await db.query(`insert into app.app_user (id, login, display_name, status) values
       ('00000000-0000-0000-0000-00000000000a', 'ua', 'User A', 'ACTIVE'),
       ('00000000-0000-0000-0000-00000000000b', 'ub', 'User B', 'ACTIVE'),
@@ -124,6 +128,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ${Object.entries(TK).map(([k, id]) => `('${id}', '${k.toLowerCase()}', 'Ticket ${k}', 'ACTIVE')`).join(", ")},
       ${Object.entries(ST).map(([k, id]) => `('${id}', '${k}', 'Student admin ${k}', 'ACTIVE')`).join(", ")},
       ('${CA.ca}', 'ca', 'Catalogue admin', 'ACTIVE'),
+      ('${BM.a}', 'bma', 'Batch manager A', 'ACTIVE'), ('${BM.r1}', 'bmr1', 'Batch manager region 1', 'ACTIVE'),
       ('${CO.m}', 'com', 'Centre manager', 'ACTIVE'), ('${CO.r1}', 'cor1', 'Centre manager region 1', 'ACTIVE'),
       ${Object.entries(EQ).map(([k, id]) => `('${id}', 'eq${k}', 'Enquiry ${k}', 'ACTIVE')`).join(", ")}`);
     await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, region_id, area_id, scope_centre_id) values
@@ -142,6 +147,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('${ST.sa}', 17, 'CENTRE', null, null, 1), ('${ST.sb}', 17, 'CENTRE', null, null, 3),
       ('${ST.sr}', 17, 'REGION', 1, null, null), ('${ST.sh}', 17, 'ALL', null, null, null),
       ('${CA.ca}', 18, 'ALL', null, null, null),
+      ('${BM.a}', 26, 'CENTRE', null, null, 1), ('${BM.r1}', 26, 'REGION', 1, null, null),
       ('${CO.m}', 25, 'ALL', null, null, null), ('${CO.r1}', 25, 'REGION', 1, null, null),
       ('${EQ.wa}', 22, 'CENTRE', null, null, 1), ('${EQ.wa}', 17, 'CENTRE', null, null, 1), ('${EQ.wb}', 22, 'CENTRE', null, null, 3),
       ('${EQ.va}', 23, 'CENTRE', null, null, 1), ('${EQ.ma}', 22, 'CENTRE', null, null, 1), ('${EQ.setup}', 24, 'ALL', null, null, null)`);
@@ -158,6 +164,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
         ${Object.entries(TK).map(([k, id]) => `('tok-tk${k[0]!.toUpperCase()}${k.slice(1)}', '${id}', '8 hours', null)`).join(", ")},
         ${Object.entries(ST).map(([k, id]) => `('${ST_TOKEN[k as keyof typeof ST]}', '${id}', '8 hours', null)`).join(", ")},
         ('tok-catA', '${CA.ca}', '8 hours', null),
+        ('tok-bmA', '${BM.a}', '8 hours', null), ('tok-bmR1', '${BM.r1}', '8 hours', null),
         ('tok-coM', '${CO.m}', '8 hours', null), ('tok-coR1', '${CO.r1}', '8 hours', null),
         ${Object.entries(EQ).map(([k, id]) => `('${EQ_TOKEN[k as keyof typeof EQ]}', '${id}', '8 hours', null)`).join(", ")}) v(t, u, e, r)`);
     // explicit ids above do not advance the identity sequences; later inserts must not collide with them

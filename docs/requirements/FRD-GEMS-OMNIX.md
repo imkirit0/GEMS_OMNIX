@@ -1444,7 +1444,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Academics (14), Placement (2), Accounts (1)
 - **Workflows (05):** WF-X17 Feedback / appraisal; WF-X19 Batch / class / semester assignment; WF-X2 ID card generation; WF14 Year closing & promotion; WF15 Attendance, syllabus, placement
 - **Open decisions (04):** D-ACA-1, D-ACA-2, D-ACA-3, D-GAP-1, D-GAP-2, D-HR-2, D-YEAR-1, D-YEAR-2, PR-09
-- **Distinct acceptance tests (09):** 8
+- **Distinct acceptance tests (09):** 11
 
 #### FR-020.01: Semester / Section (part of FR-020)
 
@@ -1686,7 +1686,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Academics |
 | Open decisions | - |
-| Acceptance tests | T-SEC-002 |
+| Acceptance tests | T-SEC-002, T-CB-001, T-CB-002, T-CB-003 |
 | Workflows | WF-X19 Batch / class / semester assignment |
 | Data migration | IMPORTED |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
