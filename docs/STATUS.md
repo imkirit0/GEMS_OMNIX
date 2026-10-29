@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-29, centre onboarding built (WF3; O1–O4; eighth Stage 3 piece), fresh-clone CI green 188 tests (last evidence: E-044).
+**Last updated:** 2026-10-29, centre onboarding built (WF3; O1–O4; eighth Stage 3 piece), fresh-clone CI green 188 tests, GitHub run 40927699163 green (last evidence: E-044).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
