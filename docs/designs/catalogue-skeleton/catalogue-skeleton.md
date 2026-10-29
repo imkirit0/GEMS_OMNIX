@@ -1,7 +1,7 @@
 # Centre and catalogue skeleton (Stage 2)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner accepted every section on 2026-10-28; build approval follows the EGM review (steps 5–9). Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8). DD-1…DD-4 were decided before drafting, DD-5…DD-13 during review steps 5–8 (see [Decisions](#decisions)).
+*   **Status:** Proposed. The design owner accepted every section on 2026-10-28; build approval follows the EGM review (steps 5–9). Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8), [`implementation_readiness_report.md`](implementation_readiness_report.md) (step 9). DD-1…DD-4 were decided before drafting, DD-5…DD-13 during review steps 5–8 (see [Decisions](#decisions)).
 *   **Date:** 2026-10-28
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO; the "Default used now" column of Open Questions is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -27,7 +27,7 @@ This design adds the **skeleton** that roadmap Stage 2 lists ("centre/catalogue 
 | Setup-table policy | The RLS pattern of the ticket setup tables: every signed-in user may read; only a holder of the table's manage permission (here `catalogue.manage`) at ALL scope may write | Prisma migration 0009 |
 | ALL scope | A role assignment covering every centre | Prisma migration 0002 |
 | `adminWrite()` | Permission check, fresh step-up, the change and its audit row in one transaction | `src/server/rbac.ts` |
-| Person core | `person`, `admission`, `registration`, `admit()`; "the action" is the `scopedAction()` call whose transaction wraps `admit()` | `docs/designs/person-core/person-core.md`, `src/server/action.ts` |
+| Person core | `person`, `admission`, `registration`, `admit()`; "the action" is the `scopedAction()` call inside `admit()`, whose transaction wraps `admit()`'s writes | `docs/designs/person-core/person-core.md`, `src/server/action.ts` |
 | Migration framework | The ETL runner (`etl/run.ts`, steps 0–7; step 4 applies the mapping rules) and its mapping rules | `docs/designs/migration-framework/migration-framework.md` |
 | P8 | The migration framework's end-to-end test on the synthetic fixture `etl/fixture.ts` | `tests/etl.test.ts` |
 | Class-revision ticket | The Stage 3 ticket type that changes a centre's class (D-ORG-2) | — |
@@ -153,9 +153,9 @@ export const CODE_RULE = /^[!-~]+( [!-~]+)*$/; // the code check, mirrored for f
 
 *   The database never changes a code: it refuses one that breaks `<table>_code_check`. The server functions call `normCode()` and then test the result against `CODE_RULE` and the length, giving `RbacError("invalid", "code: printable ASCII, single spaces, at most 30")` before any database write, so the caller gets a field error and receives the stored code.
 *   **T-CAT-001 checks agreement** on a fixed sample list (lower case, tab, newline, inner double space, leading and trailing space, `/`, `&`, `\x01`, NBSP inside and at the start, `É`, `ß`, `ı`). For each sample `s`:
-    1.  `CODE_RULE.test(s) && s.length <= 30 && s === s.toUpperCase()` holds exactly when the database check accepts `s` (the app's pre-check and the database agree);
-    2.  `normCode(s)` either passes condition 1 or is refused by it; every non-ASCII sample is refused.
-*   The existing `normCode` in `etl/rules/centre.ts` (trim and upper-case only) is removed; the centre and admission rules and `etl/checks.ts` import `people.ts`'s. Centre outcomes in P8 do not change (`' kl2-25 '` still matches `KL2-25`).
+    1.  `CODE_RULE.test(s) && s.length <= 30 && s === s.toUpperCase()` holds exactly when the **database** accepts `s`: the test inserts `s` as the admin into `app.course_category` inside a transaction it rolls back, and "accepted" means no 23514 on `course_category_code_check`;
+    2.  for every ASCII sample, `normCode(s)` passes condition 1, or is `""` (blank input), or `s` contains a control character such as `\x01`; for every non-ASCII sample, `normCode(s)` fails condition 1.
+*   The existing `normCode` in `etl/rules/centre.ts` (trim and upper-case only) is removed, and the centre and admission rules import `people.ts`'s; `etl/checks.ts` replaces its local `norm` (K2 scope keys) with it. This also closes a hash gap: `admission.ts` imported `normCode` from `centre.ts`, which is outside the admission rule's hash. The centre rule's description becomes "Legacy centres to existing GEMS centres by normalised code (normCode); X14 test centres excluded". Centre outcomes in P8 do not change (`' kl2-25 '` still matches `KL2-25`).
 
 #### Rows
 
@@ -195,19 +195,20 @@ export const CODE_RULE = /^[!-~]+( [!-~]+)*$/; // the code check, mirrored for f
     ```
 
     Reads need a `gems_app` connection, and the app reaches the database only through `withScope`, which requires a session; so "everyone signed in can read" (G4).
-*   **Grants** (`gems_app`): `select, insert` on the five tables; `update (name, active)` on the three masters; `update (name, category_id, division_id, active)` on `course`; `update (starts_on, ends_on, open)` on `academic_year`; `usage` on `app.course_category_id_seq`, `app.course_division_id_seq`, `app.centre_class_id_seq`, `app.course_id_seq`. No update grant or policy on `app.centre` is added. The `gems_etl` grant (`select` on `app.course` and `app.academic_year`) lives in `scripts/etl/setup.sql`, never in a Prisma migration (migration-framework G6); an existing migration environment, set up before this design, needs that one grant run by hand once (CI recreates its database).
+*   **Grants** (`gems_app`): `select, insert` on the five tables; `update (name, active)` on the three masters; `update (name, category_id, division_id, active)` on `course`; `update (starts_on, ends_on, open)` on `academic_year`; `usage` on `app.course_category_id_seq`, `app.course_division_id_seq`, `app.centre_class_id_seq`, `app.course_id_seq`. No update grant or policy on `app.centre` is added. The `gems_etl` grant (`select` on `app.course` and `app.academic_year`) lives in `scripts/etl/setup.sql`, never in a Prisma migration (migration-framework G6: 0012 must not contain the text `gems_etl` at all, not even in a comment); an existing migration environment, set up before this design, needs that one grant run by hand once (CI recreates its database).
 *   **Permission** row `('catalogue.manage', 'Maintain the catalogue: courses, masters, academic years', true) on conflict (key) do nothing`. `sensitive = true`, as for `ticket.type.manage`, makes TOTP mandatory for every holder (`recompute_requires_totp`, Prisma migration 0005); `adminWrite()` requires a fresh step-up regardless.
 *   **First holder (DD-12).** `app.rbac_set_role_permissions` lets an RBAC administrator grant only permissions they hold at ALL scope, so no one could ever be given `catalogue.manage` through the app. Two lines close the gap on every database: migration 0012 adds `catalogue.manage` to the existing `system_admin` role (`insert into app.role_permission select id, 'catalogue.manage' from app.role where key = 'system_admin' on conflict do nothing`), which covers databases bootstrapped before it; and `scripts/bootstrap-admin.mjs` adds it to `ADMIN_PERMISSIONS`, which covers new ones. The administrator then creates a catalogue role and assigns it, or opens the first year and courses themselves, all through audited functions. The same gap exists for `ticket.type.manage` and `student.admit`; it is recorded as a follow-up outside this design.
 
 ### Writes (`src/server/catalogue.ts`)
 
-Every function validates its input first, then makes exactly one `adminWrite()` call with `catalogue.manage` and a **literal** action name (one call per action, as `src/server/tickets/setup.ts` does, so the T-AUD-009 scan finds it). Inside the transaction the function locks the target row (`select … for update`), checks the not-found, no-op and inactive-reference rules, writes, and returns. A refusal inside the transaction rolls back and writes no audit row; a missing permission gives `Forbidden`, audited as DENIED; a stale step-up gives `StepUpRequired`.
+Every function validates its input first, then makes exactly one `adminWrite()` call with `catalogue.manage` and a **literal** action name, written before `permission:` on the same line (one call per action, as `src/server/tickets/setup.ts` does, so the T-AUD-009 scan, which reads from `action:` up to `permission:`, finds it). Inside the transaction the function locks the target row (`select … for update`), checks the not-found, no-op and inactive-reference rules, writes, and returns. A refusal inside the transaction rolls back and writes no audit row; a missing permission gives `Forbidden`, audited as DENIED; a stale step-up gives `StepUpRequired`.
 
 #### Common Rules
 
 *   `kind` is one of `course_category`, `course_division`, `centre_class`, looked up with `Object.hasOwn` in a fixed map of `Prisma.sql` table fragments (so `constructor` or `__proto__` are unknown too); anything else gives `RbacError("invalid", "kind: unknown")` before any database access. No caller-supplied text reaches SQL as an identifier.
 *   `code`: `normCode()`, then `CODE_RULE` and at most 30 characters; empty gives `RbacError("invalid", "code: required")`, otherwise `"code: printable ASCII, single spaces, at most 30"`. `name`: trimmed, 1–200 characters, else `RbacError("invalid", "name: 1-200 characters")`. Ids: safe integers, else `"id: invalid"`. `reason` (set functions): trimmed, non-empty, else `RbacError("invalid", "reason: required")` (DD-9).
-*   An unknown id or code gives `RbacError("notfound", "<table> not found")`. An update with nothing to change gives `RbacError("invalid", "nothing to change")`. Setting the state a row already has gives `RbacError("invalid", "already <active|inactive|open|closed>")`.
+*   `categoryId`, `divisionId`: a value that is not a safe integer, or names an unknown or inactive row, gives `RbacError("invalid", "categoryId: inactive or unknown")` or `"divisionId: inactive or unknown"`. `active`, `open`: must be booleans, else `"active: invalid"` / `"open: invalid"`. Dates: `isoDate()` from `people.ts` throws `PersonError`; `catalogue.ts` catches it and rethrows `RbacError("invalid", e.message)` (for example `startsOn: YYYY-MM-DD`), so every refusal from this module is an `RbacError`.
+*   An unknown id or code gives `RbacError("notfound", "<table> not found")`. An update where no field is supplied, or every supplied field equals the locked row, gives `RbacError("invalid", "nothing to change")`. Setting the state a row already has gives `RbacError("invalid", "already <active|inactive|open|closed>")`.
 *   A duplicate code gives `RbacError("duplicate", "a record with that code already exists", "catalogue.duplicate")` (re-wrapping `db()`'s unique violation, as `src/server/tickets/setup.ts` does). Any other check violation that slips past validation gives `db()`'s `RbacError("invalid", "invalid value")`.
 
 #### Functions
@@ -225,21 +226,21 @@ Every function validates its input first, then makes exactly one `adminWrite()` 
 | `setAcademicYearOpen(session, code, open, reason)` | `void` | `catalogue.activate` (open = true) or `catalogue.deactivate` (false) | `academic_year`, code | before/after = `{ open }`; `reason` in the reason column |
 
 *   `createCourse` and `updateCourse` (when the category or division changes) read the category and division `for share` (the manager holds update rights, so a direct lock works) and refuse an inactive or unknown one: `RbacError("invalid", "categoryId: inactive or unknown")` (DD-10). Existing courses keep a category or division that is later deactivated.
-*   `openAcademicYear` checks `academicYearOk(code)` (`code: YYYY-YY, consecutive years`), `isoDate()` on both dates, and `endsOn > startsOn` (`endsOn: after startsOn`); a year that already exists, open or closed, gives the duplicate error. `updateAcademicYear` checks the merged dates (the given ones over the locked row's) the same way.
+*   `openAcademicYear` checks `academicYearOk(code)` (`RbacError("invalid", "code: " + ACADEMIC_YEAR_RULE)`, reusing the constant `people.ts` exports), `isoDate()` on both dates, and `endsOn > startsOn` (`RbacError("invalid", "endsOn: after startsOn")`); a year that already exists, open or closed, gives the duplicate error. `updateAcademicYear` checks the merged dates (the given ones over the locked row's) the same way.
 
 ### Changes to `admit()`
 
 In this order (the existing steps are unchanged otherwise):
 
-1.  **Before the action**, course codes are normalised: `courseCode` = `normCode(c.courseCode)`; empty gives the existing `courses[i].courseCode: required`. The stored and returned code is the normalised one.
-2.  **First thing inside the action's transaction** (after `scopedAction` has authorised), two plain reads, which `setup_select` allows: `select open from app.academic_year where code = $1` (missing or false gives `PersonError("invalid", "academicYear: not open")`), then `select code from app.course where code = any($1) and active` (the first course, by index, not in the result gives `PersonError("invalid", "courses[i].courseCode: no such course")`). No lock is taken (DD-13). The same course twice in one admission stays allowed, as today.
+1.  **Before the action**, course codes are normalised: a code that is blank after `String.trim()` (Unicode whitespace included, as today) gives the existing `courses[i].courseCode: required`; otherwise `courseCode` = `normCode(c.courseCode)` (a non-ASCII code is kept and then fails as `no such course`). The stored and returned code is the normalised one.
+2.  **First thing inside the action's transaction** (after `scopedAction` has authorised), two plain reads, which `setup_select` allows: `select open from app.academic_year where code = $1` (missing or false gives `invalid("academicYear", "not open")`, the existing `people.ts` helper), then `select code from app.course where code = any($1) and active` (the first course, by index, not in the result gives `invalid("courses[i].courseCode", "no such course")`). No lock is taken (DD-13). The same course twice in one admission stays allowed, as today.
 3.  Then the duplicate-person logic and numbering, as today (so `SeriesMissing` can only follow an open year).
 
 A failed check rolls back and writes no audit row (no `onFailure`), as `PersonError` does today.
 
 ### The Migration Framework
 
-*   **Runner, rule step (migration-framework step 4):** two new `ctx` fields, `courses: Set<string>` from `select code from app.course` and `academicYears: Set<string>` from `select code from app.academic_year`, **all** rows: the migration checks existence only, because legacy history names deactivated courses and closed years (DD-11). Preflight refuses a run when either set is empty: `catalogue is empty: load courses and academic years`.
+*   **Runner, rule step (migration-framework step 4):** two new `ctx` fields, `courses: Set<string>` from `select code from app.course` and `academicYears: Set<string>` from `select code from app.academic_year`, **all** rows: the migration checks existence only, because legacy history names deactivated courses and closed years (DD-11). **Preflight (step 0)** also runs `select exists (select 1 from app.course) and exists (select 1 from app.academic_year) as ok` and, when false, pushes `catalogue is empty: load courses and academic years` after the `counters already exist` reason, so the run is refused before anything is written.
 *   **Registration rule:** after the existing `course_code: required` check and only when the code is non-empty, `normCode(course_code)` must be in `ctx.courses` (`course_code: no such course`); the rule writes the normalised code. Error order: `admission_key`, `course_code`, `join_date`, `status`, `register_no`.
 *   **Admission rule:** after `academicYearOk` passes, the trimmed year must be in `ctx.academicYears` (`academic_year: not in the academic year master`); a year that fails the format gets only the format error. Error order unchanged otherwise: identity, `centre_code`, `academic_year`, `admitted_on`, `admission_no`.
 *   **Versions:** because `people.ts` changes and is hashed with every rule, **all three rules move to version 2** (centre included); on a database that keeps approved rules, version 2 needs a new approval (migration-framework DD-10).
@@ -247,7 +248,7 @@ A failed check rolls back and writes no audit row (no `onFailure`), as `PersonEr
     *   admission key: the imported duplicate-number twin admission;
     *   `course_code` `XYZ`; a fresh Register No; the admission's date; status `Active`;
     *   expected: REJECTED with the single error `course_code: no such course`.
-*   **Loading the catalogue for a real run:** the catalogue itself is not migrated in Stage 2 (Non-Goals). Before a real run the migration operator loads it, through a future catalogue mapping rule or the catalogue functions; the empty-catalogue preflight refuses a run before that.
+*   **Loading the catalogue for a real run:** the catalogue itself is not migrated in Stage 2 (Non-Goals). Before a real run the migration operator loads it, through a future catalogue mapping rule or the catalogue functions; the step-0 empty-catalogue check refuses a run before that.
 
 ## Decisions
 
@@ -335,7 +336,7 @@ Accepted by the design owner on 2026-10-28; each stays PRO until the design owne
 | Phase | Items | Why they go together |
 |---|---|---|
 | C1 Documents | 1 | T-CAT tests and matrix links stay consistent (T-DOC-001) |
-| C2 Schema | 2, 3, 4 | The foreign keys need the fixtures' catalogue rows in the same change |
+| C2 Schema | 2, 3, 4 | The foreign keys need the fixtures' catalogue rows and the bootstrap permission in the same change; existing callers use upper-case codes and seeded years, so `admit()` stays green before C3 |
 | C3 Server and migration rules | 5, 6, 7 | `admit()`, the ETL rules and their tests change together |
 | C4 Evidence | 8 | After CI is green |
 
@@ -353,11 +354,12 @@ Accepted by the design owner on 2026-10-28; each stays PRO until the design owne
 
 #### 3. `tests/fixtures.ts` (Modify)
 
-*   `reset()` truncates the five tables (with `restart identity`), inserts `catalogue.manage`, and seeds:
-    *   category `GEN` "General", division `GEN` "General";
+*   `reset()` truncates the five tables (with `restart identity`), inserts `('catalogue.manage', 'Maintain the catalogue: courses, masters, academic years', true)` (the same row as 0012; `tests/admin-http.test.ts`'s bootstrap test needs it once `ADMIN_PERMISSIONS` includes it), and seeds:
+    *   category `GEN` "General", division `GEN` "General", centre class `METRO` "Metro";
     *   courses `DCA` "Diploma in Computer Applications", `TALLY` "Tally", `PYTHON` "Python", `DTP` "Desktop Publishing", `CCNA` "CCNA", all in `GEN`/`GEN`;
     *   academic years `2024-25` … `2028-29`, each `YYYY-06-01` to `YYYY+1-05-31`, all open (T-PER-003 still expects `SeriesMissing` for 2025-26, not `not open`).
 *   Role 18 `catalogue_admin` with `catalogue.manage`, held at ALL by a new user exported as `CA = { ca: "00000000-0000-0000-0000-0000000000f1" }` (login `ca`, "Catalogue admin", token `tok-catA`). Tests that write call `setStepUp("tok-catA", 0)` first.
+*   `tests/people.test.ts` (moved here from C3 so it never passes for the wrong reason): the composite-foreign-key insert uses course `DCA` instead of `X` and asserts the constraint `registration_admission_id_centre_id_fkey`.
 
 #### 4. `scripts/etl/setup.sql`, `scripts/bootstrap-admin.mjs` (Modify)
 
@@ -372,22 +374,28 @@ Accepted by the design owner on 2026-10-28; each stays PRO until the design owne
 
 #### 6. `etl/run.ts`, `etl/types.ts`, `etl/checks.ts`, `etl/rules/*.ts`, `etl/fixture.ts` (Modify)
 
-*   `Ctx.courses`, `Ctx.academicYears`, loaded in step 4; the empty-catalogue preflight refusal; the two rule checks; `normCode` imported from `people.ts` in the centre and admission rules and `checks.ts` (the one in `centre.ts` removed); all three rules at version 2; the `XYZ` defect.
+*   `Ctx.courses`, `Ctx.academicYears`, loaded in step 4; the step-0 empty-catalogue check; the two rule checks; `normCode` from `people.ts` in the centre and admission rules, replacing `checks.ts`'s `norm` (the one in `centre.ts` removed); the centre rule's new description; all three rules at version 2.
+*   Fixture: two defects appended at the end of `buildFixture()`, after the `Completed` row: the `XYZ` course row, and an admission with the well-formed but unseeded year `2030-31` (Admission No `GTEC30311`, admitted on `2026-10-01`, with one valid course row; P8's `laterYearNumbers` assertion becomes `["2027-28", "2030-31"]`), expected REJECTED with the single error `academic_year: not in the academic year master` (its course row: `admission_key: admission not imported`).
 
 #### 7. Tests (Create/Modify)
 
 *   `tests/catalogue.test.ts`:
-    *   **T-CAT-001:** `normCode()` agrees with the check on the fixed sample list (three conditions); creating `" dca "` gives a duplicate; a direct insert (as the admin) of an un-normalised, over-long or non-ASCII code into each of the four code tables fails with 23514.
-    *   **T-CAT-002:** a direct registration insert with an unknown course code fails with 23503 on the course foreign key; an update of a referenced course code as the admin fails (restrict); `admit()` with a deactivated course gives `courses[0].courseCode: no such course` while an existing registration of that course stays; a closed or unknown year gives `academicYear: not open`; a lower-case course code is stored upper-case.
-    *   **T-CAT-003:** with step-up, `ca` creates, updates, deactivates (reason required) and reactivates a course, a master and a year, each audited with the before/after of the table above; `ST_TOKEN.sa` (no `catalogue.manage`) gets `Forbidden` and a DENIED row; without a fresh step-up, `StepUpRequired`; an inactive category is refused; an unknown `kind`, including `constructor`, is refused before any database access. Direct statements through `withScope`: as `T.uA`, insert and update on each of the five tables fail (42501 or 0 rows); as `ca`, `update … set code`, `delete`, and `update app.centre set centre_class_id` fail with 42501.
-    *   **T-CAT-004:** through `withScope(T.uA, …)` (a centre user without catalogue rights), every seeded course, master and year is readable.
-*   `tests/etl.test.ts`: the unit test's `ctx` gains `courses` and `academicYears`; the changed-code message reads `rule centre v2: …`; a new assertion that the `XYZ` row is REJECTED with `course_code: no such course`; an empty catalogue refuses the run.
-*   `tests/people.test.ts`: the composite-foreign-key insert uses course `DCA` instead of `X`, so it still tests the centre foreign key.
+    *   **T-CAT-001:** the two agreement conditions on the fixed sample list; creating `" dca "` gives a duplicate; a direct insert (as the admin) of an un-normalised, over-long or non-ASCII code into each of the four code tables fails with 23514.
+    *   **T-CAT-002:** as the admin, direct statements fail with 23503 on the named foreign key: a registration with an unknown course code (`registration_course_code_fkey`), an admission with year `2030-31` (`admission_academic_year_fkey`), `update app.centre set centre_class_id = 999` (`centre_centre_class_id_fkey`); an update of a referenced course code fails (restrict); `admit()` with a deactivated course gives `courses[0].courseCode: no such course` while an existing registration of that course stays; a closed or unknown year gives `academicYear: not open`; a lower-case course code is stored upper-case.
+    *   **T-CAT-003:** with step-up, `ca` creates, updates, deactivates (reason required) and reactivates a course, a master and a year, each audited with the before/after of the table above; `ST_TOKEN.sa` (no `catalogue.manage`) gets `Forbidden` and a DENIED row; without a fresh step-up, `StepUpRequired`; an inactive category is refused; an unknown `kind`, including `constructor`, is refused before any database access (called with `session = undefined`, it still gives `RbacError("invalid", "kind: unknown")`, not a session error); a bad date gives an `RbacError`. Direct statements through `withScope`: as `T.uA`, an insert into each of the five tables fails with 42501 and an update changes 0 rows; as `ca`, `update … set code`, `delete`, and `update app.centre set centre_class_id` fail with 42501.
+    *   **T-CAT-004:** through `withScope(T.uA, …)` (a centre user without catalogue rights), the code lists of all five tables equal the seeded ones exactly.
+    *   The file contains the literals `"catalogue.create"`, `"catalogue.update"`, `"catalogue.activate"`, `"catalogue.deactivate"` in its audit assertions (T-AUD-009 requires each catalogued action to appear in a test).
+*   `tests/etl.test.ts`:
+    *   the unit test's `ctx` gains `courses: new Set(["DCA"])` and `academicYears: new Set(["2026-27"])`, so its expected errors stay unchanged; a further unit row with an inactive course code in `courses` maps IMPORTED (DD-11);
+    *   the changed-code message reads `rule centre v2: …`;
+    *   P8 asserts the `XYZ` row (`course_code: no such course`) and the `2030-31` admission (`academic_year: not in the academic year master`);
+    *   after `resetEtl()`, `truncate app.course, app.academic_year cascade` as the admin, then the run throws `RunRefused` with reasons exactly `["catalogue is empty: load courses and academic years"]`.
 *   `tests/audit-catalogue.ts`, `tests/audit.test.ts`: the four actions `catalogue.create`, `catalogue.update`, `catalogue.activate`, `catalogue.deactivate`; T-AUD-009 scans `src/server/catalogue.ts` with `/"(catalogue\.[a-z0-9_.]+)"/g` on `action:` lines.
 
 #### 8. `docs/STATUS.md`, `docs/audit/12-evidence-and-verification-log.md` (Modify)
 
-*   Evidence entry E-034 with CI counts and the mutation checks.
+*   E-034 in the evidence log: CI counts, and one row per mutation (the mutation, the file mutated, the test that failed, and that the code was restored and CI passed again).
+*   STATUS: the catalogue-skeleton line becomes "built" with E-034, the test count, a completed-items row, and the follow-up for `ticket.type.manage` and `student.admit` kept.
 
 ### Verification Plan
 
