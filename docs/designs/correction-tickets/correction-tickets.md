@@ -1,7 +1,7 @@
 # Student correction tickets (Stage 3, third piece)
 
 *   **Author:** gtm
-*   **Status:** Draft. DD-1…DD-3 were decided by the design owner on 2026-10-29; DD-4…DD-9 are proposed here and need the owner's acceptance before the EGM review (steps 5–9).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -100,12 +100,12 @@ Each handler:
 1.  **DD-1: One ticket handler per identity field** (six), matching the legacy codes (design owner, 2026-10-29).
 2.  **DD-2: Proof is set per ticket type** with the engine's existing "document required" switch (design owner, 2026-10-29).
 3.  **DD-3: Likely duplicates are shown to the approver, not blocking** (design owner, 2026-10-29).
-4.  **DD-4 (proposed): The engine gains an optional `prepare` step** so a handler can store resolved data (person id, old value) in the payload at raise.
-5.  **DD-5 (proposed): Ticket fields gain a `select` kind** (gender).
-6.  **DD-6 (proposed): The engine gains an optional `review` hook** shown to those who may act, and an optional `describe` for the payload.
-7.  **DD-7 (proposed): The final approval's audit row names the corrected field, not the values** (as learner-details DD-14); the values stay in the ticket payload.
-8.  **DD-8 (proposed): The learner is named by Admission No at the ticket's centre.**
-9.  **DD-9 (proposed): A correction is refused as stale if the field changed after the ticket was raised;** the raiser raises a new ticket.
+4.  **DD-4: The engine gains an optional `prepare` step** so a handler can store resolved data (person id, old value) in the payload at raise.
+5.  **DD-5: Ticket fields gain a `select` kind** (gender).
+6.  **DD-6: The engine gains an optional `review` hook** shown to those who may act, and an optional `describe` for the payload.
+7.  **DD-7: The final approval's audit row names the corrected field, not the values** (as learner-details DD-14); the values stay in the ticket payload.
+8.  **DD-8: The learner is named by Admission No at the ticket's centre.**
+9.  **DD-9: A correction is refused as stale if the field changed after the ticket was raised;** the raiser raises a new ticket.
 
 ## Open Questions
 
