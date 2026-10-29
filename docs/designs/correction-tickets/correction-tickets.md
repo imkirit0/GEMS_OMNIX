@@ -1,7 +1,7 @@
 # Student correction tickets (Stage 3, third piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-10…DD-13).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -51,23 +51,25 @@ One factory, six handlers (DD-1):
 
 | Key | Field | Input kind | Legacy code (SRC where stated) |
 |---|---|---|---|
-| `identity.givenName` | `givenName` | text | FNC (first name) |
+| `identity.givenName` | `givenName` | text (required) | FNC (first name) |
 | `identity.familyName` | `familyName` | text (empty clears) | LNC (last name) |
-| `identity.dateOfBirth` | `dateOfBirth` | date | to confirm |
-| `identity.gender` | `gender` | select (DD-5) | GDR |
+| `identity.dateOfBirth` | `dateOfBirth` | date (required) | to confirm |
+| `identity.gender` | `gender` | select without an empty option (required) | GDR |
 | `identity.mobile` | `mobile` | text (empty clears) | to confirm (SMS?) |
 | `identity.email` | `email` | text (empty clears) | EMC |
 
 Each handler:
 
 *   **`fields`:** `admissionNo` (text) and `newValue` (the kind above).
-*   **`parse(p)`:** trims `admissionNo` (1–40 characters, else `TicketError("invalid", "admissionNo: required")`); normalises `newValue` with `identityField(field, v)` (an empty value is `null`, allowed only for the optional fields), mapping `PersonError` to `TicketError("invalid", <field rule>)`.
-*   **`prepare(tx, { centreId, payload })`** (engine extension, DD-4): finds the admission `where admission_no = $1 and centre_id = $centreId` (else `TicketError("invalid", "no admission with that number at this centre")`), reads the person's current value, refuses `newValue === oldValue` (`"that is already the value"`), and returns the stored payload `{ admissionNo, personId, field, oldValue, newValue }`.
+*   **`parse(p)`:** trims `admissionNo` (1–40 characters, else `TicketError("invalid", "admissionNo: required")`); normalises `newValue` with `identityField(field, v)`; an empty value is `null` and allowed only for `familyName`, `mobile` and `email` (the table's "empty clears"), else `TicketError("invalid", "newValue.required")`; a `PersonError` becomes `TicketError("invalid", "newValue.format")` (Z8). Message keys are listed in `invalidMessages` (below).
+*   **`prepare(tx, { centreId, payload })`** (engine extension, DD-4): first `app.has_permission('student.view', centreId)`; without it, the same answer as an unknown number (DD-13, Z9). Then finds the admission `where admission_no = $1 and centre_id = $centreId` (else `TicketError("invalid", "admission.unknown")`), reads the person's current value, refuses `newValue === oldValue` (`"newValue.same"`), and returns the stored payload `{ admissionNo, personId, field, oldValue, newValue }`.
 *   **`validate`:** nothing more (prepare did it).
-*   **`revalidate(tx, t)`:** re-reads the current value (`select … for update` through `changeIdentity`'s lock is later; here a plain read under the engine's ticket lock); different from `t.payload.oldValue` → `TicketError("stale", "changed")` (G2).
-*   **`review(tx, t)`** (engine extension, DD-6): for the name, date-of-birth and mobile handlers, the persons other than `t.payload.personId` whose match key equals the key of the corrected identity, in the caller's `student.view` scope, as lines "Possible duplicate: <given> <family>, born <dob>" (no mobile); empty otherwise.
+*   **`revalidate(tx, t)`:** reads the current value **with the person row lock**, `select <column> from app.person where id = $1 for update` (Z1): two approvals of different tickets on one learner queue here, so the second sees the first's committed change; `changeIdentity()`'s own lock is then re-taken by the same transaction. Different from `t.payload.oldValue` → `TicketError("stale", "changed")` (G2).
+*   **`review(tx, t)`** (engine extension, DD-6): for the name, date-of-birth and mobile handlers, builds the corrected identity (the current person row with `newValue` put in), and lists the persons other than `t.payload.personId` with the same match key admitted at centres where **the approver holds `ticket.approve`** (`findMatches(tx, identity, "ticket.approve")`; DD-10, Z2), as lines "Possible duplicate: <given> <family>, born <dob>" (no mobile); when there are none, the line "No likely duplicates at centres you approve for", so an empty list is never silent.
 *   **`apply(tx, t)`:** `changeIdentity(tx, t.centreId, t.payload.personId, { [field]: t.payload.newValue })`, returns `{ before: { fields: [field] }, after: { fields: [field] } }` (DD-7: no values in the audit row).
 *   **`staleMessages`:** `{ changed: "The learner's record changed after this ticket was raised; raise a new ticket." }`.
+*   **`invalidMessages`** (engine extension, DD-12, Z4): `{ "admissionNo.required": "Enter the Admission No.", "admission.unknown": "No admission with that number at this centre.", "newValue.required": "Enter the new value.", "newValue.format": "The new value is not in the right format.", "newValue.same": "That is already the learner's value." }`. `TicketError("invalid", key)` with a listed key is shown as its text on the raise page; any other invalid stays the generic message.
+*   The factory uses `TicketError` only inside functions, so the import cycle `handlers.ts` ↔ `identity-handlers.ts` stays safe, as with `test-handler.ts` (Z7).
 
 ### Engine Extensions (DD-4, DD-5, DD-6)
 
@@ -75,10 +77,13 @@ Each handler:
 *   **`TicketField.kind` gains `"select"`** with `options: [value, label][]`; the raise form renders a `<select>`.
 *   **`review?(tx, t): Promise<string[]>`** on `TicketHandler`: `getTicket()` calls it when the viewer `canAct`, and the ticket page shows the lines above the action form. The engine's other behaviour is unchanged.
 *   **The ticket page** shows a handler's payload through an optional `describe?(payload): [label, value][]` instead of raw JSON (for these handlers: Admission No, field, old value, new value).
+*   **`invalidMessages?: Record<string, string>`** on `TicketHandler` (DD-12): `adminPost()` passes a listed invalid key to the raise page as `detail`, and the page shows its text from the handler's fixed list, as it already does for stale messages; the text never comes from the URL.
 
 ### Registration and Configuration
 
-*   `HANDLERS` registers the six handlers in every environment (today it is empty in production). Ticket types are created by a `ticket.type.manage` holder in `/admin/ticket-types` as today: code (FNC, LNC, …), approvers per level, and the "document required" switch per type (DD-2).
+*   `HANDLERS` registers the six handlers in every environment. **This ends two Stage 2 assumptions** (Z3): "`HANDLERS` is empty in production" (`handlers.ts`) and ticket-engine DD-7 (the ticket screens as a test harness): the ticket screens become production screens, unstyled; the comments in `handlers.ts` and `engine.ts` are updated.
+*   **Proof needs ADR-002 (DD-11):** a correction type with "document required" cannot be switched on in production while ADR-002 (document storage) is Proposed: `setTypeActive` refuses it with `ticket.setup.storage` when `VERCEL_ENV === "production"` and the policy constant `TICKET_POLICY.documentsSigned` is false. Signing ADR-002 (project owner, IT, Legal) flips that constant in code. Types without proof may go live.
+*   Ticket types are created by a `ticket.type.manage` holder in `/admin/ticket-types` as today: code (FNC, LNC, …), approvers per level, and the "document required" switch per type (DD-2).
 *   No migration: the ticket tables, the person core and the audit catalogue already cover this (`ticket.raise`, `ticket.approve`, …).
 
 ### Personal Data
@@ -90,10 +95,11 @@ Each handler:
 
 | ID | What it does | Expected |
 |---|---|---|
-| T-COR-001 | Configure a type per handler; raise with a valid Admission No, an unknown one, another centre's, an empty required value, an invalid date, the same value | Raised with the stored payload; field errors otherwise |
-| T-COR-002 | Raise two corrections of one field; approve the first; then the second | The second refused as stale at its final approval |
+| T-COR-001 | Configure a type per handler; raise with a valid Admission No, an unknown one, another centre's, by a raiser without `student.view`, an empty required value, an invalid date, the same value | Raised with the stored payload; otherwise `TicketError("invalid", key)` with the listed key (the raiser without `student.view` gets `admission.unknown`), and the raise page shows the key's text |
+| T-COR-002 | Raise two corrections of one field; approve them one after the other, and concurrently | The second refused as stale at its final approval, also when both approvals run at once (one applies, the other is stale) |
 | T-COR-003 | Approve a given-name correction | `person.given_name` and `match_key` changed in the approval's transaction; the audit row names the field only |
-| T-COR-004 | Raise a correction that makes the learner match another person | The approver's ticket page lists the possible duplicate; approval still works |
+| T-COR-004 | Raise a correction that makes the learner match another person; the approver holds `ticket.approve` but not `student.view` | The approver's ticket page lists the possible duplicate; with none, the "no likely duplicates" line; approval still works |
+| T-COR-005 | A document-required correction type, `VERCEL_ENV=production`, ADR-002 not signed | Switching it on is refused (`ticket.setup.storage`); a type without proof switches on |
 
 ## Decisions
 
@@ -106,6 +112,10 @@ Each handler:
 7.  **DD-7: The final approval's audit row names the corrected field, not the values** (as learner-details DD-14); the values stay in the ticket payload.
 8.  **DD-8: The learner is named by Admission No at the ticket's centre.**
 9.  **DD-9: A correction is refused as stale if the field changed after the ticket was raised;** the raiser raises a new ticket.
+10. **DD-10: The duplicate warning covers centres where the approver holds `ticket.approve`,** and says so when it finds none (design owner, 2026-10-29, Z2).
+11. **DD-11: A proof-requiring correction type stays off in production until ADR-002 is signed;** the ticket screens become production screens (design owner, 2026-10-29, Z3).
+12. **DD-12: The raise page shows the handler's specific reason** from a fixed list (design owner, 2026-10-29, Z4).
+13. **DD-13: Raising a correction needs `student.view` at the centre;** without it, the answer is the same as for an unknown Admission No (design owner, 2026-10-29, Z9).
 
 ## Open Questions
 
@@ -151,7 +161,7 @@ Outline; the file-by-file plan is written against the code during EGM step 9:
 | Phase | Items |
 |---|---|
 | C1 Documents | T-COR-001…004 in audit 09; matrix links on R-095 |
-| C2 Engine | `prepare`, `review`, `describe`, `select` fields; existing ticket tests still pass |
+| C2 Engine | `prepare`, `review`, `describe`, `invalidMessages`, `select` fields; the ADR-002 gate in `setTypeActive`; comments updated; existing ticket tests still pass |
 | C3 Handlers | `identity-handlers.ts`, registration; tests |
 | C4 Pages and evidence | raise-form select; ticket page review lines and described payload; smoke; mutation checks; E-entry |
 
