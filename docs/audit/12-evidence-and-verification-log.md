@@ -1243,3 +1243,33 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/smoke-security.mjs | 1b5674d8599bc9e4defb88edb2a0d003ef0e6a2ca687c9fe45d83ef1dab5ee0b |
 | evidence/mutation-learner-details-2026-10-29.txt | e2aba3f5b4b6f9ff5e740fa620748b4a4e8ad5da5def2103515418893f85656d |
 | evidence/ci-learner-details-2026-10-29.txt | c456b7019e66d4aacf1cbeb3b1cec0a0e1e7ed85e339dd96f86491f22b5e93b5 |
+
+## E-039 Correction tickets built (third Stage 3 piece) (2026-10-29)
+- **Request:** the design owner approved `docs/designs/correction-tickets/correction-tickets.md` for build (2026-10-29, "Approve, build it") after EGM review steps 5–9 (reports and the file-by-file plan in the same folder; 19 owner decisions). Built in phases C1–C4.
+- **C1:** audit 09 T-COR-001…006; R-095 linked, with the DD-19 note (proof-less correction types before ADR-002 are a temporary deviation for PRO to confirm); CSV and FRD regenerated (0 errors).
+- **C2 (engine):** `tickets/errors.ts` (no imports; re-exported); `TicketHandler<P, R>` with optional `prepare`, `review`, `describe`, `invalidMessages`, `valuesPermission` and select fields; `raise()` reads the re-raise source `for update` and checks status and raiser before `parse`/`prepare`; `getTicket()` returns the payload only to those who act or hold the handler's permission, plus `described` and `hasReview`; `ticketReview()` as an audited `scopedAction` (`ticket.review.duplicates`, matches only; failures degrade to one line, audited FAILED; lost connection, expired session and refusal rethrown); `adminPost` passes invalid keys as `detail`; `TICKET_GATES` (committed `false`) and `gateRefusal()` in `setTypeActive`, `updateType` and `requestUpload`, for every ticket type and environment. The existing ticket tests open the gates in `beforeAll`.
+- **C3 (handlers):** `tickets/identity-handlers.ts`: six handlers from one factory (given/family name, date of birth, gender select, mobile, email); `prepare` (student.view at the centre, Admission No at the centre, same learner on re-raise, old value from the record, same value refused); `revalidate` under the person lock (stale `changed`/`format`); `apply` (advisory lock on the corrected key, `changeIdentity`, field names only in the audit); `review` via `approverMatches()` (Admission No and centre; names only with student.view; "not possible" without a key); registered in every environment.
+- **C4 (pages):** raise page select fields and the handler's own message; ticket page "Request hidden" / described table / JSON, and the duplicate check for those who may act; the manual Supabase run's header notes the gates.
+- **Tests:** `tests/corrections.test.ts`, 9 tests (gates and their committed defaults; review audit and degradation; payload visibility; raising and every refusal key, incl. the route's `detail`; stale in turn and concurrently with a held person lock; re-raise rules incl. a non-raiser; apply and `ApplyFailed`; the duplicate review's scope and naming). Real server: 5 new checks (gender select; the specific message for an unknown number; a valid raise; the approver's described request and audited duplicate check; "Request hidden" for a viewer).
+- **Mutation checks** (`evidence/mutation-correction-tickets-2026-10-29.txt`): 24 code and 2 real-server mutations, all caught; control passed. Three cases were added because their mutations would otherwise have survived (one was first reported MISSED, then CAUGHT after the case was added). Not covered by a test: the advisory lock in `apply`, the re-raise of a payload of another shape.
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **164 passed + 3 todo** (15 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-correction-tickets-2026-10-29.txt`).
+- **Limits:** in production no ticket type can be switched on until the numbering policy is signed and the counter seeded (DD-18); proof-requiring types also wait for ADR-002 and the engine's DD-16 safeguards (DD-14); unmapped legacy codes (GPC, FPC, GNC, MNC, NC, SMS); unstyled screens; not yet on Supabase.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| src/server/tickets/errors.ts | a66b472a38b1527472878b523be7e0e78c4b9445881ab7db9531ce22bd771d12 |
+| src/server/tickets/handlers.ts | 5999e97481c1b6128b19e6541e299634b24e0b3cbe4f91e0010706b21c2a32c4 |
+| src/server/tickets/identity-handlers.ts | 3145e2e2416456116fafc4e2b48920163eeff752b49427bc122d21b11f4e6c13 |
+| src/server/tickets/engine.ts | 7fa0fdc5a5b91b8026fb5292d232212d46364408279d0765b5c43ac3968a1f04 |
+| src/server/tickets/setup.ts | a57d5b2bc08c791ef927f2617e65216e07ea3ae79d16e519484acc7130e47bd9 |
+| src/server/tickets/policy.ts | 3de5e01fda92b174bee5e6706cf0fc065c948800ab97883a6b51d51f34cf292c |
+| src/server/admin-http.ts | 5190c02ef606fe61c8c0eedfa42d1c95b5568edc33c3495eb45b98fef1863f0c |
+| src/server/people.ts | eff7943b94f8596634fecec775ddf72c92e005ce151e989ce3d16e43f9a6831a |
+| app/tickets/new/page.tsx | 7dd0bc95599f7c9607309e4aec4806a3b962df8614a406eb5600d2eb3727c0bb |
+| app/tickets/[id]/page.tsx | c5fbbf157eda5980f396fe5ded0824b23a066c88cf6468100e5766a21ef23f7c |
+| tests/corrections.test.ts | e6a328c70279c3b2b1bde7de56aea143f3996815ca7da62f9d7538f51c2f5e91 |
+| scripts/smoke-security.mjs | fab263149307083294c10c894423ed3a3ddb914d487a9299e7a2de539ede90b9 |
+| evidence/mutation-correction-tickets-2026-10-29.txt | a3323b28e161f3548269e1b113cd91c12859b3fe8e422f0206a0e0bb17159fd2 |
+| evidence/ci-correction-tickets-2026-10-29.txt | 24961f8c75c78f4da1b118a8af58f7e591b98767c09ec27980d6ae021cdd4ea0 |
