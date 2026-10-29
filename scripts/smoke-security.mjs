@@ -145,7 +145,8 @@ try {
   // a real multipart action post: the hidden $ACTION_* fields and admissionId copied from a freshly rendered form
   const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   const learner = { centreId: String(ids.A), academicYear: "2026-27", admittedOn: "2026-10-28", givenName: "Smoke", familyName: "Learner",
-    dateOfBirth: "2000-01-01", mobile: "9000012345", "course.1.courseCode": "SMKC", "course.1.joinDate": "2026-11-01" };
+    dateOfBirth: "2000-01-01", mobile: "9000012345", "course.1.courseCode": "SMKC", "course.1.joinDate": "2026-11-01",
+    currentPincode: "682001", employmentStatus: "STUDENT", qualification: "SSLC" };
   const renderedForm = async () => {
     const page = await (await get("/students/new", stu)).text();
     const hidden = [...page.matchAll(/<input\b[^>]*type="hidden"[^>]*>/g)].map((m) => [m[0].match(/name="([^"]*)"/)?.[1], m[0].match(/value="([^"]*)"/)?.[1] ?? ""]);

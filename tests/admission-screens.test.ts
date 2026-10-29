@@ -19,6 +19,7 @@ const fields = (o: Record<string, string> = {}): Record<string, string> => ({
   centreId: String(C.A), academicYear: "2026-27", admittedOn: "2026-10-28", givenName: `Asha${++n}`, familyName: "Varma",
   gender: "FEMALE", dateOfBirth: "2001-05-05", mobile: `98765${String(n).padStart(5, "0")}`,
   "course.1.courseCode": "DCA", "course.1.joinDate": "2026-11-01", "course.2.courseCode": "", "course.3.courseCode": "",
+  currentPincode: "682001", employmentStatus: "STUDENT", qualification: "SSLC", // learner-details DD-6
   admissionId: randomUUID(), ...o,
 });
 const submit = (tok: string, f: Record<string, string>, h = H) => submitAdmission(tok, h, form(f));
@@ -186,7 +187,7 @@ describe("admission screens (T-ADM)", () => {
     expect(twice.formError).toBe(ADMIT_MESSAGES.thisYear);
   });
 
-  test("T-ADM-006 the action files export only the two actions (read as text: importing them needs next/headers)", () => {
+  test("T-ADM-006 the action files export only the three actions (read as text: importing them needs next/headers)", () => {
     const found: string[] = [];
     const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true })
       .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : e.name === "actions.ts" ? [path.join(d, e.name)] : []));
@@ -196,6 +197,6 @@ describe("admission screens (T-ADM)", () => {
       expect(src, f).not.toMatch(/export\s*\{|export\s+default/);
       for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|var|class)\s+(\w+)/gm)) found.push(m[1]!);
     }
-    expect(found.sort()).toEqual(["admitAction", "searchAction"]);
+    expect(found.sort()).toEqual(["admitAction", "saveDetailsAction", "searchAction"]);
   });
 });

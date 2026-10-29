@@ -3,12 +3,14 @@
 // page re-renders with the action's returned state. Values live only in the POST body and that state, never a URL.
 import { useActionState } from "react";
 import type { AdmitFormState } from "@/server/admission-form";
+import { DETAILS_NOTE } from "@/server/details";
+import DetailsFields from "../details-fields";
 import { admitAction } from "./actions";
 
 type Options = { centres: { id: number; code: string; name: string }[]; years: { code: string }[];
   courses: { code: string; name: string }[]; today: string };
 
-export default function AdmitForm({ options, initial }: { options: Options; initial: AdmitFormState }) {
+export default function AdmitForm({ options, initial, countries }: { options: Options; initial: AdmitFormState; countries: [string, string][] }) {
   const [state, action, pending] = useActionState(admitAction, initial);
   const v = (name: string, fallback = "") => state.values[name] ?? fallback;
   const err = (name: string) => state.fieldErrors[name] && <span role="alert"> {state.fieldErrors[name]}</span>;
@@ -35,6 +37,7 @@ export default function AdmitForm({ options, initial }: { options: Options; init
       <label style={row}>Date of birth <input type="date" name="dateOfBirth" defaultValue={v("dateOfBirth")} />{err("dateOfBirth")}</label>
       <label style={row}>Mobile <input name="mobile" inputMode="tel" defaultValue={v("mobile")} />{err("mobile")}</label>
       <label style={row}>Email <input type="email" name="email" defaultValue={v("email")} />{err("email")}</label>
+      <DetailsFields values={state.values} errors={state.fieldErrors} countries={countries} />
       {[1, 2, 3].map((n) => (
         <fieldset key={n}>
           <legend>Course {n}</legend>
@@ -56,6 +59,7 @@ export default function AdmitForm({ options, initial }: { options: Options; init
       {state.candidates && (
         <fieldset>
           <legend>This may be someone already admitted</legend>
+          <p>{DETAILS_NOTE}</p>
           <ul>
             {state.candidates.map((c) => (
               <li key={c.id}>{c.givenName} {c.familyName ?? ""} {c.dateOfBirth ? `(born ${c.dateOfBirth})` : ""}{" "}

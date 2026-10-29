@@ -20,6 +20,8 @@ export const COUNTRY_CODES = ("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ B
   + "SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG "
   + "VI VN VU WF WS YE YT ZA ZM ZW").split(" ");
 export const DEFAULT_NATIONALITY = "IN";
+/** Shown in the admit form's duplicate list (DD-13): typed details for an existing learner may be ignored. */
+export const DETAILS_NOTE = "Details you typed are saved only if this learner has none yet; otherwise edit them on the learner's page.";
 
 export const DETAIL_KEYS = ["currentAddress", "currentPlace", "currentPincode", "permanentAddress", "permanentPlace",
   "permanentPincode", "nationality", "bloodGroup", "employmentStatus", "qualification", "fatherName", "fatherOccupation",

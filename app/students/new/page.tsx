@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { countryOptions, DEFAULT_NATIONALITY } from "@/server/details";
 import { admitOptions } from "@/server/people";
 import { pageRead } from "@/server/page-read";
 import AdmitForm from "./form";
@@ -11,7 +12,9 @@ export default async function NewStudent() {
       <p><a href="/students">All students</a></p>
       <h1>Admit a learner</h1>
       {/* a fresh form id per page load (DD-10); the form keeps the posted one across round trips */}
-      <AdmitForm options={options} initial={{ values: {}, admissionId: randomUUID(), fieldErrors: {} }} />
+      {/* nationality defaults to India here, in the initial state only (learner-details DD-12, R8) */}
+      <AdmitForm options={options} countries={countryOptions()}
+        initial={{ values: { nationality: DEFAULT_NATIONALITY }, admissionId: randomUUID(), fieldErrors: {} }} />
     </main>
   );
 }

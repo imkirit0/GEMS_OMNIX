@@ -5,7 +5,9 @@ import fs from "node:fs";
 import pg from "pg";
 import { Forbidden } from "../src/server/action";
 import { BLOOD_GROUPS, COUNTRY_CODES, detailField, DETAIL_KEYS, EMPLOYMENT_STATUSES, QUALIFICATIONS, type Details } from "../src/server/details";
+import { detailsFrom, submitAdmission, submitDetails, type DetailsFormState } from "../src/server/admission-form";
 import { admit, getPerson, PersonError, updateDetails, type AdmitInput } from "../src/server/people";
+import { randomUUID } from "node:crypto";
 import { asAdmin, C, newSession, reset, rows, ST_TOKEN } from "./fixtures";
 
 const { sa, sb, sr } = ST_TOKEN;
@@ -155,5 +157,40 @@ describe("learner details (T-LD)", () => {
       await admin(`alter table app.person_detail drop constraint person_detail_father_name_check;
         alter table app.person_detail add constraint person_detail_father_name_check ${def}`);
     }
+  });
+});
+
+describe("learner details through the forms (T-LD-001, T-LD-002 form layer)", () => {
+  const H = new Headers({ origin: "http://localhost", host: "localhost" });
+  const form = (o: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(o)) f.append(k, v); return f; };
+  const admitForm = (o: Record<string, string> = {}) => form({ centreId: String(C.A), academicYear: "2026-27", admittedOn: "2026-10-28",
+    givenName: `Form${++n}`, dateOfBirth: "2001-02-02", mobile: `96000${String(n).padStart(5, "0")}`, "course.1.courseCode": "DCA",
+    "course.1.joinDate": "2026-11-01", admissionId: randomUUID(), currentPincode: "682001", employmentStatus: "STUDENT",
+    qualification: "SSLC", ...o });
+  const personOf = (r: unknown) => (r as { redirect: string }).redirect.replace("/students/", "");
+
+  test("T-LD-001 admit form: same as current copies; the three fields required for a new person; an untouched select is null", async () => {
+    const p = personOf(await submitAdmission(sa, H, admitForm({ currentAddress: "1 Hill Road", currentPlace: "Thrissur", permanentSame: "on",
+      permanentAddress: "typed but replaced", bloodGroup: "", nationality: "IN" })));
+    expect(await detailRow(p)).toMatchObject({ permanent_address: "1 Hill Road", permanent_place: "Thrissur", permanent_pincode: "682001",
+      blood_group: null, nationality: "IN" });
+    const missing = await submitAdmission(sa, H, admitForm({ currentPincode: "", employmentStatus: "", qualification: "" }));
+    expect((missing as { fieldErrors: Record<string, string> }).fieldErrors).toEqual({ currentPincode: "required", employmentStatus: "required", qualification: "required" });
+    expect(detailsFrom(form({ bloodGroup: "", nationality: "" }))).toEqual({ bloodGroup: "", nationality: "" }); // "" clears, never a list value
+  });
+
+  test("T-LD-002 edit form: required on every edit, a missing optional input kept, stale and no-Origin cases", async () => {
+    const { personId: p } = await admit(sa, learner({ details: { ...FULL, bloodGroup: "O+" } }));
+    const edit = (o: Record<string, string>, h = H) => submitDetails(sa, h, form({ personId: p, centreId: String(C.A), version: "1",
+      currentPincode: "682001", employmentStatus: "STUDENT", qualification: "SSLC", currentPlace: "Kakkanad", ...o }));
+    // bloodGroup not posted at all: kept
+    expect(await edit({})).toEqual({ redirect: `/students/${p}` });
+    expect(await detailRow(p)).toMatchObject({ current_place: "Kakkanad", blood_group: "O+", version: 2 });
+    expect(((await edit({ version: "2", qualification: "" })) as DetailsFormState).fieldErrors).toEqual({ qualification: "required" });
+    expect(((await edit({ currentPlace: "Old version" })) as DetailsFormState).formError).toBe("changed since you opened them; reload the page");
+    expect(((await edit({ version: "2", fatherPhone: "123" })) as DetailsFormState).fieldErrors).toEqual({ fatherPhone: "10 digits" });
+    expect(await thrown(edit({ version: "2" }, new Headers({ host: "localhost" })))).toBeInstanceOf(Forbidden);
+    expect(await thrown(submitDetails(sr, H, form({ personId: p, centreId: String(C.A2), version: "2", currentPincode: "682001",
+      employmentStatus: "STUDENT", qualification: "SSLC" })))).toMatchObject({ reason: "notfound" });
   });
 });

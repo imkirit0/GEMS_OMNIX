@@ -4,8 +4,9 @@
 import { Forbidden } from "./action";
 import { hasOrigin } from "./auth/http";
 import { isConnectionLost, withScope } from "./db";
+import { DETAIL_KEYS, REQUIRED_DETAILS, type Details } from "./details";
 import { SeriesMissing } from "./numbering";
-import { admit, AdmissionExists, PersonError, PossibleDuplicate, type AdmissionRow, type AdmitInput, type Candidate } from "./people";
+import { admit, AdmissionExists, PersonError, PossibleDuplicate, updateDetails, type AdmissionRow, type AdmitInput, type Candidate } from "./people";
 
 /** The list page's search state (DD-13): the term travels only in the POST body. */
 export type SearchState = { q: string; centreId: string; rows?: AdmissionRow[]; rateLimited?: boolean };
@@ -21,8 +22,29 @@ export type AdmitFormState = {
 
 const ROWS = [1, 2, 3] as const; // DD-7
 const COURSE_FIELDS = ["courseCode", "joinDate", "endDate"] as const;
+/** The detail inputs shared by the admit and edit forms (learner-details Z4): the 20 keys and "same as current". */
+export const DETAIL_NAMES: readonly string[] = [...DETAIL_KEYS, "permanentSame"];
 export const FORM_NAMES = ["centreId", "academicYear", "admittedOn", "givenName", "familyName", "gender", "dateOfBirth", "mobile",
-  "email", ...ROWS.flatMap((n) => COURSE_FIELDS.map((f) => `course.${n}.${f}`))];
+  "email", ...ROWS.flatMap((n) => COURSE_FIELDS.map((f) => `course.${n}.${f}`)), ...DETAIL_NAMES];
+
+/**
+ * The posted details: a key only when its input was posted (a posted "" clears, an absent input keeps the stored value;
+ * design D3). "Same as current" copies the three posted current fields to the permanent ones (C16).
+ */
+export function detailsFrom(fd: FormData): Partial<Details> {
+  const out: Partial<Details> = {};
+  for (const k of DETAIL_KEYS) if (fd.has(k)) { const v = fd.get(k); out[k] = typeof v === "string" ? v : null; }
+  if (fd.has("permanentSame")) {
+    out.permanentAddress = out.currentAddress ?? null;
+    out.permanentPlace = out.currentPlace ?? null;
+    out.permanentPincode = out.currentPincode ?? null;
+  }
+  return out;
+}
+/** Required details by posted text: an absent required input counts as empty (design R12). */
+const requiredDetails = (fd: FormData, errors: Record<string, string>) => {
+  for (const k of REQUIRED_DETAILS) { const v = fd.get(k); if (typeof v !== "string" || !v.trim()) errors[k] = "required"; }
+};
 
 export const ADMIT_MESSAGES = {
   reload: "Reload the form and try again.",
@@ -47,6 +69,7 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
   const opt = (name: string) => text(name).trim() || null;
   if (!text("centreId")) state.fieldErrors["centreId"] = "required";
   if (!existingId) for (const name of ["dateOfBirth", "mobile"]) if (!text(name)) state.fieldErrors[name] = "required"; // DD-14
+  if (!existingId) requiredDetails(fd, state.fieldErrors); // learner-details DD-6
   const rowOf: number[] = []; // courses[i] came from form row rowOf[i]
   const courses: AdmitInput["courses"] = [];
   for (const n of ROWS) {
@@ -64,7 +87,7 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
       dateOfBirth: opt("dateOfBirth"), mobile: opt("mobile"), email: opt("email"),
     },
     centreId: Number(text("centreId")), academicYear: text("academicYear"), admittedOn: text("admittedOn"), courses,
-    admissionId: state.admissionId, ...(confirmNew ? { confirmNew } : {}),
+    admissionId: state.admissionId, ...(confirmNew ? { confirmNew } : {}), details: detailsFrom(fd),
   };
 
   // ---------- admit and map the outcome ----------
@@ -85,6 +108,7 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
       if (e.reason === "notfound") return fail({ formError: ADMIT_MESSAGES.stale }); // only from a stale existingId
       if (e.field === "admissionId") return fail({ formError: ADMIT_MESSAGES.reload });
       if (e.field === "admission") return fail({ formError: ADMIT_MESSAGES.thisYear });
+      if (e.field === "details") return fail({ formError: e.rule! }); // learner-details I7
       const row = /^courses\[(\d+)\]\.(\w+)$/.exec(e.field ?? "");
       const name = row ? `course.${rowOf[Number(row[1])]}.${row[2]}` : e.field;
       if (name && FORM_NAMES.includes(name)) return fail({ fieldErrors: { [name]: e.rule! } });
@@ -92,6 +116,34 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
     }
     // only a loss during COMMIT reaches here (withScope retries earlier ones); a resubmit is safe (DD-14)
     if (isConnectionLost(e)) return fail({ formError: ADMIT_MESSAGES.dropped });
+    throw e;
+  }
+}
+
+// ---------- The learner-details edit form (docs/designs/learner-details, "Edit Path") ----------
+
+export type DetailsFormState = { values: Record<string, string>; personId: string; centreId: string; version: string;
+  fieldErrors: Record<string, string>; formError?: string };
+
+/** Maps the posted edit form to updateDetails(). Forbidden and not-found are not caught: pageRead() answers 404. */
+export async function submitDetails(session: string, h: Headers, fd: FormData): Promise<DetailsFormState | { redirect: string }> {
+  if (!hasOrigin(h)) throw new Forbidden("missing Origin");
+  const text = (name: string) => { const v = fd.get(name); return typeof v === "string" ? v : ""; };
+  const state: DetailsFormState = {
+    values: Object.fromEntries(DETAIL_NAMES.map((n) => [n, text(n)]).filter(([, v]) => v !== "")),
+    personId: text("personId"), centreId: text("centreId"), version: text("version"), fieldErrors: {},
+  };
+  requiredDetails(fd, state.fieldErrors); // required on every edit (DD-11)
+  if (Object.keys(state.fieldErrors).length > 0) return state;
+  try {
+    await updateDetails(session, state.personId, state.centreId, state.version, detailsFrom(fd));
+    return { redirect: `/students/${state.personId}` };
+  } catch (e) {
+    if (e instanceof PersonError && e.reason === "invalid") {
+      if (e.field === "details") return { ...state, formError: e.rule! }; // stale or nothing to change: reload says it
+      if (e.field && DETAIL_NAMES.includes(e.field)) return { ...state, fieldErrors: { [e.field]: e.rule! } };
+      return { ...state, formError: e.message };
+    }
     throw e;
   }
 }
