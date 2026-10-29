@@ -1,7 +1,7 @@
 # Course master (Stage 3, fourth piece)
 
 *   **Author:** gtm
-*   **Status:** Draft. DD-1…DD-4 were decided by the design owner on 2026-10-29; DD-5…DD-10 are proposed here and need the owner's acceptance before the EGM review (steps 5–9).
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -98,12 +98,12 @@ New table **`app.course_centre_class`** (`course_id` → `course`, `centre_class
 2.  **DD-2: Availability is recorded now and enforced by `admit()` only when a switch is on** (design owner, 2026-10-29).
 3.  **DD-3: `catalogue.manage` puts courses live,** as today; approval tickets wait for fees (design owner, 2026-10-29).
 4.  **DD-4: Admin list and edit pages** (design owner, 2026-10-29).
-5.  **DD-5 (proposed): Department is free text** until a department master exists.
-6.  **DD-6 (proposed): A Keltron course must carry a share between 0 and 100;** other courses carry none.
-7.  **DD-7 (proposed): With enforcement on, a centre without a class may sell no course** (fail closed), so switching it on requires every centre to have a class.
-8.  **DD-8 (proposed): The pages live under `/admin/catalogue/courses`;** the course list is readable by any signed-in user, edits need `catalogue.manage`.
-9.  **DD-9 (proposed): Availability by centre class only;** special cases by region, area or centre (R-090.01) come later.
-10. **DD-10 (proposed): Duration fields are stored as given** (type plus up to four counts); the summary shown is computed, not stored.
+5.  **DD-5: Department is free text** until a department master exists.
+6.  **DD-6: A Keltron course must carry a share between 0 and 100;** other courses carry none.
+7.  **DD-7: With enforcement on, a centre without a class may sell no course** (fail closed), so switching it on requires every centre to have a class.
+8.  **DD-8: The pages live under `/admin/catalogue/courses`;** the course list is readable by any signed-in user, edits need `catalogue.manage`.
+9.  **DD-9: Availability by centre class only;** special cases by region, area or centre (R-090.01) come later.
+10. **DD-10: Duration fields are stored as given** (type plus up to four counts); the summary shown is computed, not stored.
 
 ## Open Questions
 
