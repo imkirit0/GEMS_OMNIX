@@ -1,7 +1,7 @@
 # Enquiry to admission (Stage 3, sixth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-14 on 2026-10-29 (DD-15 at step 6); build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-15).
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-14 on 2026-10-29 (DD-15 at step 6); build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-15); step 7: [`critic_report.md`](critic_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Every seeded list value is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -52,7 +52,7 @@ Fees, schemes and discounts on the course preferences wait for Stage 4.
 
 ## Technical Plan (Architecture)
 
-Z- and C- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5) and [`comprehension_report.md`](comprehension_report.md) (step 6).
+Z-, C- and D- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6) and [`critic_report.md`](critic_report.md) (step 7).
 
 ### Data Model (migration `0018_enquiry`)
 
@@ -393,6 +393,70 @@ After the admission insert: `update app.enquiry set admission_id = …, status_i
 
 *   `ST.sa` serves as a user with `student.admit` but no `enquiry.manage`.
 *   T-AUD-009 scans `src/server/enquiry.ts` for `"enquiry.*"` actions.
+
+### Contracts (step 7, D1–D18; these supersede step 6 where they differ)
+
+*   **Writes lock first (D1, D2).** Every enquiry write starts with `select id, centre_id, admission_id, status_id from app.enquiry where id = any ($ids::bigint[]) order by id for no key update`. Then it checks the kind and the enrolment. The ordered lock serialises the write with `admit()` and with overlapping bulk calls, so no deadlock is possible.
+    *   **Database backstops:**
+        *   the guard refuses **any** update of a row whose `old.admission_id is not null` (admit's own null-to-value update is unaffected);
+        *   a `before insert` trigger on `enquiry_followup` refuses an enrolled parent.
+    *   **Errors:** the enquiry error mapper turns a P0001 from these triggers into `enquiry: enrolled`, as a last resort (tested in T-ENQ-002 and T-ENQ-003).
+*   **Duplicate warnings are audited and rate-limited (D3).** On `SameMobile`, `scopedAction`'s `onFailure` hook writes in its own transaction:
+    *   a FAILED `enquiry.create` row with `reason: "duplicate"` and the matched ids only (no names, no mobile);
+    *   one `app.rate_take('search', …)`.
+
+    A rate-limited caller sees the `rateLimited` message. DD-10 still warns rather than blocks.
+*   **Search (D4).** One query ORs three conditions:
+    *   `id = q` when `q` is 1–18 digits;
+    *   `mobile = identityField('mobile', q)` when that succeeds;
+    *   a name prefix.
+*   **No partial index (D5).** The `enquiry_status` trigger refuses any insert, and any update, that gives `kind = 'ENROLLED'`; the migration seeds that row before it creates the trigger. The trigger also refuses:
+    *   deactivating the ENROLLED row;
+    *   deactivating the last active row of each other kind (D18);
+    *   changing `kind`.
+
+    Triggers are invisible to Prisma, so the drift gate stays clean.
+*   **Status master messages (D6).** These are `RbacError("invalid", "<field>: <rule>")` (catalogue `bad()`), mapped by `adminPost`:
+    *   `code: …` (the catalogue code rules);
+    *   `name: 1-200 characters`;
+    *   `colour: #rrggbb`;
+    *   `sortOrder: 0-1000`;
+    *   `kind: one of OPEN, LOST, JUNK` (ENROLLED cannot be created);
+    *   `active: last of its kind`;
+    *   `active: enrolled status`.
+
+    The trigger's P0001 is not reachable from the page, because the function checks first.
+*   **Admission link in the database (D7).** A composite FK `enquiry (admission_id, centre_id) → admission (id, centre_id)`.
+*   **The admit enquiry check (D8).**
+    *   `enquiryId` must match `^\d{1,18}$` before the action (`enquiry: not found` otherwise).
+    *   Without `enquiry.manage`, it throws `Forbidden("enquiry.manage denied")`; the audit detail carries `enquiryId` and the missing permission.
+*   **Audit gate (D9).** Each call site writes its literal action on one line (`action: "enquiry.create", permission: "enquiry.manage", …`). `src/server/enquiry.ts` joins the T-AUD-009 scan list.
+*   **Type fixes (D10).**
+    *   `updateEnquiry` changes omit `enquiredOn` and `statusId`.
+    *   `EnquiryInput.statusId` is optional; it defaults to the lowest-order OPEN status.
+    *   `createEnquiry` takes `nextval('app.enquiry_id_seq')` first, so the audit `targetId` is the new id.
+*   **Follow-ups and the next date (D11).**
+    *   `next_follow_up_on` changes only when `nextOn` is present: a date sets it; an explicit `null` clears it.
+    *   A NOTE keeps it.
+    *   Moving to LOST or JUNK clears it, and reopening leaves it empty.
+*   **Insert guard (D12).** The kind must be OPEN.
+*   **Contact checks (D13).** Named checks `enquiry_<column>_check` mirror the code:
+    *   `mobile`, `whatsapp`, `landline`, `guardian_phone`: `^\d{10}$`;
+    *   `current_pincode`: `^[1-9][0-9]{5}$`;
+    *   the free-text lengths, as 0015 does.
+*   **Indexes (D14; all in `schema.prisma` as `@@index`, so the drift gate agrees):**
+    *   `enquiry (centre_id, mobile)`;
+    *   `enquiry (centre_id, id)`;
+    *   `enquiry (next_follow_up_on)`;
+    *   `enquiry_followup (enquiry_id)`;
+    *   `person (mobile)` (the learner lookup).
+*   **Name lookup (D15).** `app.enquiry_people(p_ids bigint[])` returns the names for the enquiries the caller may view: one call per page.
+*   **View policy (D16).** The select policy uses the centres where the caller holds **either** `enquiry.view` or `enquiry.manage` (`scoped_centre_ids('enquiry.view') || scoped_centre_ids('enquiry.manage')`). A role with `manage` alone still works.
+*   **Enroll pre-fill (D17).**
+    *   Only preference 1 fills course row 1 (join date blank).
+    *   The other preferences are listed above the form as "Also interested in: …".
+    *   A preference that is no longer offered is listed as "(no longer offered)".
+*   **Smoke (D18).** 404 parity for `/enquiries/<hidden id>` against a missing id, and for `/students/new?enquiry=<hidden id>`.
 
 ### Tests
 
