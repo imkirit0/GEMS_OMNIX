@@ -33,7 +33,8 @@ export async function adminPost(req: Request, backTo: string | ((fields: Record<
     if (e instanceof RbacError) return seeOther(req, withError(back, e.key ?? e.reason));
     if (e instanceof TicketError) {
       const to = withError(back, `ticket.${e.reason}`);
-      return seeOther(req, e.reason === "stale" ? `${to}&detail=${encodeURIComponent(e.message)}` : to);
+      // the page looks a detail up in the handlers' fixed lists only, never shows it as such (DD-12)
+      return seeOther(req, e.reason === "stale" || e.reason === "invalid" ? `${to}&detail=${encodeURIComponent(e.message)}` : to);
     }
     if (e instanceof TicketNotFound) return new Response("Not found", { status: 404 }); // same as a missing ticket
     if (e instanceof TicketDuplicate) return seeOther(req, `/tickets/${e.id}`);
@@ -55,6 +56,8 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "ticket.setup.levels": "Levels must run 1, 2, 3… with no gaps, at most 4.",
   "ticket.setup.activate": "The type needs a registered handler and valid levels before it can be switched on.",
   "ticket.setup.duplicate": "A ticket type with that code already exists.",
+  "ticket.setup.numbering": "Ticket types cannot be switched on until the ticket numbering policy is signed and its counter is set.",
+  "ticket.setup.storage": "A type that needs documents cannot be switched on until document storage is approved (ADR-002) and its safeguards are in place.",
   duplicate: "That login or key already exists.",
   notfound: "Not found.",
   invalid: "Some values were invalid. Check the scope fields.",

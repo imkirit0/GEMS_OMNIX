@@ -13,7 +13,7 @@ export const AUDIT_CATALOGUE = [
   "export.centres", "export.users",
   // tickets (src/server/tickets/engine.ts, setup.ts)
   "ticket.upload.request", "ticket.raise", "ticket.approve", "ticket.reject", "ticket.forward", "ticket.reassign",
-  "ticket.apply_failed", "ticket.document.download",
+  "ticket.apply_failed", "ticket.document.download", "ticket.review.duplicates",
   "ticket.category.create", "ticket.type.create", "ticket.type.update", "ticket.type.levels", "ticket.type.viewers",
   "ticket.type.activate", "ticket.type.deactivate",
   // person core (src/server/people.ts)

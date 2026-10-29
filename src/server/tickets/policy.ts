@@ -14,3 +14,15 @@ export const TICKET_POLICY = {
   numberMaxLength: 30,
   numberPeriod: "ALL", // one counter that never resets (NP-2 default)
 } as const;
+
+// Go-live gates (correction-tickets DD-14, DD-18), for every ticket type, in every environment. Mutable so tests can
+// open them; the committed values stay false (a test asserts it). A manual Supabase run sets documentsLive locally
+// before `next build` and never commits it.
+export const TICKET_GATES = {
+  numberingSigned: false, // NP signed and the ticket counter seeded after the legacy numbers
+  documentsLive: false, // ADR-002 signed and the engine's DD-16 safeguards built (upload cleanup, per-user limit)
+};
+export function gateRefusal(t: { documentRequired: boolean }): "ticket.setup.numbering" | "ticket.setup.storage" | null {
+  if (!TICKET_GATES.numberingSigned) return "ticket.setup.numbering";
+  return t.documentRequired && !TICKET_GATES.documentsLive ? "ticket.setup.storage" : null;
+}

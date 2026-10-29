@@ -1,6 +1,7 @@
 // The test-only ticket handler (DD-2). Its domain table is app.test_ticket_counter (tests/sql/ticket-test-handler.sql).
 // Used by tests/tickets.test.ts and by the manual Supabase run; never registered in production.
-import { TicketError, type TicketHandler } from "./handlers";
+import { TicketError } from "./errors";
+import type { TicketHandler } from "./handlers";
 
 export type CounterPayload = { key: string; failApply: boolean; failRevalidate: boolean };
 

@@ -3,15 +3,14 @@
 // triggers and append-only history (0009); who may act is decided by app.ticket_may_act, refused here (DD-1).
 import { randomUUID } from "node:crypto";
 import { Forbidden, scopedAction } from "../action";
-import { isConnectionLost, withScope, type Tx } from "../db";
+import { isConnectionLost, ScopeError, withScope, type Tx } from "../db";
 import { adminWrite } from "../rbac";
 import { allocateGlobal, formatTicketNumber } from "../numbering";
 import { storage } from "../storage";
 import { Prisma } from "../../../generated/prisma/client";
-import {
-  ApplyFailed, HANDLERS, TicketDuplicate, TicketError, TicketNotFound, type TicketField, type TicketRow,
-} from "./handlers";
-import { TICKET_POLICY } from "./policy";
+import { ApplyFailed, TicketDuplicate, TicketError, TicketNotFound } from "./errors";
+import { HANDLERS, type TicketField, type TicketRow } from "./handlers";
+import { TICKET_GATES, TICKET_POLICY } from "./policy";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID.test(s);
@@ -87,10 +86,10 @@ export async function requestUpload(session: string | undefined,
   const key = `uploads/${u.centreId}/${uploadId}`;
   await scopedAction(session, { action: "ticket.upload.request", permission: "ticket.raise", centreId: u.centreId,
     targetType: "ticket_upload", targetId: uploadId }, async (tx) => {
-    // no upload unless a live type needs documents: in Stage 2 that refuses every upload (DD-16)
+    // no upload unless a live type needs documents and document storage is live (correction-tickets DD-14)
     const [t] = await tx.$queryRaw<{ active: boolean; document_required: boolean; handler_key: string }[]>`
       select active, document_required, handler_key from app.ticket_type where id = ${u.typeId}`;
-    if (!t?.active || !t.document_required || !HANDLERS[t.handler_key]) throw new TicketError("inactive");
+    if (!TICKET_GATES.documentsLive || !t?.active || !t.document_required || !HANDLERS[t.handler_key]) throw new TicketError("inactive");
     if (!Number.isSafeInteger(u.size) || u.size <= 0 || u.size > TICKET_POLICY.maxFileBytes) throw new TicketError("document", "file too large");
     if (!TICKET_POLICY.fileTypes.some((f) => f.mime === u.contentType)) throw new TicketError("document", "file type not allowed");
     const fileName = u.fileName.trim().slice(0, 200);
@@ -153,16 +152,22 @@ export async function raise(session: string | undefined, r: RaiseInput): Promise
   const res = await scopedAction(session, { action: "ticket.raise", permission: "ticket.raise", centreId,
     targetType: "ticket", targetId: r.ticketId }, (tx, ctx) => ticketDb(r.ticketId, async () => {
     const handler = await lockHandler(tx, typeId);
+    // the re-raise checks come before any domain answer, so a non-raiser learns nothing from prepare (correction-tickets D1)
+    let source: unknown;
+    if (r.reraiseOf) {
+      const [old] = await tx.$queryRaw<{ status: string; raised_by: string; payload: unknown }[]>`
+        select status::text, raised_by::text, payload from app.ticket where id = ${r.reraiseOf}::uuid for update`;
+      if (old?.status !== "REJECTED" || old.raised_by !== ctx.userId) throw new TicketError("invalid", "only the raiser can re-raise a rejected ticket");
+      source = old.payload;
+    }
     const [type] = await tx.$queryRaw<{ code: string; number_prefix: string; document_required: boolean }[]>`
       select code, number_prefix, document_required from app.ticket_type where id = ${typeId}`;
-    const payload = handler.parse(r.payload);
+    const parsed = handler.parse(r.payload);
+    const payload = handler.prepare
+      ? await handler.prepare(tx, { centreId, payload: parsed, ...(r.reraiseOf ? { source } : {}) })
+      : parsed;
     await handler.validate(tx, { centreId, payload });
     if (type!.document_required && docs.length === 0) throw new TicketError("document", "a document is required");
-    if (r.reraiseOf) {
-      const [old] = await tx.$queryRaw<{ status: string; raised_by: string }[]>`
-        select status::text, raised_by::text from app.ticket where id = ${r.reraiseOf}::uuid for update`;
-      if (old?.status !== "REJECTED" || old.raised_by !== ctx.userId) throw new TicketError("invalid", "only the raiser can re-raise a rejected ticket");
-    }
     const levels = await tx.$queryRaw<{ level: number; approver_user_id: string | null; approver_role_id: number | null }[]>`
       select level, approver_user_id::text, approver_role_id from app.ticket_type_level where type_id = ${typeId} order by level`;
     if (levels.length === 0 || levels.some((l, i) => l.level !== i + 1)) throw new TicketError("inactive", "type has no valid levels");
@@ -333,9 +338,9 @@ export async function getTicket(session: string | undefined, id: string) {
   if (!isUuid(id)) throw new TicketNotFound();
   return withScope(session, async (tx) => {
     const [t] = await tx.$queryRaw<(TicketListRow & { payload: unknown; version: number; assignedUserId: string | null;
-      reraiseOf: string | null; closedAt: Date | null; typeCode: string; canView: boolean; canAct: boolean })[]>`
+      reraiseOf: string | null; closedAt: Date | null; typeCode: string; handlerKey: string; canView: boolean; canAct: boolean })[]>`
       select ${listColumns}, t.payload, t.version, t.assigned_user_id::text as "assignedUserId", t.reraise_of::text as "reraiseOf",
-             t.closed_at as "closedAt", ty.code as "typeCode",
+             t.closed_at as "closedAt", ty.code as "typeCode", ty.handler_key as "handlerKey",
              app.ticket_may_view(t.id) as "canView", app.ticket_may_act(t.id) as "canAct"
       from app.ticket t join app.ticket_type ty on ty.id = t.type_id join app.centre c on c.id = t.centre_id
       where t.id = ${id}::uuid`;
@@ -356,9 +361,47 @@ export async function getTicket(session: string | undefined, id: string) {
     const candidates = t.canAct || canReassign
       ? await tx.$queryRaw<{ id: string; display_name: string }[]>`select id::text, display_name from app.ticket_forward_candidates(${id}::uuid)`
       : [];
-    return { ...t, levels, history, documents, canReassign, candidates,
-      names: Object.fromEntries(people.map((p) => [p.id, p.display_name])) as Record<string, string> };
+    // DD-16: a handler may require a permission to see the payload, for those who cannot act (one rule, here)
+    const h = HANDLERS[t.handlerKey];
+    let visible = t.canAct || !h?.valuesPermission;
+    if (!visible) {
+      const [v] = await tx.$queryRaw<{ ok: boolean }[]>`select app.has_permission(${h!.valuesPermission!}, ${t.centreId}::int) as ok`;
+      visible = !!v?.ok;
+    }
+    let described: [string, string][] | null = null;
+    if (visible && h?.describe) {
+      try { described = h.describe(t.payload); } catch { described = null; } // a payload of an older handler: the JSON
+    }
+    return { ...t, payload: visible ? t.payload : null, described, hasReview: !!h?.review, levels, history, documents,
+      canReassign, candidates, names: Object.fromEntries(people.map((p) => [p.id, p.display_name])) as Record<string, string> };
   });
+}
+
+/**
+ * The handler's review lines for one who may act (DD-6, DD-17), audited as ticket.review.duplicates with the matched
+ * person ids. A failing review degrades to one line, audited FAILED in its own transaction; a lost connection, an
+ * expired session and a refusal are not hidden (R1).
+ */
+export async function ticketReview(session: string | undefined, ticketId: string): Promise<string[]> {
+  const { centreId } = await locate(session, ticketId);
+  try {
+    const r = await scopedAction(session, { action: "ticket.review.duplicates", permission: "ticket.approve", centreId, targetType: "ticket", targetId: ticketId },
+      async (tx) => {
+        const [t] = await tx.$queryRaw<{ payload: unknown; handler_key: string; ok: boolean }[]>`
+          select t.payload, ty.handler_key, app.ticket_may_act(t.id) as ok
+          from app.ticket t join app.ticket_type ty on ty.id = t.type_id where t.id = ${ticketId}::uuid`;
+        if (!t?.ok) throw new Forbidden("not an approver of this ticket");
+        const review = HANDLERS[t.handler_key]?.review;
+        return review ? review(tx, { centreId, payload: t.payload }) : { lines: [], matches: [] };
+      }, (x) => ({ matches: x.matches }),
+      (e) => (isConnectionLost(e) || e instanceof ScopeError || e instanceof Forbidden ? null
+        : { action: "ticket.review.duplicates", extra: { error: e instanceof Error ? e.name : "unknown" } }));
+    return r.lines;
+  } catch (e) {
+    if (isConnectionLost(e) || e instanceof ScopeError || e instanceof Forbidden) throw e;
+    console.error(JSON.stringify({ level: "error", msg: "ticket review failed", error: e instanceof Error ? e.name : "unknown" }));
+    return ["Review unavailable"];
+  }
 }
 
 export async function documentLink(session: string | undefined, ticketId: string, documentId: number): Promise<string> {

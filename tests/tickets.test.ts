@@ -11,6 +11,7 @@ import {
   act, approvalQueue, documentLink, getTicket, listTickets, raise, raiseOptions, reassign, requestUpload,
 } from "../src/server/tickets/engine";
 import { ApplyFailed, HANDLERS, TicketError, TicketNotFound, type TicketHandler } from "../src/server/tickets/handlers";
+import { TICKET_GATES } from "../src/server/tickets/policy";
 import { testCounter } from "../src/server/tickets/test-handler";
 import {
   createCategory, createType, getType, listTypes, setTypeActive, setTypeLevels, setTypeViewers, updateType,
@@ -59,6 +60,9 @@ async function uploadPdf(token: string, typeId: number, bytes: Uint8Array = PDF,
 beforeAll(async () => {
   await asAdmin((db) => db.query(fs.readFileSync("tests/sql/ticket-test-handler.sql", "utf8")));
   HANDLERS[testCounter.key] = testCounter as TicketHandler<unknown>;
+  // the engine tests switch types on and upload documents: open the go-live gates for this file (correction-tickets DD-14, DD-18)
+  TICKET_GATES.numberingSigned = true;
+  TICKET_GATES.documentsLive = true;
 });
 beforeEach(async () => { await reset(); fakeStorage.clear(); });
 

@@ -5,7 +5,7 @@ import { authorize } from "../action";
 import { withScope, type Tx } from "../db";
 import { adminWrite, RbacError } from "../rbac";
 import { HANDLERS } from "./handlers";
-import { TICKET_POLICY } from "./policy";
+import { gateRefusal, TICKET_GATES, TICKET_POLICY } from "./policy";
 
 type Level = { level: number; userId?: string; roleId?: number };
 type Viewer = { userId?: string; roleId?: number };
@@ -83,6 +83,10 @@ export const updateType = async (session: string | undefined, typeId: number, u:
         const [open] = await tx.$queryRaw<{ n: number }[]>`select count(*)::int as n from app.ticket where type_id = ${typeId} and status = 'OPEN'`;
         if (before.active || open!.n > 0) throw refuse("ticket.setup.handler", "the handler can change only while the type is off and has no open tickets");
       }
+      // DD-14: documents cannot become required on a live type while document storage is not live
+      if (before.active && u.documentRequired && !before.document_required && !TICKET_GATES.documentsLive) {
+        throw refuse("ticket.setup.storage", "documents cannot be required on an active type yet");
+      }
       await tx.$executeRaw`update app.ticket_type set name = ${u.name.trim()}, category_id = ${u.categoryId},
         priority = ${u.priority}::app."TicketPriority", document_required = ${u.documentRequired}, handler_key = ${u.handlerKey.trim()}
         where id = ${typeId}`;
@@ -127,6 +131,8 @@ export const setTypeActive = (session: string | undefined, typeId: number, activ
       if (!HANDLERS[t.handler_key] || levels.length === 0 || levels.some((l, i) => l.level !== i + 1)) {
         throw refuse("ticket.setup.activate", "the type needs a registered handler and valid levels before it can be switched on");
       }
+      const gate = gateRefusal({ documentRequired: t.document_required }); // DD-14, DD-18
+      if (gate) throw refuse(gate, "go-live gate closed");
       await tx.$executeRaw`update app.ticket_type set active = true where id = ${typeId}`;
       return { before: { active: t.active }, after: { active: true } };
     }, (r) => r)
