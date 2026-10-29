@@ -1407,7 +1407,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - a same-origin post saves;
   - the record shows Enroll to a user who may admit.
 - **Mutation checks** (`evidence/mutation-enquiry-2026-10-29.txt`): 61 mutations (39 code, 20 database, 1 drift, 1 real-server). One was MISSED at first (D19: reset() rewrites permissions from the fixtures). A check on the 0018 seed was added, and the mutation is caught. Three were not run; the file gives the reasons.
-- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **180 passed + 3 todo** (18 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-enquiry-2026-10-29.txt`).
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **180 passed + 3 todo** (18 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-enquiry-2026-10-29.txt`). Confirmed on GitHub: run 40893513797 for `126b5c5` succeeded.
 - **Limits:**
   - Not built: export, conversion reports, reminders by SMS or e-mail, the R-080 front-office masters, the CRM ticket and profile (later pieces).
   - Fees, schemes and batches on preferences wait for Stage 4.
