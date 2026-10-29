@@ -1,0 +1,80 @@
+Centre onboarding mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-29, local Docker database.
+Code mutations: applied, the named test run (vitest -t), restored. Database mutations of 0020: applied as SQL, the named test
+run, restored; the next CI run recreated the database green. 15-16: migration text. 42, 38s: next build, fresh database, next start, smoke.
+17 (setval omitted) is review only: the fixtures set the sequences themselves.
+
+Code:
+CAUGHT 18 create permission view
+CAUGHT 19 insert returning
+CAUGHT 20 validator order
+CAUGHT 21 phoneDigits keeps 0
+CAUGHT 22 set phone clearable
+CAUGHT 23 no GST combination
+CAUGHT 24 no GST-while-active
+CAUGHT 25a checklist without class
+CAUGHT 25b checklist without GST
+CAUGHT 26a reason optional
+CAUGHT 26b already-state allowed
+CAUGHT 27 duplicate ignores name
+CAUGHT 28 no admit gate
+CAUGHT 29 admit gate above used
+CAUGHT 30 no enquiry gate
+CAUGHT 31a no admission form mapping
+CAUGHT 31b no enquiry form mapping
+CAUGHT 32 admitOptions all centres
+CAUGHT 33a active always true
+CAUGHT 33b manage narrowed
+CAUGHT 34 getCentre without view
+CAUGHT 35 getCentre manage per centre
+CAUGHT 36a update audit before empty
+CAUGHT 36b status audit after
+CAUGHT 36c region audit
+CAUGHT 37 action not catalogued
+CAUGHT 38 no same-origin
+CAUGHT 39 no step-up
+CAUGHT 40 no id regex
+CAUGHT 41 unknown op accepted
+CAUGHT 41b unknown centre op accepted
+CAUGHT 43 enquiry columns unqualified
+
+Database (first run):
+CAUGHT 1 centre_insert true
+CAUGHT 2 centre_manage_update true
+CAUGHT 3 trigger without class branch
+CAUGHT 4 trigger without other-columns branch
+CAUGHT 5 trigger for every role
+CAUGHT 6 trigger compares the class too
+CAUGHT 7 status in the insert grant
+CAUGHT 8 code in the update grant
+CAUGHT 9 geo_insert true
+CAUGHT 10 geo_update true
+CAUGHT 11 no force on area
+CAUGHT 12 delete policy on region
+CAUGHT 13a region_id in the area update grant
+CAUGHT 13b code in the region update grant
+CAUGHT 14 drop centre_gst_check
+CAUGHT 14 drop centre_gstin_check
+CAUGHT 14 drop centre_phone_check
+CAUGHT 14 drop centre_email_check
+CAUGHT 14 drop centre_address_check
+CAUGHT 14 drop centre_agreement_check
+CAUGHT 14 drop centre_code_check
+CAUGHT 14 drop centre_category_check
+CAUGHT 14 drop centre_ownership_check
+CAUGHT 14 drop centre_gst_supply_check
+MISSED 14 drop region_code_check
+MISSED 14 drop region_name_check
+MISSED 14 drop area_name_check
+
+The three region/area checks were MISSED; T-CO-002 gained direct inserts for them. Rerun:
+CAUGHT 14 drop region_code_check
+CAUGHT 14 drop region_name_check
+CAUGHT 14 drop area_name_check
+
+Migration text:
+CAUGHT 15 no system_admin grant
+CAUGHT 16 not sensitive
+
+Real server:
+CAUGHT 42 new-centre page without notFound  | FAIL  T-CO the new-centre page is 404 for a non-manager  (200)
+CAUGHT 38s centre view forms for viewers  | FAIL  T-CO the centre view shows the new fields to a viewer, without forms  (200)

@@ -1507,3 +1507,40 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/smoke-security.mjs | a6fd3b969b5cbbc13a9146ad02fc57340305a9af38c76d5de6273dfbc3fabdc4 |
 | evidence/mutation-certifications-2026-10-29.txt | d247ee23a201e97a0c56f89c6c7f7c6667e698a85c99a4e327d6a1131a5553bc |
 | evidence/ci-certifications-2026-10-29.txt | 843bb60957dd72c5080905996d642a7b745601139a857c612ad1785e3825e6b6 |
+
+## E-044 Centre onboarding built (eighth Stage 3 piece, WF3) (2026-10-29)
+- **Request:** roadmap order, continued under the owner's standing instruction (2026-10-29). DD-1…DD-5 and the build approval were taken as the recommended options. EGM review: steps 5–7 in parallel on one commit, then steps 8 (with a merged Technical Plan) and 9. DD-3 was corrected at review: staff whose only centres are inactive already cannot sign in (0004 `account_usable`, T-AUTH-012). Built in phases O1–O4.
+- **O1 (documents):** T-CO-001…004 added to audit 09; R-023, R-022 and R-022.02 linked; CSV and FRD regenerated (0 errors).
+- **O2 (data and server):**
+  - Migration 0020:
+    - centre columns: email, phone, address, category, GST (enabled, supply, GSTIN), ownership, agreement dates, opened on; named checks for each, and for centre, region and area codes and names (pre-checked against existing rows);
+    - row security on region and area for the first time (everyone reads; `org.centre.manage` at ALL scope inserts and updates; no deletes);
+    - centre insert and update policies on `org.centre.manage`, beside 0017's class policy;
+    - `centre_write_guard` (security invoker; app role only): the class needs `catalogue.manage`, every other column `org.centre.manage`;
+    - permission `org.centre.manage` (sensitive) with the `system_admin` grant; column grants (never status or the class on insert; codes never change; areas never move); sequences set past legacy ids.
+  - `centres.ts`: `createCentre` (id taken first for the audit row; no RETURNING), `updateCentre` (row lock; rules on the merged row; a set phone cannot be cleared; audit of the changed fields), `setCentreActive` (reason; checklist: a class, and GST supply and GSTIN when registered), region and area add and rename, `getCentre` and `listCentres` also open to managers at ALL scope, `listGeography`. Duplicates are mapped by constraint name.
+  - Trading gate: `admit()` (after the resubmit check, so a resubmitted form still says saved) and `createEnquiry()` refuse at an inactive centre; the forms say "This centre is not active yet."; `admitOptions` lists active centres only; `enquiryOptions` gains `active`, and only the create paths filter on it.
+  - `phoneDigits` in `details.ts` is now the one phone rule (details, enquiries, centres).
+  - Found at build: the new `centre.email` column made enquiry's detail read ambiguous (42702); its columns are now qualified, guarded by mutation 43.
+- **O3 (pages):** `/centres` links (New centre; Regions and areas), `/centres/new` (404 for others), edit and activate on `/centres/[id]` with links to the class page and user admin, `/centres/geography`; routes `/centres/create`, `/centres/[id]/save`, `/centres/geography/save`; error texts for duplicates and the checklist.
+- **Tests:** `tests/centre-onboarding.test.ts` holds 4 tests. Existing tests changed: fixtures (role 25, `tok-coM`, `tok-coR1`), T-SEC-007 split, T-RLS-002 centre commands, the T-MS column list, T-AUD-009 scan and catalogue. Real server: 4 new checks (the view shows the new fields without forms; `/centres/new` is 404 for a viewer; regions and areas readable without forms; a foreign-origin create is refused).
+- **Mutation checks** (`evidence/mutation-centre-onboarding-2026-10-29.txt`): 60 in total (32 code, 24 database, 2 migration text, 2 real-server). Three were MISSED at first (the region and area name and code checks); T-CO-002 gained direct inserts and all three are now CAUGHT. Mutation 17 (setval omitted) is review only: the fixtures set the sequences themselves.
+- **Checks:** a fresh clone of `ff3e417` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0: no drift; 0 type errors; **188 passed + 3 todo** (20 files); build and bundle scan; admin journey and all security smoke checks passed (`evidence/ci-centre-onboarding-2026-10-29.txt`).
+- **Limits and next steps:**
+  - Moving areas between regions, centre deletion and per-centre documents are out of scope.
+  - GSTIN shape and the phone rule are PMC parameters.
+  - Not yet on Supabase (migrations 0012–0020).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0020_centre_onboarding/migration.sql | bed49b0c4ac52c81af981e0bf95a68ce60e35f02dc1d9b4d2ff8e5ffb1c9db2f |
+| prisma/schema.prisma | 21b8f0aaff8296cd475f0f6d06885082c9870b7350ca818a86d1d9533399ec5c |
+| src/server/centres.ts | 6175d08e3f78a02881cf205d375d219fac1b1bc600367c1397e1717f7d701259 |
+| src/server/people.ts | 45d01317fc2917072cf6db65be4d5edf46e82a924bf93086a50caf600ba62963 |
+| src/server/enquiry.ts | 35ea30799257d49979dbc5597eeec9b7b6a08d44c410a577d7fddbaa221865a7 |
+| src/server/details.ts | 2f3a84b6c7323f5db19d1e5be12ac80a17343043c22dd4dd5dac5dd117b3f37b |
+| src/server/admission-form.ts | aa3d637e233453a77d2e2b6b32dafec728bd186f49b86b860e047e1a76b11302 |
+| src/server/enquiry-form.ts | 548260c2033a3267560d9a4f979cea584791928bef5ba19c06c7c2ff7dc86829 |
+| tests/centre-onboarding.test.ts | 8155caeac7c7cde3900f05f8e4f92fdc7c3c530a314ded6cc1d93a412ab9527b |
