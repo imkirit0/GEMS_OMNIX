@@ -1,7 +1,7 @@
 # Centre onboarding (Stage 3, eighth piece, WF3)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-5 were taken as the recommended options under the owner's standing instruction of 2026-10-29; build approval follows the EGM review (steps 5–9). Steps 5–7 ran in parallel: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md); DD-3 corrected (recommended option under the standing instruction). Step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
+*   **Status:** Approved for build on 2026-10-29 after the EGM review (steps 5–9), under the owner's standing instruction of 2026-10-29. DD-1…DD-5 are recommended options taken under the same instruction; DD-3 was corrected at steps 5–7. Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (steps 5–7 in parallel), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`; fixed lists are PMC. Input: [`input-brief.md`](input-brief.md).
@@ -254,13 +254,24 @@ Fixture holders (I2): `tok-coM` (role 25 `centre_manager`, `org.centre.manage`, 
 
 ## Detailed Implementation Plan
 
-Outline; EGM step 9 writes the file-by-file plan:
+The file-by-file plan (O1–O4, each ending green) and the 42 mutation checks are in [`implementation_readiness_report.md`](implementation_readiness_report.md). These notes from that step are binding; they supersede the text above where they differ:
 
-| Phase | Items |
-|---|---|
-| O1 Documents | T-CO-001…004 in audit 09; matrix links on R-023, R-022, R-022.02 |
-| O2 Server | Migration 0020; Prisma; `centres.ts` writes and reads; trading gate in `admit()` and `createEnquiry()`; audit catalogue; T-SEC-007; tests |
-| O3 Pages | `/centres/new`, the view's forms, geography page, routes, labels, messages; tests |
-| O4 Evidence | Smoke; mutation checks; E-entry |
+*   **New centre id (R1):** `createCentre` takes `nextval` in a pre-flight `withScope`, so `adminWrite` can use it as `targetId` (the enquiry pattern). A refused attempt uses up one id.
+*   **Changed test (R2):** `catalogue-masters.test.ts` checks the sorted 15 UPDATE columns of `centre`.
+*   **Enquiry pickers (R3):** `enquiryOptions.manage` stays as it is and gains `active`. Only the create paths filter on `manage && active`, so existing enquiries at an inactive centre keep their bulk actions.
+*   **Managers see every centre (R4):** `getCentre` and `listCentres` also admit `org.centre.manage` (ALL), as `listCentreClasses` does.
+*   **Shared helpers (R5, R6):**
+    *   `catalogue.ts` exports `bad`, `code`, `name`, `reasonOf` and `date`.
+    *   `details.ts` exports `phoneDigits`, used by `detailField`, enquiry and centres.
+    *   `PersonError` from these helpers becomes `bad()` in `centres.ts`.
+*   **Pre-checks (R7):** the do-blocks are written out in the report; 0012 has no such precedent.
+*   **Existence checks (R8):** `areaId` and `regionId` are checked for shape before the database and for existence inside the callback.
+*   **Dates and changes (R9):** dates are read as `::text`; "nothing to change" compares canonical values; the audit records changed keys only.
+*   **More tests (R10):** T-CO-003 also covers the form messages and the resubmit-after-deactivation order.
+*   **Small rules (R11–R14):**
+    *   the trigger is `plpgsql security invoker` with `search_path`;
+    *   region and area renames lock the row;
+    *   the email is trimmed, and blank means null;
+    *   the matrix tests are listed per row.
 
 *Drafted with EGM (draft step followed manually)*
