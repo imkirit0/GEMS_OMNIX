@@ -1,7 +1,7 @@
 # Admission screens (Stage 3, first piece)
 
 *   **Author:** gtm
-*   **Status:** Draft. DD-1…DD-3 were decided by the design owner on 2026-10-29; DD-4…DD-8 are proposed here and need the owner's acceptance, section by section, before the EGM review (steps 5–9).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -92,11 +92,11 @@ All three use `pageRead()` (404 on `Forbidden`, login redirect on an expired ses
 1.  **DD-1: Existing fields only.** The form collects what `admit()` takes today; more person fields come by a later expand migration (design owner, 2026-10-29).
 2.  **DD-2: Unstyled pages** until a design system is chosen (design owner, 2026-10-29).
 3.  **DD-3: No documents** in this piece (design owner, 2026-10-29).
-4.  **DD-4 (proposed): The admit form submits to a Server Action** that returns the typed values and any candidates to the page, so the duplicate choice needs no retyping and no personal data enters a URL. The rest of the app keeps route handlers.
-5.  **DD-5 (proposed): No edits after save.** A wrong admission is corrected by a later R-095 ticket (D-ADM-3's proposed default: identity and contact fields via ticket only).
-6.  **DD-6 (proposed): The list searches by Admission No, Register No, name start and mobile,** at most 100 rows, under the existing search rate limit; it never shows the mobile.
-7.  **DD-7 (proposed): A plain select of active courses** per course row, three rows.
-8.  **DD-8 (proposed): The admission date defaults to today (Asia/Kolkata)** and is not checked against the academic year's dates (catalogue DD-6).
+4.  **DD-4: The admit form submits to a Server Action** that returns the typed values and any candidates to the page, so the duplicate choice needs no retyping and no personal data enters a URL. The rest of the app keeps route handlers.
+5.  **DD-5: No edits after save.** A wrong admission is corrected by a later R-095 ticket (D-ADM-3's proposed default: identity and contact fields via ticket only).
+6.  **DD-6: The list searches by Admission No, Register No, name start and mobile,** at most 100 rows, under the existing search rate limit; it never shows the mobile.
+7.  **DD-7: A plain select of active courses** per course row, three rows.
+8.  **DD-8: The admission date defaults to today (Asia/Kolkata)** and is not checked against the academic year's dates (catalogue DD-6).
 
 ## Open Questions
 
@@ -140,7 +140,7 @@ All three use `pageRead()` (404 on `Forbidden`, login redirect on an expired ses
 
 ## Detailed Implementation Plan
 
-To be written after the owner accepts DD-4…DD-8; outline:
+Outline; the full plan is written against the code during EGM step 9:
 
 | Phase | Items |
 |---|---|
