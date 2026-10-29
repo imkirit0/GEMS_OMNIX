@@ -1,7 +1,7 @@
 # Course master (Stage 3, fourth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-11…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14…DD-17); step 7: [`critic_report.md`](critic_report.md) (DD-18); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-13 revised).
+*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-11…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14…DD-17); step 7: [`critic_report.md`](critic_report.md) (DD-18); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-13 revised); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -229,13 +229,19 @@ One `adminWrite` with the literal action `catalogue.course.classes` (`targetType
 
 ## Detailed Implementation Plan
 
-Outline; the file-by-file plan is written against the code during EGM step 9:
+The file-by-file plan (phases M1–M4, each ending with `bash scripts/ci.sh` exit 0) and the 25 mutation checks are in [`implementation_readiness_report.md`](implementation_readiness_report.md) (EGM step 9). Contract notes from that step, binding for the build:
 
-| Phase | Items |
-|---|---|
-| M1 Documents | T-CM-001…006 in audit 09; matrix links on R-090, R-091 |
-| M2 Server | Migration 0016 (columns, checks, grants, link table); `schema.prisma`; `catalogue.ts` fields, `setCourseClasses`, reads; `CATALOGUE_GATES`, the visible/availability checks and the `admitOptions` payload in `people.ts`; `course-offer.ts`; audit catalogue entry and test literal; tests |
-| M3 Pages | `/admin/catalogue/courses` list, new, edit; routes; `admin-http.ts` detail and message; the admission form's offered-course list; home link; tests |
-| M4 Evidence | Smoke additions; mutation checks; E-entry |
+*   **Existing tests (R1, R2):** T-CAT-003's course audit rows spread a test constant `COURSE_DEFAULTS` (the 19 fields at their defaults); its course activate/deactivate rows become whole rows. T-ADM-001 expects `classCode: null` on centres and `enforced: false`. The admission form's `Options` type is `Awaited<ReturnType<typeof admitOptions>>` (type-only import).
+*   **Generated files (R3):** M1 runs `build_matrix.py` and `build_frd.py` and commits the matrix CSV and the FRD.
+*   **Link table (R4):** both relations `onDelete: Restrict, onUpdate: Restrict`; the DDL is generated with `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` against a database at 0015, then checks, RLS (`enable` and `force`) and grants are added by hand.
+*   **Labels (R5):** `COURSE_FIELD_LABELS`, exported from `app/admin/catalogue/courses/course-form.tsx`: Code, Name, Display name, Category, Division, Department, Duration type, Months, Weeks, Days, Hours, Capacity, Exam minimum days, Sort order, KELTRON share (%), Centre classes (`classIds`), Reason, and the flag labels above. An unknown `detail` shows no "Check:" line.
+*   **Admission form (R6):** a `hydrated` flag set in `useEffect`; `offeredCourses(options.courses, hydrated ? centre : null, options.enforced)`; `centreId` in `useState` (from the posted value) with `onChange` on the centre select; each course select keyed `${n}:${centreId}` with a `defaultValue` kept only when still offered, so a remount clears an invalid choice.
+*   **Read shapes (R7):** `listCourses` → `{ courses: { id, code, name, displayName, categoryId, divisionId, active, visible, sortOrder, durationType, durationMonths, durationWeeks, durationDays, durationHours, classes: string[] }[], categories, divisions, classes, canManage }` (active picklist entries, no share). `getCourse` → `{ course: { id, code, name, categoryId, divisionId, active, ...CourseDetails, classes: string[] }, categories, divisions, classes, canManage }`, picklist entries `{ id, code, name, active }` including the course's own inactive ones. `export function durationSummary(c)` in `catalogue.ts` ("6 months · 120 hours", "1 week", NA or no counts → "—"), tested in T-CM-001.
+*   **Non-vacuous tests (R8):** T-CM-002 deletes a real link row as a non-manager (0 rows, row kept), inserts as one (42501), and asserts RLS enabled and forced; T-CM-005 sets a share of 37.5 first; T-CM-003 adds class `A++`, sets centre A to METRO, leaves A2 without a class, links DCA to METRO and TALLY to both, and asserts non-zero refused and accepted counts before checking agreement; T-CM-001 asserts `{ code: "23514", constraint: "course_<column>_check" }`; T-CM-006 admits before hiding; the committed default is checked on the value and on the source text of `people.ts`.
+*   **Share (R9, R10, R12):** after the tolerance check the share is normalised with `Math.round(x * 100) / 100`; SQL writes `${share}::numeric`; every audited read casts `keltron_share::float8`. Direct-insert check cases use out-of-range shares (−1, 100.01, a share without Keltron, Keltron without a share); 12.345 is refused by the app only.
+*   **Classes (R11):** a non-array or non-integer `classIds` → `classIds: invalid`; newly added ids are read `… and active for share`, a count mismatch → `classIds: inactive or unknown`.
+*   **Form (R13):** `sortOrder` is required and pre-filled (0 on a new course).
+*   **Accepted (R14, R15):** `ADMIN_MESSAGES["catalogue.duplicate"]` names a course while only course pages exist (revisit with the masters pages); prefix-less messages ("nothing to change") show the generic line, and T-CM-004 asserts they carry no `detail=`.
+*   **Client safety (R16):** `src/server/course-offer.ts` has no imports; it defines `OfferCourse` and `OfferCentre`, which `people.ts` and the form import with `import type`.
 
 *Drafted with EGM (draft step followed manually)*
