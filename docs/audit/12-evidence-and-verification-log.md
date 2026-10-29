@@ -1308,3 +1308,56 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/smoke-security.mjs | 7983433ade0e124b4d01f62105448e75a90a63f29ca671bc84d537ae217f2fc4 |
 | evidence/mutation-course-master-2026-10-29.txt | 23632ce837616693e89e565ea9eca252040186aeca2cb66b1cb3184061564204 |
 | evidence/ci-course-master-2026-10-29.txt | e3d29977e2d1d6ee4ba28b9b120444133bb4d84f0ebdd526a9281132317e95dd |
+
+## E-041 Catalogue masters pages built (fifth Stage 3 piece) (2026-10-29)
+- **Request:** the design owner approved `docs/designs/catalogue-masters/catalogue-masters.md` for build (2026-10-29, "Approve, build it") after EGM review steps 5–9. The reports and the file-by-file plan are in the same folder; the review produced no new owner decisions beyond DD-1…DD-10. Built in phases P1–P4, each ending with `bash scripts/ci.sh` exit 0.
+- **P1 (documents):**
+  - Audit 09: T-MS-001…003.
+  - Matrix links on R-033.06, R-033.07, R-033.08 and R-028.
+  - CSV and FRD regenerated (0 errors).
+  - Superseded notes added to catalogue-skeleton DD-7 and the course-master non-goal.
+- **P2 (server):**
+  - Migration 0017: `grant update (centre_class_id) on app.centre` and the `setup_update` policy on `catalogue.manage` at ALL scope. No schema change, no drift.
+  - `listMasters` (every row by code), `listAcademicYears` (newest first, ISO dates), `listCentreClasses` (RLS plus the `org.centre.view` gate, managers see all) and `setCentreClass`. The last is audited as `catalogue.centre.class` with codes and a reason. It locks the centre `for no key update`, so admissions are never held up, and never newly sets an inactive class.
+  - `liveRef` returns the code.
+  - The duplicate-code message now names "a record".
+  - Updated tests: T-CAT-003's centre statement removed; the T-RLS-002 comment and the T-SEC-007 title updated.
+- **P3 (pages):**
+  - `/admin/catalogue` (index), `/admin/catalogue/masters/[slug]` (categories, divisions, classes), `/admin/catalogue/years` and `/admin/catalogue/centres` ("Class per centre"), with their save routes (`safeRoute` + `adminPost`; unknown slugs 404 before the origin check; toggles only `"1"`/`"0"`).
+  - One shared `AdminErrors` (own keys only), which replaces `CourseErrors`.
+  - The home link is now "Catalogue".
+- **Tests:** `tests/catalogue-masters.test.ts`, 3 tests:
+  - Lists, ordering, ISO dates and `canManage`.
+  - The class per centre: set, change, clear; refusals; a kept inactive class; availability after a set; a centre-scoped `catalogue.manage` holder refused by the app and by SQL; the exact column grant; the lock not delayed by a key-share holder and waiting for a concurrent write; who sees which centres.
+  - Every route, including the error line rendered with crafted values.
+  - Real server: 6 new checks (three pages readable without forms, manager forms, unknown slugs 404, a foreign-origin class change 403).
+- **Mutation checks** (`evidence/mutation-catalogue-masters-2026-10-29.txt`): 42 mutations (33 code, 6 database, 1 drift, 2 real-server), all caught. Five were not run, with the reasons in the file.
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **173 passed + 3 todo** (17 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-catalogue-masters-2026-10-29.txt`).
+- **Limits:**
+  - Class changes need no approval ticket until D-ORG-2 is signed.
+  - The other R-020 masters wait.
+  - Year codes and dates are not cross-checked (catalogue DD-6).
+  - No centre has a class at cutover: the go-live check in `docs/STATUS.md` must return no rows before course availability is switched on.
+  - The screens are unstyled.
+  - Not yet on Supabase (migrations 0012–0017).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0017_centre_class_write/migration.sql | 1fb30c0852ceb18b2e350831015f2c016ff6147c7b8fa5088b6f07ad71569441 |
+| src/server/catalogue.ts | 36f3a598a3c5835f24aea3df33d6d70d6678167e99476e18c98fed343d48b1e5 |
+| src/server/admin-http.ts | 4fa23d5b648f0fec20aae4dcbe525988c413a9875b0b0bcc34e6685083f74127 |
+| app/admin/catalogue/admin-errors.tsx | 7fc81dce7058bede63d5377867aa9e71d8d49f1771c8069abd0069009d21bc3c |
+| app/admin/catalogue/page.tsx | ac0827f59d12489eb523f7fc77bee7d2847f46af37229bec6247de2d36bf50a8 |
+| app/admin/catalogue/masters/slugs.ts | 3619546ead5db029a057f75514dc2f389e216ae4b3dd9f9fdfa5a7cb43c8a849 |
+| app/admin/catalogue/masters/[slug]/page.tsx | 1650b3e2398663ec7727ecadfff9e014ea93f4fb47da2e16fbd1fc55075970ef |
+| app/admin/catalogue/masters/[slug]/save/route.ts | 79d12f2f8ecb147423a72b74cbc132b7f47d412aa2e8b61afc54bd89bb81cb8d |
+| app/admin/catalogue/years/page.tsx | 7c61cfe1bc2820c8756aa9b2e2315eac1c30449c5890880eedfe21f994921b78 |
+| app/admin/catalogue/years/save/route.ts | cbfd41e574fd3ef925acdf10bf85c20e05c0811ef1958682076ac84e0f5deaac |
+| app/admin/catalogue/centres/page.tsx | d627bf870e37a72f82ecb7b30f4ac637f306e60d74da6b062111f5d853861d49 |
+| app/admin/catalogue/centres/save/route.ts | 8ec9b3409a03c3285ede60bded838f11017d6ad8eb91ec7c39e9ed119dd6b33d |
+| tests/catalogue-masters.test.ts | e430ea31fc9fa8d99f6340ea9dc24881d2eb720f72ebed0d79e78c38a9d331c3 |
+| scripts/smoke-security.mjs | 319589bf40a1fb02a54d43647cdd250cb3c1b71e17a0e67a778173726d11b549 |
+| evidence/mutation-catalogue-masters-2026-10-29.txt | 762c12dd7c7a1df070a6bdf7723727f7e42cfd4b212b2f62eb8908c332904874 |
+| evidence/ci-catalogue-masters-2026-10-29.txt | b08b68c8272aef252684a8304f8e8289cd19c2d2d3760231ae592169ca1cd80d |
