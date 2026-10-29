@@ -1154,3 +1154,21 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | tests/fixtures.ts | 1c71423e54ee50a7798f737db78535ad3b22196ec4dcb247afd32e28f503cb42 |
 | evidence/mutation-catalogue-2026-10-29.txt | 41db3c2667068546b5f2ecb00a94634cfa529eed459b248430506023a3e0e774 |
 | evidence/ci-catalogue-skeleton-2026-10-29.txt | 9aaf27477bfa90380497662331819c660fe3e019b566902f46255b7c5158ffd1 |
+
+## E-035 System administrator holds every permission (2026-10-29)
+- **Finding:** `app.rbac_set_role_permissions` (0005) lets an administrator grant only permissions they hold network-wide. The first administrator held 4 of the 15 permissions (`rbac.view`, `rbac.user.manage`, `rbac.role.manage`, `catalogue.manage`), so the other 11 (`org.centre.view`, `org.centre.export`, `ticket.raise/view/approve/document.view/type.manage`, `student.view`, `student.admit`, `pii.export`, `rbac.user.export`) could never be granted through the app. The E-034 follow-up had named only two of them.
+- **Decision:** project owner, in chat, 2026-10-29: "Admin holds all" (chosen over a separate grant right and over script-only grants). **PMC under D-SEC-1** (IT/Ops): stays a parameter until the role matrix is signed.
+- **Change:** migration `0013_system_admin_all` grants every `app.permission` row to an existing `system_admin` role (a no-op on a database not yet bootstrapped); `scripts/bootstrap-admin.mjs` grants every permission instead of a fixed list.
+- **Tests** (`tests/admin-http.test.ts`): the bootstrap role holds every permission; the 0013 SQL run on a role holding the old four leaves none missing; every migration after 0013 that inserts into `app.permission` also mentions `system_admin`.
+- **Mutation checks:** 0013 replaced by `select 1` → the 0013 test failed; bootstrap limited to `rbac.%` → the bootstrap test failed; both restored, 8/8 passed.
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: no drift; 0 type errors; **140 passed + 3 todo**; build; bundle scan; real-server smoke passed (`evidence/ci-system-admin-2026-10-29.txt`).
+- **Risk accepted:** the system administrator is a network-wide super-user (personal-data export, admissions, ticket approval). Mitigations: TOTP mandatory (sensitive permissions), fresh step-up on admin writes, every action audited. Not yet applied to Supabase.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0013_system_admin_all/migration.sql | addc1b65c30d149f474d057012282105ca707e44586c277776ffee6bbb0ae229 |
+| scripts/bootstrap-admin.mjs | 55cc925ac052d52a1c81bd52764be8351aec5731caa813a3024aa38e916eb92a |
+| tests/admin-http.test.ts | b09c5b2d7ad5a112116ae855b9b518881cfd8d54a39aa75cef23562b2339a376 |
+| evidence/ci-system-admin-2026-10-29.txt | 98ea2fe7194d0f356f69c801517c212d060aca9fc7f35af47fd9a912f8783180 |

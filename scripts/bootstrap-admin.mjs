@@ -9,7 +9,6 @@ import { config } from "dotenv";
 import pg from "pg";
 
 const SETUP_LINK_HOURS = 72; // same as src/server/rbac.ts (PMC)
-const ADMIN_PERMISSIONS = ["rbac.view", "rbac.user.manage", "rbac.role.manage", "catalogue.manage"]; // catalogue DD-12
 
 export async function bootstrapAdmin(db, { login, displayName }) {
   const key = String(login ?? "").trim().toLowerCase();
@@ -23,7 +22,8 @@ export async function bootstrapAdmin(db, { login, displayName }) {
     if (existing.rowCount) throw new Error("an administrator already exists; use the admin screens instead");
     const role = (await db.query(`insert into app.role (key, name) values ('system_admin', 'System administrator')
       on conflict (key) do update set name = app.role.name returning id`)).rows[0].id;
-    for (const p of ADMIN_PERMISSIONS) await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, $2) on conflict do nothing`, [role, p]);
+    // every permission: an administrator can grant only what they hold (0005); PMC under D-SEC-1, migration 0013
+    await db.query(`insert into app.role_permission (role_id, permission_key) select $1, key from app.permission on conflict do nothing`, [role]);
     const user = (await db.query(`insert into app.app_user (id, login, display_name, status, requires_totp)
       values (gen_random_uuid(), $1, $2, 'ACTIVE', true) returning id`, [key, String(displayName).trim()])).rows[0].id;
     await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind) values ($1, $2, 'ALL')`, [user, role]);

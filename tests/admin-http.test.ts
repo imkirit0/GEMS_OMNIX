@@ -1,5 +1,7 @@
 // Admin HTTP layer and first-admin bootstrap.
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import pg from "pg";
 import { POST as stepup } from "../app/auth/stepup/route";
 import { POST as createUserRoute } from "../app/admin/users/create/route";
@@ -120,9 +122,31 @@ describe("first-admin bootstrap", () => {
       const { token } = await bootstrapAdmin(db, { login: "Boss", displayName: "Boss" });
       expect(await auth().confirmReset(token, "boss-chosen-password")).toBe(true);
       expect((await auth().signIn("boss", "boss-chosen-password", "10.8.0.1")).kind).toBe("enrol"); // TOTP before any access
+      const missing = await db.query(`select key from app.permission except select permission_key from app.role_permission rp
+        join app.role r on r.id = rp.role_id where r.key = 'system_admin'`);
+      expect(missing.rows, "system_admin holds every permission (0013)").toEqual([]);
       const actions = (await db.query(`select action from app.audit_log where action = 'rbac.bootstrap'`)).rowCount;
       expect(actions).toBe(1);
       await expect(bootstrapAdmin(db, { login: "boss2", displayName: "Boss 2" })).rejects.toThrow(/already exists/);
     } finally { await db.end(); }
+  });
+
+  test("migration 0013 gives an existing system_admin every permission; later permission migrations grant it too", async () => {
+    const db = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
+    await db.connect();
+    try {
+      // a database bootstrapped before 0013: the role exists with the old four permissions
+      const role = (await db.query(`insert into app.role (key, name) values ('system_admin', 'System administrator') returning id`)).rows[0].id;
+      await db.query(`insert into app.role_permission values ($1, 'rbac.view'), ($1, 'rbac.user.manage'), ($1, 'rbac.role.manage'),
+        ($1, 'catalogue.manage')`, [role]);
+      await db.query(fs.readFileSync("prisma/migrations/0013_system_admin_all/migration.sql", "utf8"));
+      const missing = await db.query(`select key from app.permission except select permission_key from app.role_permission where role_id = $1`, [role]);
+      expect(missing.rows).toEqual([]);
+    } finally { await db.end(); }
+    for (const d of fs.readdirSync("prisma/migrations").filter((d) => d > "0013")) {
+      const f = path.join("prisma/migrations", d, "migration.sql");
+      const sql = fs.existsSync(f) ? fs.readFileSync(f, "utf8") : "";
+      if (/insert into app\.permission/i.test(sql)) expect(sql, `${d} adds a permission`).toContain("system_admin");
+    }
   });
 });
