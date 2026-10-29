@@ -1117,3 +1117,40 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | evidence/etl-19b6d7c9-9da5-4e44-9a6e-3e3f335a0d9e-exceptions.csv | e1882ec7450c43441af446e406509adf08477b2cf613bc4ed2d87b8804a5485c |
 | evidence/mutation-etl-2026-10-28.txt | 5059d8ded971b2894d67779f86b0da2298afd041004a61a4de30523efeaafd60 |
 | evidence/ci-migration-framework-2026-10-28T181602.txt | 7b78b3f6179c53bba30f7d68f8d50b470e51508b25e601725d84163f2d8a472a |
+
+## E-034 Centre and catalogue skeleton built (2026-10-29)
+- **Request:** "start with next steps" (2026-10-29), taken as the design owner's build approval of `docs/designs/catalogue-skeleton/catalogue-skeleton.md` after EGM review steps 5–9 (reports in the same folder). Built in phases C1–C4, each ending with `bash scripts/ci.sh` exit 0.
+- **C1 (documents):** audit 09 gains the T-CAT table (001–004); matrix Tests column: T-CAT-001…004 on R-090, T-CAT-001/004 on R-033.06–.08, T-CAT-001/002 on R-028; CSV and FRD regenerated (0 errors).
+- **C2 (schema):** migration `0012_catalogue`: tables `course_category`, `course_division`, `centre_class`, `course`, `academic_year`; foreign keys `registration.course_code → course(code)`, `admission.academic_year → academic_year(code)`, `centre.centre_class_id → centre_class(id)` (all restrict on delete and update); `centre.centre_class` dropped behind a guard that refuses if it holds values; named code, name, year and date checks; setup-table RLS (no delete policy); column-level update grants (codes never updatable); `catalogue.manage` (sensitive) granted to `system_admin`. `scripts/bootstrap-admin.mjs` adds `catalogue.manage` (DD-12); `scripts/etl/setup.sql` grants `gems_etl` select on `app.course`, `app.academic_year` (0012 does not mention `gems_etl`). Fixtures seed GEN/GEN/METRO, five courses, years 2024-25…2028-29, role 18 `catalogue_admin` held by `ca` at ALL.
+- **C3 (server and rules):** `people.ts` exports `normCode()` and `CODE_RULE`; `admit()` normalises course codes and, first in its transaction, refuses a closed or unknown year (`academicYear: not open`) and an inactive or unknown course (`courses[i].courseCode: no such course`). `src/server/catalogue.ts`: nine functions behind `adminWrite()` with literal actions `catalogue.create/update/activate/deactivate`. ETL: `ctx.courses`, `ctx.academicYears` (existence only, DD-11), empty-catalogue preflight, course and year checks, `normCode` from `people.ts` everywhere (local copies removed), all three rules at version 2; P8 fixture gains the `XYZ` course row and a `2030-31` admission.
+- **Tests:** `tests/catalogue.test.ts` (T-CAT-001 agreement of `normCode()`/`CODE_RULE` with the database on 16 samples incl. tab, newline, `\x01`, NBSP, É, ß, ı; 23514 on all four code tables; duplicates. T-CAT-002 the three named foreign keys, restrict on code update, inactive course and closed/unknown year refused, existing registration kept, lower-case code stored upper-case. T-CAT-003 every function audited with exact before/after/reason; Forbidden + DENIED; StepUpRequired; unknown `kind` incl. `constructor`/`__proto__` refused with no session; database gate: 42501 on inserts by a centre user, 0-row updates, 42501 on code update, delete and `centre_class_id` update by the catalogue admin. T-CAT-004 a centre user reads all five tables). `tests/etl.test.ts`: unit row for a deactivated course imports; P8 asserts the two new defects and `laterYearNumbers` `["2027-28", "2030-31"]`; the empty-catalogue refusal; `rule centre v2`. T-AUD-009 scans `catalogue.ts`.
+- **Mutation checks** (`evidence/mutation-catalogue-2026-10-29.txt`; each restored and the test passed again):
+
+  | Guarantee | Mutation | Test that failed |
+  |---|---|---|
+  | Code normalised | drop `course_code_check` | T-CAT-001 |
+  | Real courses | drop `registration_course_code_fkey` and the `admit()` check | T-CAT-002 |
+  | Controlled writes | `setup_insert` on `course_category` with check (true) | T-CAT-003 |
+  | Audited | audit skipped for OK `catalogue.*` actions | T-CAT-003 |
+
+- **Checks:** `bash scripts/ci.sh` exit 0 on a fresh database: no drift; 0 type errors; **139 passed + 3 todo** (12 files); build; bundle scan; real-server admin journey and security smoke passed (`evidence/ci-catalogue-skeleton-2026-10-29.txt`).
+- **Limits:** functions only, no screens (Stage 3); no catalogue mapping rule (needs legacy data); not yet run on Supabase (the hosted database needs 0012 and the one `gems_etl` grant by hand); the T-CAT-003 database-gate statements use a `gems_app` client with the session setting, as `tests/rbac.test.ts` does, not `withScope`. Follow-up kept: `ticket.type.manage` and `student.admit` have the same first-holder gap as DD-12.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0012_catalogue/migration.sql | 705a529fca51d6d9f568aeb4debe42ef453a455d3fb063e41e6b33ac76baf25d |
+| src/server/catalogue.ts | a45779e2e74cffa7cda23e8ec42df36a981d246fa8788815afd0c7cdff54e504 |
+| src/server/people.ts | 6b439105e5780930e17ee5023077be6b2c84a731491b151bf859420ce52381c7 |
+| etl/run.ts | d19458b1fbf199654c2f1234de482a03c9c4ec43c053288635d6eb8f62606d41 |
+| etl/checks.ts | 064e11be36e456507f9f77e415090c4e668a28f88cfdb1d4d9d79df179c731bb |
+| etl/rules/centre.ts | 452ba2a5b515c77b4dbb7c3e4df9e7692fef6cb84dd0c38d890d38653be38555 |
+| etl/rules/admission.ts | 4629ec2f2364607b0c22762b17ee59873bb5800f9f2a7450027ff79136c932c6 |
+| etl/rules/registration.ts | be33f1a6b015057f8197992dc03d809816d8adabb94113aad40dce5f6fb5c3f4 |
+| etl/fixture.ts | a1cf79e5292f399d6ef9d28cf398162d89ae5be4ab92607a8cb0c34a1ea23212 |
+| tests/catalogue.test.ts | d6e8c11f0ea4adce8dec7827f2f746f8c3062e63355888fb7288fb69384f4b34 |
+| tests/etl.test.ts | b487a344fc88c0e6425eb8abef62e0deef240127dc944194a03873b779c98d53 |
+| tests/fixtures.ts | 1c71423e54ee50a7798f737db78535ad3b22196ec4dcb247afd32e28f503cb42 |
+| evidence/mutation-catalogue-2026-10-29.txt | 41db3c2667068546b5f2ecb00a94634cfa529eed459b248430506023a3e0e774 |
+| evidence/ci-catalogue-skeleton-2026-10-29.txt | 9aaf27477bfa90380497662331819c660fe3e019b566902f46255b7c5158ffd1 |

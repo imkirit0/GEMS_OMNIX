@@ -9,7 +9,7 @@ import { config } from "dotenv";
 import pg from "pg";
 
 const SETUP_LINK_HOURS = 72; // same as src/server/rbac.ts (PMC)
-const ADMIN_PERMISSIONS = ["rbac.view", "rbac.user.manage", "rbac.role.manage"];
+const ADMIN_PERMISSIONS = ["rbac.view", "rbac.user.manage", "rbac.role.manage", "catalogue.manage"]; // catalogue DD-12
 
 export async function bootstrapAdmin(db, { login, displayName }) {
   const key = String(login ?? "").trim().toLowerCase();

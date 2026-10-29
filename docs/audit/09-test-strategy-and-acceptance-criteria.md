@@ -133,6 +133,14 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-PER-004 | Scope | A centre sees only its own admissions and registrations, and a person only through one of them; another centre's record raises the same error as a missing one |
 | T-PER-005 | Identity changes | Go through one function that returns before and after, only for a person admitted at the given centre |
 
+### T-CAT: centre and catalogue skeleton (`docs/designs/catalogue-skeleton/catalogue-skeleton.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-CAT-001 | One record per code | Courses, categories, divisions, centre classes and academic years each have one row per code; codes are normalised (`normCode()` agrees with the database checks) and unique |
+| T-CAT-002 | References are real | The database refuses a registration with an unknown course, an admission with an unknown academic year and a centre with an unknown class; `admit()` also refuses a deactivated course or a closed year; existing registrations of a deactivated course stay |
+| T-CAT-003 | Controlled, audited writes | Only a holder of `catalogue.manage` with a fresh step-up changes the catalogue, in the app and in the database; every change is audited with before and after; deactivation needs a reason |
+| T-CAT-004 | Everyone signed in reads | A centre user without catalogue rights reads all five tables in full |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

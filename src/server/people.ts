@@ -92,13 +92,24 @@ export const ACADEMIC_YEAR_RULE = "YYYY-YY, consecutive years";
 export function academicYearOk(y: string): boolean {
   return /^\d{4}-\d{2}$/.test(y) && Number(y.slice(5)) === (Number(y.slice(0, 4)) + 1) % 100;
 }
+// Catalogue codes (docs/designs/catalogue-skeleton, DD-8). Every writer of a code and every ETL rule uses this one function.
+const ASCII_SPACE = /[\t\n\v\f\r ]+/g;
+/** ASCII input: trim ASCII whitespace, collapse inner runs to one space, upper-case. Non-ASCII input is returned
+ *  unchanged, so it fails the code check instead of being folded (ß would become SS). Non-strings give "". */
+export const normCode = (v: unknown): string => {
+  if (typeof v !== "string") return "";
+  if (/[^\x00-\x7f]/.test(v)) return v;
+  return v.replace(ASCII_SPACE, " ").replace(/^ | $/g, "").toUpperCase();
+};
+export const CODE_RULE = /^[!-~]+( [!-~]+)*$/; // the <table>_code_check of migration 0012, mirrored for field errors
+
 export const previousYear = (y: string) => `${Number(y.slice(0, 4)) - 1}-${y.slice(2, 4)}`; // 2026-27 -> 2025-26
 
 function courses(list: unknown): Course[] {
   if (!Array.isArray(list) || list.length === 0) throw invalid("courses", "at least one");
   return list.map((c: Partial<Course>, i) => {
-    const courseCode = optText(c?.courseCode);
-    if (!courseCode) throw invalid(`courses[${i}].courseCode`, "required");
+    if (!optText(c?.courseCode)) throw invalid(`courses[${i}].courseCode`, "required");
+    const courseCode = normCode(c.courseCode); // a non-ASCII code is kept and fails as "no such course"
     const joinDate = isoDate(`courses[${i}].joinDate`, c.joinDate);
     const endDate = c.endDate == null ? undefined : isoDate(`courses[${i}].endDate`, c.endDate);
     if (endDate && endDate < joinDate) throw invalid(`courses[${i}].endDate`, "not before joinDate");
@@ -186,7 +197,7 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
   // validation before the action: nothing to audit for a malformed request
   if (!Number.isSafeInteger(input.centreId)) throw invalid("centreId", "required");
   if (typeof input.academicYear !== "string" || !academicYearOk(input.academicYear)) throw invalid("academicYear", ACADEMIC_YEAR_RULE);
-  const admittedOn = isoDate("admittedOn", input.admittedOn); // independent of academicYear until R-028 (design)
+  const admittedOn = isoDate("admittedOn", input.admittedOn); // not checked against the year's dates (catalogue DD-6)
   const list = courses(input.courses);
   const existingId = "existingId" in input.person ? input.person.existingId : undefined;
   if (existingId !== undefined && (typeof existingId !== "string" || !UUID.test(existingId))) throw new PersonError("notfound");
@@ -199,6 +210,13 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
   return scopedAction(session, { action: "person.admit", permission: "student.admit", centreId: input.centreId,
     targetType: "person", targetId: personId }, (tx) => personDb(async () => {
     dismissed = []; // withScope may retry this callback
+    // the catalogue: the year must be open and every course active; plain reads, no lock (catalogue DD-13)
+    const [year] = await tx.$queryRaw<{ open: boolean }[]>`select open from app.academic_year where code = ${input.academicYear}`;
+    if (!year?.open) throw invalid("academicYear", "not open");
+    const live = new Set((await tx.$queryRaw<{ code: string }[]>`
+      select code from app.course where code = any (${list.map((c) => c.courseCode)}::text[]) and active`).map((r) => r.code));
+    const missing = list.findIndex((c) => !live.has(c.courseCode));
+    if (missing >= 0) throw invalid(`courses[${missing}].courseCode`, "no such course");
     if (fresh) {
       const [{ key } = { key: null }] = await tx.$queryRaw<{ key: string | null }[]>`
         select app.person_match_key(${fresh.givenName}, ${fresh.familyName}, ${fresh.dateOfBirth}::date, ${fresh.mobile}) as key`;

@@ -82,5 +82,9 @@ export function buildFixture(seed = FIXTURE_SEED): Fixture {
     register_no: String(++reg), join_date: "2026-07-01", status: "Active" });
   legacy_course_row.push({ ...last, source_key: key(legacy_course_row.length + 1), course_code: "TALLY" }); // same Register No
   legacy_course_row.push({ ...last, source_key: key(legacy_course_row.length + 1), register_no: String(++reg), status: "Completed" });
+  // catalogue skeleton (appended so every row above is unchanged): an unknown course, and a year not in the master
+  legacy_course_row.push({ source_key: key(legacy_course_row.length + 1), admission_key: twin.source_key, course_code: "XYZ",
+    register_no: String(++reg), join_date: twin["admitted_on"]!, status: "Active" });
+  addAdmission({ academic_year: "2030-31", admission_no: `${PERSON_POLICY.admissionPrefix("2030-31")}1`, admitted_on: "2026-10-01" }, 1);
   return { legacy_centre, legacy_admission, legacy_course_row };
 }

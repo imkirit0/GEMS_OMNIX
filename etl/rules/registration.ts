@@ -1,5 +1,5 @@
 // Registration mapping rule (design: "Entities in P8"): legacy course rows under their imported admission.
-import { isoDate, PersonError } from "../../src/server/people";
+import { isoDate, normCode, PersonError } from "../../src/server/people";
 import { targetName } from "../ids";
 import { SOURCE_SYSTEM, type Ctx, type RawRow, type Result, type RuleError, type Rule } from "../types";
 
@@ -13,7 +13,7 @@ const admissionParent = (row: RawRow) => {
 };
 
 export const registration = {
-  id: "registration", version: 1, owner: "Certification", sourceTable: TABLE, entities: ["registration"],
+  id: "registration", version: 2, owner: "Certification", sourceTable: TABLE, entities: ["registration"],
   description: "Legacy course rows to registrations under their imported admission; status by STATUS_MAP",
   dispositions: { registration: ["IMPORTED", "REJECTED"] },
   parent: { registration: admissionParent },
@@ -26,8 +26,9 @@ export const registration = {
       const parent = admissionParent(row);
       const adm = parent ? ctx.result("admission", parent.sourceKey) : undefined;
       if (adm?.disposition !== "IMPORTED" || !("target" in adm)) errors.push({ field: "admission_key", message: "admission not imported", value: v("admission_key") });
-      const code = (v("course_code") ?? "").trim();
+      const code = normCode((v("course_code") ?? "").trim());
       if (!code) errors.push({ field: "course_code", message: "required", value: v("course_code") });
+      else if (!ctx.courses.has(code)) errors.push({ field: "course_code", message: "no such course", value: v("course_code") }); // existence only (DD-11)
       const join = (v("join_date") ?? "").trim();
       try { isoDate("joinDate", join); } catch (e) {
         if (!(e instanceof PersonError)) throw e;

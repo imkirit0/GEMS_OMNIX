@@ -75,6 +75,7 @@ grant select on migration.key_map to gems_etl;
 grant insert (run_id, entity, source_system, source_table, source_key, source_row_hash, disposition, rule_id,
   rule_version, target_table, target_id, survivor_target_id, reason) on migration.key_map to gems_etl;
 grant select on app.centre to gems_etl;
+grant select on app.course, app.academic_year to gems_etl; -- catalogue skeleton: existence checks (DD-11)
 grant select, insert on app.person, app.admission, app.registration, app.global_number_series to gems_etl;
 grant insert on app.audit_log to gems_etl;
 grant usage on sequence app.audit_log_id_seq to gems_etl;

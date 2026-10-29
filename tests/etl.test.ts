@@ -52,7 +52,8 @@ describe("migration framework units", () => {
   });
 
   test("mapping rules on hand-written rows", () => {
-    const ctx = { centres: [{ id: 1, code: "KL2-25" }], result: () => undefined, sourceRows: () => [] } as unknown as Ctx;
+    const ctx = { centres: [{ id: 1, code: "KL2-25" }], courses: new Set(["DCA", "OLD"]), academicYears: new Set(["2026-27"]),
+      result: () => undefined, sourceRows: () => [] } as unknown as Ctx;
     const out = centre.map([{ source_key: "1", code: " kl2-25 " }, { source_key: "2", code: "KL2-25" }, { source_key: "3", code: "GDEMO" },
       { source_key: "4", code: "ZZ" }], ctx);
     expect([...out.values()].map((r) => r["centre"]!.disposition)).toEqual(["IMPORTED", "REJECTED", "EXCLUDED", "REJECTED"]);
@@ -60,6 +61,11 @@ describe("migration framework units", () => {
       { ...ctx, result: () => undefined } as Ctx);
     expect((reg.get("1")!["registration"] as { errors: { field: string; message: string }[] }).errors.map((e) => `${e.field}: ${e.message}`))
       .toEqual(["admission_key: admission not imported", "join_date: not a date", "status: not in the status map"]);
+    // DD-11: ctx.courses holds every code, active or not, so a course deactivated since ("OLD") still imports; codes are normalised
+    const adm: Result = { disposition: "IMPORTED", target: { table: "app.admission", id: "a", row: { centre_id: 1 } } };
+    const old = registration.map([{ source_key: "2", admission_key: "9", course_code: " old ", register_no: "8", join_date: "2026-02-01", status: "Active" }],
+      { ...ctx, result: () => adm, id: () => "r" } as Ctx);
+    expect(old.get("2")!["registration"]).toMatchObject({ disposition: "IMPORTED", target: { row: { course_code: "OLD" } } });
   });
 
   test("T-MIG-005 K5 and strictness and run status are pure functions", () => {
@@ -119,6 +125,11 @@ describe("P8 dry run on synthetic data (T-MIG)", () => {
     const reg = (where: string) => outcome(r1.runId, "registration", "legacy_course_row", where, []);
     expect(await reg("r.admission_key = '999999'")).toEqual([{ disposition: "REJECTED", reason: "admission_key: admission not imported" }]);
     expect(await reg("r.status = 'Completed'")).toEqual([{ disposition: "REJECTED", reason: "status: not in the status map" }]);
+    // catalogue skeleton: an unknown course; a well-formed year that is not in the academic year master
+    expect(await reg("r.course_code = 'XYZ'")).toEqual([{ disposition: "REJECTED", reason: "course_code: no such course" }]);
+    expect(await a("r.academic_year = '2030-31'", [])).toEqual([{ disposition: "REJECTED", reason: "academic_year: not in the academic year master" }]);
+    expect(await reg("r.admission_key = (select source_key from raw.legacy_admission where academic_year = '2030-31')"))
+      .toEqual([{ disposition: "REJECTED", reason: "admission_key: admission not imported" }]);
     const dupReg = await asAdmin((db) => db.query(`select register_no from raw.legacy_course_row group by 1 having count(*) > 1`).then((q) => q.rows));
     expect(dupReg).toHaveLength(1);
     expect((await reg(`r.register_no = '${dupReg[0].register_no}'`)).map((x) => x.reason)).toEqual([null, "register_no: duplicate"]);
@@ -134,7 +145,7 @@ describe("P8 dry run on synthetic data (T-MIG)", () => {
     // numbers: unparsable and later-year listed; counters above the highest raw numbers (on GDEMO rows)
     const art = JSON.parse(fs.readFileSync(r1.artifactPaths[0]!, "utf8"));
     expect(art.unparsedNumbers.map((u: { column: string }) => u.column)).toEqual(["admission_no", "admission_no"]); // G-TEC/26/0042, LEGACY-UMA
-    expect(art.laterYearNumbers.map((l: { year: string }) => l.year)).toEqual(["2027-28"]);
+    expect(art.laterYearNumbers.map((l: { year: string }) => l.year)).toEqual(["2027-28", "2030-31"]);
     expect(art.seeds).toEqual([{ series: "REGISTER", period: "ALL", value: "2064112" }, { series: "ADMISSION", period: "2026-27", value: "43887" }]);
     expect(art.rules.every((x: { approved: boolean }) => !x.approved)).toBe(true); // a dry run lists unapproved rules
 
@@ -183,7 +194,7 @@ describe("refusals and confinement (G5, G6)", () => {
     await asAdmin(async (db) => { await db.query(RESET_SQL); await db.query(`update migration.rule set code_hash = 'x' where rule_id = 'centre'`); });
     const e = await run({ mode: "dry", asOf: AS_OF, artifactDir: tmp() }).catch((x) => x);
     expect(e).toBeInstanceOf(RunRefused);
-    expect((e as RunRefused).reasons).toEqual(["rule centre v1: code changed; give it a new version"]);
+    expect((e as RunRefused).reasons).toEqual(["rule centre v2: code changed; give it a new version"]);
   });
 
   test("an existing counter and a non-empty database are refused", async () => {
@@ -191,6 +202,11 @@ describe("refusals and confinement (G5, G6)", () => {
     expect(((await run({ mode: "dry", asOf: AS_OF }).catch((x) => x)) as RunRefused).reasons).toEqual(["counters already exist: REGISTER/ALL"]);
     await asAdmin((db) => db.query(`delete from app.global_number_series; insert into raw.legacy_centre (source_key) values ('1')`));
     expect(((await run({ mode: "dry", asOf: AS_OF }).catch((x) => x)) as RunRefused).reasons).toEqual(["database is not empty: run scripts/etl/reset.sql"]);
+  });
+
+  test("an empty catalogue is refused before anything is written", async () => {
+    await asAdmin((db) => db.query(`truncate app.course, app.academic_year cascade`));
+    expect(((await run({ mode: "dry", asOf: AS_OF }).catch((x) => x)) as RunRefused).reasons).toEqual(["catalogue is empty: load courses and academic years"]);
   });
 
   test("a cutover with approved rules on the fixture ends FAILED (K7/K8/K10/K11 not built; rejects present)", async () => {

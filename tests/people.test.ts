@@ -126,8 +126,8 @@ describe("person core (T-PER)", () => {
     const a = await admit(sa, input());
     // a registration whose centre differs from its admission's
     const fk = await thrown(asAdmin((db) => db.query(`insert into app.registration (id, admission_id, centre_id, course_code, register_no, join_date)
-      values (gen_random_uuid(), $1, 3, 'X', 'R1', '2026-11-01')`, [a.admissionId])));
-    expect(fk).toMatchObject({ code: "23503" });
+      values (gen_random_uuid(), $1, 3, 'DCA', 'R1', '2026-11-01')`, [a.admissionId])));
+    expect(fk).toMatchObject({ code: "23503", constraint: "registration_admission_id_centre_id_fkey" });
     // academic year: refused by admit, and by the database check on a direct insert (never as a cast error)
     for (const y of ["2026-2027", "2026-28", "26-27"]) expect(await thrown(admit(sa, input({ academicYear: y })))).toMatchObject({ reason: "invalid" });
     for (const y of ["2026-28", "abcd-ef"]) {

@@ -18,6 +18,8 @@ export const AUDIT_CATALOGUE = [
   "ticket.type.activate", "ticket.type.deactivate",
   // person core (src/server/people.ts)
   "person.admit",
+  // catalogue (src/server/catalogue.ts)
+  "catalogue.create", "catalogue.update", "catalogue.activate", "catalogue.deactivate",
   // migration runs (etl/run.ts)
   "migration.run.start", "migration.run.finish",
 ] as const;

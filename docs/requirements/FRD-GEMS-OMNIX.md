@@ -268,7 +268,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Operations (21), Admissions (1), IT (1), Accounts (1)
 - **Workflows (05):** WF-X13 User/role/permission administration; WF3 Centre onboarding
 - **Open decisions (04):** D-CAT-1, D-COMM-1, D-CUR-1, D-GAP-2, D-MIG-4, D-MIG-7, D-ORG-1, D-ORG-2, D-ORG-3, D-ORG-4, D-ORG-5, D-ORG-6, D-PORTAL-1, D-SEC-2, D-SEC-4, D-YEAR-3, PR-01
-- **Distinct acceptance tests (09):** 10
+- **Distinct acceptance tests (09):** 13
 
 #### FR-020: GROUP: Masters dashboard (10 tiles, "Search features" box)
 
@@ -493,7 +493,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Accounts |
 | Open decisions | D-YEAR-3, D-MIG-7 |
-| Acceptance tests | T-RPT-015 |
+| Acceptance tests | T-RPT-015, T-CAT-001, T-CAT-002 |
 | Workflows | - |
 | Data migration | IMPORTED; X9 history conflict |
 | Delivery stage | 2 Data model, numbering, audit, ticket core |
@@ -605,7 +605,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Operations |
 | Open decisions | D-CAT-1 |
-| Acceptance tests | T-SEC-007 |
+| Acceptance tests | T-SEC-007, T-CAT-001, T-CAT-004 |
 | Workflows | - |
 | Data migration | IMPORTED |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -1033,7 +1033,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Academics (9), Certification (1), Tech Support (1)
 - **Workflows (05):** WF10 Voucher & licence; WF15 Attendance, syllabus, placement; WF2 Catalogue & availability
 - **Open decisions (04):** D-CAT-1, D-CAT-2, D-CAT-3
-- **Distinct acceptance tests (09):** 3
+- **Distinct acceptance tests (09):** 7
 
 #### FR-033.07: Course Category (part of FR-033)
 
@@ -1046,7 +1046,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Academics |
 | Open decisions | - |
-| Acceptance tests | T-SEC-007 |
+| Acceptance tests | T-SEC-007, T-CAT-001, T-CAT-004 |
 | Workflows | - |
 | Data migration | IMPORTED |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -1062,7 +1062,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Academics |
 | Open decisions | - |
-| Acceptance tests | T-SEC-007 |
+| Acceptance tests | T-SEC-007, T-CAT-001, T-CAT-004 |
 | Workflows | - |
 | Data migration | IMPORTED |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -1095,7 +1095,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-092, FR-111, FR-033 |
 | Business owner | Academics |
 | Open decisions | D-CAT-1, D-CAT-2, D-CAT-3 |
-| Acceptance tests | T-E2E-002 |
+| Acceptance tests | T-E2E-002, T-CAT-001, T-CAT-002, T-CAT-003, T-CAT-004 |
 | Workflows | WF2 Catalogue & availability |
 | Data migration | IMPORTED; 1,220 codes, 196 multi-name (DQR); "-delete" courses EXCLUDED/ARCHIVED |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

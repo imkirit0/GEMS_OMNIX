@@ -19,6 +19,7 @@ export type Ctx = {
   /** raw rows of source tables loaded in this run, by table name (e.g. "legacy_centre") */
   sourceRows(table: string): RawRow[];
   centres: { id: number; code: string }[]; // app.centre, read by the runner
+  courses: Set<string>; academicYears: Set<string>; // every app.course code and app.academic_year code, active or not (DD-11)
   identity: Map<string, StoredIdentity | RuleError[]>; // step 3, by admission source key
   matchKey: Map<string, string | null>; // step 3, valid identities only
   id(name: string): string; // uuidv5 under ETL_NAMESPACE

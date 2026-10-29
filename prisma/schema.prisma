@@ -50,10 +50,11 @@ model Centre {
   code         String       @unique
   name         String
   areaId       Int          @map("area_id")
-  centreClass  String?      @map("centre_class") // FR-033.06; class semantics D-ORG-2, D-CAT-1
+  centreClassId Int?        @map("centre_class_id") // FR-033.06; set by the Stage 3 centre form (catalogue DD-7)
   // D-ORG-1 default (UNAPPROVED): centres are created inactive and activated through a checklist
   status       CentreStatus @default(INACTIVE)
   area         Area         @relation(fields: [areaId], references: [id])
+  centreClass  CentreClass? @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   scopes       RoleAssignment[]
   numberSeries NumberSeries[]
   tickets         Ticket[]
@@ -574,6 +575,7 @@ model Admission {
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
   person        Person         @relation(fields: [personId], references: [id], onDelete: Restrict)
   centre        Centre         @relation(fields: [centreId], references: [id], onDelete: Restrict)
+  year          AcademicYear   @relation(fields: [academicYear], references: [code], onDelete: Restrict, onUpdate: Restrict)
   registrations Registration[]
 
   @@unique([id, centreId])
@@ -595,8 +597,77 @@ model Registration {
   // composite: keeps registration.centre_id equal to its admission's centre
   admission   Admission          @relation(fields: [admissionId, centreId], references: [id, centreId], onDelete: Restrict)
   centre      Centre             @relation(fields: [centreId], references: [id], onDelete: Restrict)
+  course      Course             @relation(fields: [courseCode], references: [code], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([admissionId])
   @@map("registration")
+  @@schema("app")
+}
+
+// ---------- Catalogue skeleton (docs/designs/catalogue-skeleton; RLS, checks and grants in migration 0012) ----------
+// Identity fields only (DD-1); codes are normalised by normCode() and never change; rows are deactivated, never deleted.
+
+model CourseCategory {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  courses   Course[]
+
+  @@map("course_category")
+  @@schema("app")
+}
+
+model CourseDivision {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  courses   Course[]
+
+  @@map("course_division")
+  @@schema("app")
+}
+
+model CentreClass {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  centres   Centre[]
+
+  @@map("centre_class")
+  @@schema("app")
+}
+
+model Course {
+  id            Int            @id @default(autoincrement())
+  code          String         @unique
+  name          String
+  categoryId    Int            @map("category_id")
+  divisionId    Int            @map("division_id")
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  category      CourseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  division      CourseDivision @relation(fields: [divisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  registrations Registration[]
+
+  @@map("course")
+  @@schema("app")
+}
+
+// R-028 Academic Year Master (DD-3); dates are reference data (DD-6).
+model AcademicYear {
+  code       String      @id
+  startsOn   DateTime    @map("starts_on") @db.Date
+  endsOn     DateTime    @map("ends_on") @db.Date
+  open       Boolean     @default(true)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  admissions Admission[]
+
+  @@map("academic_year")
   @@schema("app")
 }

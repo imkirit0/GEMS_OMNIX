@@ -1,7 +1,7 @@
 # Centre and catalogue skeleton (Stage 2)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner accepted every section on 2026-10-28; build approval follows the EGM review (steps 5–9). Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8), [`implementation_readiness_report.md`](implementation_readiness_report.md) (step 9). DD-1…DD-4 were decided before drafting, DD-5…DD-13 during review steps 5–8 (see [Decisions](#decisions)).
+*   **Status:** Approved for build by the design owner on 2026-10-29 after the EGM review (steps 5–9); built the same day (evidence E-034). The design owner accepted every section on 2026-10-28. Reviews so far: [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8), [`implementation_readiness_report.md`](implementation_readiness_report.md) (step 9). DD-1…DD-4 were decided before drafting, DD-5…DD-13 during review steps 5–8 (see [Decisions](#decisions)).
 *   **Date:** 2026-10-28
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO; the "Default used now" column of Open Questions is PMC. Input: [`input-brief.md`](input-brief.md).

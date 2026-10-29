@@ -34,6 +34,9 @@ export const ST = {
 export const ST_TOKEN = { sa: "tok-stuA", sb: "tok-stuB", sr: "tok-stuR", sh: "tok-stuH" } as const;
 export const ST_ROLE = 17;
 
+// Catalogue-skeleton fixture user: role 18 catalogue_admin (catalogue.manage) at ALL. Token tok-catA.
+export const CA = { ca: "00000000-0000-0000-0000-0000000000f1" } as const;
+
 export async function asAdmin<T>(fn: (db: pg.Client) => Promise<T>): Promise<T> {
   const db = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
   await db.connect();
@@ -47,7 +50,8 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       app.role, app.permission, app.app_user, app.centre, app.area, app.region,
       app.ticket_document, app.ticket_upload, app.ticket_event, app.ticket_level, app.ticket, app.global_number_series,
       app.registration, app.admission, app.person,
-      app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category, app.rate_hit restart identity cascade`);
+      app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category, app.rate_hit,
+      app.course, app.course_category, app.course_division, app.centre_class, app.academic_year restart identity cascade`);
     if ((await db.query(`select to_regclass('app.test_ticket_counter') t`)).rows[0].t) await db.query(`truncate app.test_ticket_counter`);
     await db.query("set session_replication_role = origin");
     await db.query(`insert into app.region (id, code, name) values (1, 'R1', 'Region 1'), (2, 'R2', 'Region 2')`);
@@ -59,12 +63,13 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('rbac.view', 'View users and roles', false), ('rbac.user.manage', 'Manage users', true), ('rbac.role.manage', 'Manage roles', true),
       ('ticket.raise', 'Raise tickets', false), ('ticket.view', 'View tickets', false), ('ticket.approve', 'Act on tickets', false),
       ('ticket.document.view', 'Download ticket documents', false), ('ticket.type.manage', 'Set up ticket types', true),
-      ('student.view', 'View learners admitted at a centre in your scope', false), ('student.admit', 'Admit learners at a centre', false)`);
+      ('student.view', 'View learners admitted at a centre in your scope', false), ('student.admit', 'Admit learners at a centre', false),
+      ('catalogue.manage', 'Maintain the catalogue: courses, masters, academic years', true)`);
     await db.query(`insert into app.role (id, key, name) values (1, 'centre_admin', 'Centre admin'),
       (2, 'ho_viewer', 'HO viewer'), (3, 'rbac_admin', 'RBAC admin'),
       (10, 'tk_raiser', 'Ticket raiser'), (11, 'tk_level1', 'Ticket level 1'), (12, 'tk_level2', 'Ticket level 2'),
       (13, 'tk_approver', 'Ticket approver'), (14, 'tk_reviewer', 'Ticket reviewer'), (15, 'tk_type_admin', 'Ticket type admin'),
-      (16, 'tk_member', 'Centre member (no permissions)'), (17, 'student_admin', 'Student admin')`);
+      (16, 'tk_member', 'Centre member (no permissions)'), (17, 'student_admin', 'Student admin'), (18, 'catalogue_admin', 'Catalogue admin')`);
     await db.query(`insert into app.role_permission values
       (1, 'org.centre.view'), (1, 'numbering.series.allocate'), (2, 'org.centre.view'),
       (3, 'rbac.view'), (3, 'rbac.user.manage'), (3, 'rbac.role.manage'),
@@ -72,7 +77,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       (11, 'ticket.approve'), (11, 'ticket.view'), (11, 'ticket.document.view'),
       (12, 'ticket.approve'), (12, 'ticket.view'), (12, 'ticket.document.view'),
       (13, 'ticket.approve'), (13, 'ticket.view'), (14, 'ticket.view'),
-      (15, 'ticket.type.manage'), (15, 'rbac.view'), (17, 'student.view'), (17, 'student.admit')`);
+      (15, 'ticket.type.manage'), (15, 'rbac.view'), (17, 'student.view'), (17, 'student.admit'), (18, 'catalogue.manage')`);
     await db.query(`insert into app.app_user (id, login, display_name, status) values
       ('00000000-0000-0000-0000-00000000000a', 'ua', 'User A', 'ACTIVE'),
       ('00000000-0000-0000-0000-00000000000b', 'ub', 'User B', 'ACTIVE'),
@@ -81,7 +86,8 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('00000000-0000-0000-0000-0000000000ff', 'hoall', 'HO All', 'ACTIVE'),
       ('00000000-0000-0000-0000-0000000000d0', 'disabled', 'Disabled user', 'DISABLED'),
       ${Object.entries(TK).map(([k, id]) => `('${id}', '${k.toLowerCase()}', 'Ticket ${k}', 'ACTIVE')`).join(", ")},
-      ${Object.entries(ST).map(([k, id]) => `('${id}', '${k}', 'Student admin ${k}', 'ACTIVE')`).join(", ")}`);
+      ${Object.entries(ST).map(([k, id]) => `('${id}', '${k}', 'Student admin ${k}', 'ACTIVE')`).join(", ")},
+      ('${CA.ca}', 'ca', 'Catalogue admin', 'ACTIVE')`);
     await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, region_id, area_id, scope_centre_id) values
       ('00000000-0000-0000-0000-00000000000a', 1, 'CENTRE', null, null, 1),
       ('00000000-0000-0000-0000-00000000000b', 1, 'CENTRE', null, null, 3),
@@ -96,7 +102,8 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('${TK.reviewer}', 14, 'CENTRE', null, null, 1), ('${TK.admin}', 15, 'ALL', null, null, null),
       ('${TK.viewer}', 16, 'CENTRE', null, null, 1), ('${TK.b}', 11, 'CENTRE', null, null, 3),
       ('${ST.sa}', 17, 'CENTRE', null, null, 1), ('${ST.sb}', 17, 'CENTRE', null, null, 3),
-      ('${ST.sr}', 17, 'REGION', 1, null, null), ('${ST.sh}', 17, 'ALL', null, null, null)`);
+      ('${ST.sr}', 17, 'REGION', 1, null, null), ('${ST.sh}', 17, 'ALL', null, null, null),
+      ('${CA.ca}', 18, 'ALL', null, null, null)`);
     await db.query(`insert into app.app_session (token_hash, user_id, expires_at, revoked_at)
       select sha256(convert_to(t, 'UTF8')), u::uuid, now() + e::interval, r from (values
         ('tok-uA', '00000000-0000-0000-0000-00000000000a', '8 hours', null::timestamptz),
@@ -108,7 +115,8 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
         ('tok-revoked', '00000000-0000-0000-0000-00000000000a', '8 hours', now()),
         ('tok-disabled', '00000000-0000-0000-0000-0000000000d0', '8 hours', null),
         ${Object.entries(TK).map(([k, id]) => `('tok-tk${k[0]!.toUpperCase()}${k.slice(1)}', '${id}', '8 hours', null)`).join(", ")},
-        ${Object.entries(ST).map(([k, id]) => `('${ST_TOKEN[k as keyof typeof ST]}', '${id}', '8 hours', null)`).join(", ")}) v(t, u, e, r)`);
+        ${Object.entries(ST).map(([k, id]) => `('${ST_TOKEN[k as keyof typeof ST]}', '${id}', '8 hours', null)`).join(", ")},
+        ('tok-catA', '${CA.ca}', '8 hours', null)) v(t, u, e, r)`);
     // explicit ids above do not advance the identity sequences; later inserts must not collide with them
     for (const t of ["region", "area", "centre", "role"]) await db.query(`select setval('app.${t}_id_seq', (select max(id) from app.${t}))`);
     await db.query(`insert into app.number_series (centre_id, doc_type, period, gap_rule, current)
@@ -116,6 +124,14 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
     // as the cutover script would seed them (NP-8): legacy current values (R-029)
     await db.query(`insert into app.global_number_series (series, period, current) values
       ('REGISTER', 'ALL', 2064112), ('ADMISSION', '2026-27', 43887)`);
+    // catalogue skeleton: one category, division and class; the P8 courses; academic years 2024-25 to 2028-29, all open
+    await db.query(`insert into app.course_category (code, name) values ('GEN', 'General')`);
+    await db.query(`insert into app.course_division (code, name) values ('GEN', 'General')`);
+    await db.query(`insert into app.centre_class (code, name) values ('METRO', 'Metro')`);
+    await db.query(`insert into app.course (code, name, category_id, division_id) values ('DCA', 'Diploma in Computer Applications', 1, 1),
+      ('TALLY', 'Tally', 1, 1), ('PYTHON', 'Python', 1, 1), ('DTP', 'Desktop Publishing', 1, 1), ('CCNA', 'CCNA', 1, 1)`);
+    await db.query(`insert into app.academic_year (code, starts_on, ends_on)
+      select y || '-' || lpad(((y + 1) % 100)::text, 2, '0'), make_date(y, 6, 1), make_date(y + 1, 5, 31) from generate_series(2024, 2028) y`);
   });
 }
 

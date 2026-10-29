@@ -1,0 +1,9 @@
+Catalogue skeleton mutation checks (design Verification Plan), 2026-10-29, local Docker database.
+Each mutation applied, the named test run with `npx vitest run tests/catalogue.test.ts -t <test>`, then restored and rerun.
+
+M1 Code normalised   | alter table app.course drop constraint course_code_check                          | T-CAT-001: 1 failed | restored: 1 passed
+M2 Real courses      | drop registration_course_code_fkey + remove the "no such course" throw in admit() | T-CAT-002: 1 failed | restored: 1 passed
+M3 Controlled writes | setup_insert on app.course_category with check (true)                             | T-CAT-003: 1 failed | restored: 1 passed
+M4 Audited           | app audit() returns early for OK catalogue.* actions (src/server/action.ts)       | T-CAT-003: 1 failed | restored: 1 passed
+
+After restoring, the full `bash scripts/ci.sh` (fresh database) exited 0: see evidence/ci-catalogue-skeleton-2026-10-29.txt.

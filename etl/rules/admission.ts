@@ -1,9 +1,8 @@
 // Admission and person mapping rule, one pass (design: "Admission and Person, One Pass"):
 // a person is written only together with an importable admission.
-import { ACADEMIC_YEAR_RULE, academicYearOk, isoDate, PersonError, type StoredIdentity } from "../../src/server/people";
+import { ACADEMIC_YEAR_RULE, academicYearOk, isoDate, normCode, PersonError, type StoredIdentity } from "../../src/server/people";
 import { targetName } from "../ids";
 import { SOURCE_SYSTEM, type Ctx, type RawRow, type Result, type RuleError, type Rule } from "../types";
-import { normCode } from "./centre";
 
 const TABLE = "legacy_admission";
 
@@ -21,7 +20,7 @@ function dateError(column: string, v: string | null, e: unknown): RuleError {
 }
 
 export const admission = {
-  id: "admission", version: 1, owner: "Admissions, PRO", sourceTable: TABLE, entities: ["person", "admission"],
+  id: "admission", version: 2, owner: "Admissions, PRO", sourceTable: TABLE, entities: ["person", "admission"],
   description: "Legacy admissions to person + admission in one pass; duplicates merged by app.person_match_key (synthetic stand-in for D-MIG-4 maps)",
   dispositions: { person: ["IMPORTED", "MERGED", "REJECTED"], admission: ["IMPORTED", "REJECTED"] },
   parent: { person: centreParent, admission: centreParent },
@@ -39,6 +38,7 @@ export const admission = {
       else errors.push({ field: "centre_code", message: pr?.disposition === "EXCLUDED" ? "centre excluded" : "centre not imported", value: row["centre_code"] ?? null });
       const year = (row["academic_year"] ?? "").trim();
       if (!academicYearOk(year)) errors.push({ field: "academic_year", message: ACADEMIC_YEAR_RULE, value: row["academic_year"] ?? null });
+      else if (!ctx.academicYears.has(year)) errors.push({ field: "academic_year", message: "not in the academic year master", value: row["academic_year"] ?? null });
       const on = row["admitted_on"] ?? null;
       try {
         if (isoDate("admittedOn", (on ?? "").trim()) > ctx.asOf) errors.push({ field: "admitted_on", message: "after the run date", value: on });

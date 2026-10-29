@@ -1,5 +1,6 @@
 // Reconciliation checks K1-K11 and run status (design: "Checks and Outputs"; C-03.3).
 import type pg from "pg";
+import { normCode as norm } from "../src/server/people";
 import type { Ctx, Disposition, RawRow, Result, Rule } from "./types";
 
 export type Check = { check: string; scope: Record<string, unknown>; expected: number | null; actual: number | null; passed: boolean | null; detail: Record<string, unknown> };
@@ -44,7 +45,6 @@ export async function computeChecks(db: pg.Client, runId: string, rules: Rule[],
   const { rows: km } = await db.query<KeyMapRow>(`select entity, source_key, disposition, target_table, target_id, survivor_target_id, reason
     from migration.key_map where run_id = $1`, [runId]);
   const checks: Check[] = [];
-  const norm = (v: string | null | undefined) => (v ?? "").trim().toUpperCase();
   const admissionByKey = new Map(raw["legacy_admission"]!.map((r) => [r.source_key, r]));
   const scopeOf = (entity: string, row: RawRow) => {
     if (entity === "centre") return { centre: norm(row["code"]), academic_year: null };

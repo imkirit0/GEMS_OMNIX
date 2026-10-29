@@ -82,6 +82,8 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     const counters = (await db.query(`select series, period from app.global_number_series
       where series = 'REGISTER' or (series = 'ADMISSION' and period = any($1::text[]))`, [seedYears])).rows;
     if (counters.length) reasons.push(`counters already exist: ${counters.map((c) => `${c.series}/${c.period}`).join(", ")}`);
+    const [catalogue] = (await db.query(`select exists (select 1 from app.course) and exists (select 1 from app.academic_year) as ok`)).rows;
+    if (!catalogue.ok) reasons.push("catalogue is empty: load courses and academic years");
     if (reasons.length) throw new RunRefused(reasons);
     await db.query("begin");
     const hashes = new Map<string, string>();
@@ -151,8 +153,10 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       // ---------- 4. apply rules ----------
       const results = new Map<string, Map<string, Result>>(); // entity -> key -> result
       const centres = (await db.query(`select id, code from app.centre`)).rows as { id: number; code: string }[];
+      const courses = new Set((await db.query(`select code from app.course`)).rows.map((r) => r.code as string));
+      const academicYears = new Set((await db.query(`select code from app.academic_year`)).rows.map((r) => r.code as string));
       const ctx: Ctx = {
-        result: (entity, key) => results.get(entity)?.get(key), sourceRows: (t) => raw[t] ?? [], centres, identity, matchKey,
+        result: (entity, key) => results.get(entity)?.get(key), sourceRows: (t) => raw[t] ?? [], centres, courses, academicYears, identity, matchKey,
         id: (name) => uuidv5(name), asOf: opts.asOf,
       };
       for (const { rule } of RULES) {
