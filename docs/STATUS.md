@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-29, system administrator holds every permission (migration 0013), CI green 140 tests (last evidence: E-035).
+**Last updated:** 2026-10-29, GitHub CI repaired (test-only audit trigger), clean-clone CI green 140 tests (last evidence: E-036).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
@@ -16,7 +16,7 @@
 | Open business decisions | **117** (109 D-/PR- items + NP-1…8; D-STU-5 added by the person-core design), **0 approved** | audit 04 |
 | Architecture decisions approved | 1: ADR-001 authentication = first-party module (project owner, chat, 2026-10-27) | `docs/adr/ADR-001-authentication.md` |
 | Automated tests | **140 passing + 3 todo** (20 foundation + 21 T-AUTH + 5 auth HTTP + 7 RBAC + 8 admin HTTP/bootstrap + 5 T-SEC + 10 exports + 6 T-AUD + 30 T-TKT + 7 T-PER incl. T-NUM-010 + 12 ETL/P8 + 4 T-CAT), plus real-server checks in CI: admin journey (10 steps) and security smoke (18 checks) | `evidence/audit-2026-10-27T190404.txt` |
-| CI | **GitHub Actions, green**: every push to `main` and every PR runs `scripts/ci.sh`. Runs 40501900222 (`b77d262`), 40503305157 (`e753f44`) and 40508221829 (`b1c5962`, first with the real-server stage) and 40511940652 (`857b51a`) succeeded. **Defect fixed in E-020:** before it, a typecheck error could not fail CI (`set -e` + `&&`) | E-019, E-020 |
+| CI | **GitHub Actions: red from `3fa1d84` (2026-10-28) to `0078b45` (2026-10-29), fixed in the next push (E-036).** Every push to `main` and every PR runs `scripts/ci.sh`. Cause: a test-only audit trigger left by the auth suite blocked `gems_etl` audit inserts whenever the ETL tests ran after it; local runs used a different file order and stayed green. Earlier green runs: 40501900222 (`b77d262`), 40508221829 (`b1c5962`), 40511940652 (`857b51a`). Since E-036, a change counts as green only after a clean-clone run or the GitHub run passes | E-019, E-020, E-036 |
 | Current roadmap stage | Stage 1 (security POC) in progress; Stage 2 pieces all built (sign-offs open); Stage 0 blocked | audit 10 |
 | Git | `main`. Pushed to GitHub (public) on 2026-10-28 at the owner's request, again after the dev-origin change (2008a2b); later commits local; outgoing commits scanned for the keys pasted in chat, signed-URL tokens and the project ref: none | `git log`, `git status -sb` |
 

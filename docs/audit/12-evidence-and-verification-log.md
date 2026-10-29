@@ -1172,3 +1172,16 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/bootstrap-admin.mjs | 55cc925ac052d52a1c81bd52764be8351aec5731caa813a3024aa38e916eb92a |
 | tests/admin-http.test.ts | b09c5b2d7ad5a112116ae855b9b518881cfd8d54a39aa75cef23562b2339a376 |
 | evidence/ci-system-admin-2026-10-29.txt | 98ea2fe7194d0f356f69c801517c212d060aca9fc7f35af47fd9a912f8783180 |
+
+## E-036 GitHub CI red since 2026-10-28: cause and fix (2026-10-29)
+- **Observed** (public Actions API): runs for `3fa1d84` (2026-10-28 13:09 UTC, the first push containing the migration framework), `9b4ab7b`, `8dc48dc` (40822634495) and `0078b45` (40822990576) all failed in step "Run bash scripts/ci.sh"; the last green run was `8e7f8d2`. Local `ci.sh` runs were green throughout, so **the "CI green" claims in STATUS and in E-033…E-035 held locally only, not on GitHub.**
+- **Reproduced:** a fresh `git clone` with only the `ci.yml` variables (no `.env.local`) failed the same way: 6 tests in `tests/etl.test.ts`, `permission denied for table bakeoff_audit_fault` at `etl/run.ts` audit insert.
+- **Cause:** `tests/sql/audit-fault.sql` (T-AUTH-020b fault injection, applied by the auth suite) leaves a `before insert` trigger on `app.audit_log` whose (invoker) function reads `app.bakeoff_audit_fault`, granted only to `gems_auth` and `gems_app`. When the ETL tests run after the auth suite, `gems_etl`'s audit insert fails. Test files ran in a different order locally.
+- **Fix:** `grant select on app.bakeoff_audit_fault to public` (a test-only, normally empty flag table), so every audit writer passes the trigger. A first attempt (`security definer` on the trigger function) was rejected by T-RLS-005's inventory of privileged functions, correctly, and reverted.
+- **Checks:** clean clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; **140 passed + 3 todo**; build; bundle scan; real-server smoke passed (`evidence/ci-clean-clone-2026-10-29.txt`). The GitHub run of the commit carrying this entry is the confirming evidence.
+- **Process change:** STATUS now counts a change as green only after a clean-clone run or a passing GitHub run.
+
+| File | SHA-256 |
+|---|---|
+| tests/sql/audit-fault.sql | cb60220ec58b8bd029cb31bebe300864856115ce12e512355e2889045d89d392 |
+| evidence/ci-clean-clone-2026-10-29.txt | 6b397afb90a931784271eb42cb2e2d0928ec7900eac3532dd064b02ea2b3ebad |

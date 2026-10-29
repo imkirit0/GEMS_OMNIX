@@ -1,0 +1,235 @@
+
+== T-DOC-001: requirements matrix consistency
+ERRORS (0):
+warning: in the working copy of 'docs/audit/02-requirements-traceability-matrix.csv', CRLF will be replaced by LF the next time Git touches it
+
+== FRD is generated from the matrix and committed in sync
+FRD written: 290 requirements in 19 modules; 162 linked to a workflow
+warning: in the working copy of 'docs/requirements/FRD-GEMS-OMNIX.md', CRLF will be replaced by LF the next time Git touches it
+
+== Prisma client
+Loaded Prisma config from prisma7.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+generated
+
+== Fresh database
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Created 
+ Network gems-omnix-dev_default Created 
+ Container gems-omnix-dev-db-1 Creating 
+ Container gems-omnix-dev-db-1 Created 
+ Container gems-omnix-dev-pooler-1 Creating 
+ Container gems-omnix-dev-pooler-1 Created 
+ Container gems-omnix-dev-db-1 Starting 
+ Container gems-omnix-dev-db-1 Started 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-db-1 Healthy 
+ Container gems-omnix-dev-pooler-1 Starting 
+ Container gems-omnix-dev-pooler-1 Started 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-pooler-1 Waiting 
+ Container gems-omnix-dev-db-1 Healthy 
+ Container gems-omnix-dev-pooler-1 Healthy 
+Loaded Prisma config from prisma7.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+Datasource "db": PostgreSQL database "gems", schemas "app" at "127.0.0.1:54320"
+
+13 migrations found in prisma/migrations
+
+Applying migration `0001_foundation`
+Applying migration `0002_security`
+Applying migration `0003_auth`
+Applying migration `0004_auth_hardening`
+Applying migration `0005_rbac`
+Applying migration `0006_centre_view`
+Applying migration `0007_exports`
+Applying migration `0008_audit_fields`
+Applying migration `0009_tickets`
+Applying migration `0010_search_rate_limit`
+Applying migration `0011_person_core`
+Applying migration `0012_catalogue`
+Applying migration `0013_system_admin_all`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 0001_foundation/
+    └─ migration.sql
+  └─ 0002_security/
+    └─ migration.sql
+  └─ 0003_auth/
+    └─ migration.sql
+  └─ 0004_auth_hardening/
+    └─ migration.sql
+  └─ 0005_rbac/
+    └─ migration.sql
+  └─ 0006_centre_view/
+    └─ migration.sql
+  └─ 0007_exports/
+    └─ migration.sql
+  └─ 0008_audit_fields/
+    └─ migration.sql
+  └─ 0009_tickets/
+    └─ migration.sql
+  └─ 0010_search_rate_limit/
+    └─ migration.sql
+  └─ 0011_person_core/
+    └─ migration.sql
+  └─ 0012_catalogue/
+    └─ migration.sql
+  └─ 0013_system_admin_all/
+    └─ migration.sql
+
+All migrations have been successfully applied.
+etl setup done
+
+== Schema drift: Prisma schema must equal the migrated database
+Loaded Prisma config from prisma7.config.ts.
+
+-- This is an empty migration.
+
+no drift
+
+== No unsafe raw SQL (T-RLS-013)
+none
+
+== Typecheck
+0 errors
+
+== Tests
+
+ RUN  v4.1.12 C:/Users/DELL/AppData/Local/Temp/claude/D--GEMS-OMNIX/a5108cb1-d98f-45ff-9195-898f35de6fed/scratchpad/ciclone
+
+
+ Test Files  12 passed (12)
+      Tests  140 passed | 3 todo (143)
+   Start at  10:56:13
+   Duration  40.01s (transform 358ms, setup 0ms, import 1.12s, tests 37.75s, environment 1ms)
+
+
+== Production build
+▲ Next.js 16.4.2 (Turbopack)
+✓ Running next.config.ts took 24ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1698ms
+  Running TypeScript ...
+  Finished TypeScript in 2.2s ...
+  Collecting page data using 23 workers ...
+  Generating static pages using 23 workers (0/29) ...
+  Generating static pages using 23 workers (7/29) 
+  Generating static pages using 23 workers (14/29) 
+  Generating static pages using 23 workers (21/29) 
+✓ Generating static pages using 23 workers (29/29) in 133ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin/assignments/[id]/remove
+├ ƒ /admin/roles
+├ ƒ /admin/roles/[id]
+├ ƒ /admin/roles/[id]/permissions
+├ ƒ /admin/roles/create
+├ ƒ /admin/ticket-types
+├ ƒ /admin/ticket-types/[id]
+├ ƒ /admin/ticket-types/[id]/save
+├ ƒ /admin/ticket-types/create
+├ ƒ /admin/users
+├ ƒ /admin/users/[id]
+├ ƒ /admin/users/[id]/assign
+├ ƒ /admin/users/[id]/setup-link
+├ ƒ /admin/users/[id]/status
+├ ƒ /admin/users/create
+├ ƒ /auth/enrol/confirm
+├ ƒ /auth/enrol/start
+├ ƒ /auth/login
+├ ƒ /auth/logout
+├ ƒ /auth/reset/confirm
+├ ƒ /auth/reset/request
+├ ƒ /auth/stepup
+├ ƒ /auth/verify
+├ ƒ /centres
+├ ƒ /centres/[id]
+├ ƒ /export/[dataset]
+├ ƒ /login
+├ ƒ /login/enrol
+├ ƒ /login/verify
+├ ƒ /reset
+├ ƒ /reset/confirm
+├ ƒ /stepup
+├ ƒ /tickets
+├ ƒ /tickets/[id]
+├ ƒ /tickets/[id]/act
+├ ƒ /tickets/[id]/documents/[docId]
+├ ƒ /tickets/[id]/reassign
+├ ƒ /tickets/approvals
+├ ƒ /tickets/create
+├ ƒ /tickets/new
+└ ƒ /tickets/uploads
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+== No secrets in the client bundle (T-SEC-017)
+scanned 11 client files against 12 secret values and 6 patterns
+no secrets found
+
+== Real server: first-admin journey and security checks on a fresh database
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Created 
+ Network gems-omnix-dev_default Created 
+ Container gems-omnix-dev-db-1 Creating 
+ Container gems-omnix-dev-db-1 Created 
+ Container gems-omnix-dev-pooler-1 Creating 
+ Container gems-omnix-dev-pooler-1 Created 
+ Container gems-omnix-dev-db-1 Starting 
+ Container gems-omnix-dev-db-1 Started 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-db-1 Healthy 
+ Container gems-omnix-dev-pooler-1 Starting 
+ Container gems-omnix-dev-pooler-1 Started 
+ Container gems-omnix-dev-pooler-1 Waiting 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-pooler-1 Healthy 
+ Container gems-omnix-dev-db-1 Healthy 
+Loaded Prisma config from prisma7.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+1 set password via one-time link                           303 -> http://localhost:3101/login?reset=ok
+2 sign in (admin requires TOTP)                            303 -> http://localhost:3101/login/enrol
+3 confirm password to start enrolment                      303 -> http://localhost:3101/login/enrol
+4 enrolment page shows a key                               yes (32 chars)
+5 confirm code: recovery codes shown once                  10 codes
+6 home links to administration                             1 link(s)
+7 GET /admin/users                                         200
+8 create user (step-up fresh from sign-in)                 303 -> http://localhost:3101/admin/users/<id>?created=1
+9 GET /admin/users lists the new user                      1 match(es)
+10 GET /admin/users without a session                      307 -> http://localhost:3101/login
+PASS  CSP present with a nonce, strict script-src, no unsafe-inline  (default-src 'self'; script-src 'self' 'nonce-ODdhMjA4OTItNGIxMi00YzRiLTg0NjAtNDJ)
+PASS  nonce is fresh per request
+PASS  every <script> carries the request nonce  (10 scripts)
+PASS  frame-ancestors 'none' and X-Frame-Options DENY
+PASS  nosniff, referrer policy, HSTS, permissions policy
+PASS  no X-Powered-By
+PASS  T-SEC-001 own centre 200  (200)
+PASS  T-SEC-001 other centre 404 and identical to a missing one
+PASS  T-SEC-001 own-centre ticket 200  (200)
+PASS  T-SEC-001 hidden-centre ticket 404 and identical to a missing one
+PASS  T-SEC-005 crafted filters show only the in-scope centre
+PASS  T-SEC-005 search cannot find out-of-scope rows
+PASS  T-SEC-014 XSS payload escaped in HTML
+PASS  T-SEC-012 generic 500 with reference, no internals  (500 Something went wrong. Reference: b76c8b32-07df-48a1-8956-ff8)
+PASS  T-SEC-006 export from a foreign origin is refused
+PASS  T-SEC-006 export holds only in-scope rows, as an uncached attachment  (200 1 data rows)
+PASS  T-AUD-001 response X-Request-Id equals the audit row's request_id  (711eff9f-07ab-4058-a4bf-66d0a602a0c6 vs 711eff9f-07ab-4058-a4bf-66d0a602a0c6)
+PASS  no session: scoped page redirects to /login  (307)
+all security smoke checks passed
