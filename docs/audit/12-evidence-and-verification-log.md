@@ -1445,3 +1445,65 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/smoke-security.mjs | f4cd9d971e5affd93e77eddbecb68cd06fe9d63f93e2a83c01502a00cf51d32d |
 | evidence/mutation-enquiry-2026-10-29.txt | da1c543cfbadd4968445032a95d6e73ab41f9cc2105ed126c9383eb43a970602 |
 | evidence/ci-enquiry-2026-10-29.txt | 85ba89c17cd6a5f8c3062f433b4c1b2ba07271a1398447fc63e133fd13efb423 |
+
+## E-043 Certifications and special-case availability built (seventh Stage 3 piece, WF2) (2026-10-29)
+- **Request:** roadmap order, continued under the owner's standing instruction (2026-10-29). DD-1…DD-4 and the build approval were taken as the recommended options. EGM review: steps 5–7 ran in parallel on one commit (the first step 7 run stalled and was restarted); then steps 8 and 9. No owner items. Built in phases K1–K4.
+- **K1 (documents):**
+  - T-CC-001…004 added to audit 09;
+  - the T-CM-003 row amended;
+  - R-092, R-090 and R-090.01 linked;
+  - CSV and FRD regenerated;
+  - course-master DD-7 marked as amended.
+- **K2 (data and server):**
+  - Migration 0019:
+    - `certification` (named checks; the description uses the multiline rule shared with enquiries);
+    - `course_certification` (mandatory flag);
+    - `course_centre` (named centres; `centre_id`, so four policies; select open, centre names gated by `app.centre`);
+    - RLS on `catalogue.manage` at ALL scope; the code is never updated.
+  - `catalogue.ts`:
+    - certification functions;
+    - `setCourseCertifications`, which keeps inactive links and never newly adds them;
+    - `setCourseCentres`;
+    - `getCourse` gains certifications, the visible named centres, a count of hidden ones, and picklists for managers;
+    - `listCourses` gains `specialCase`.
+  - Availability: a course with named centres is sold only there; otherwise the class rule applies. This amends course-master DD-7. The rule is the same in `admit()`, `admitOptions()` (named centres within the user's scope; `[]` never becomes null) and `offeredCourses()`.
+  - `ownText` moved into `details.ts`. It stays out of `person-rules.ts`, which the ETL rules hash.
+- **K3 (pages):**
+  - `/admin/catalogue/certifications` and its route;
+  - two course-page sections (certifications with Carries and Mandatory; "Only these centres may sell it");
+  - the course list marks named-centre courses;
+  - an index link and labels.
+- **Tests:** `tests/certifications.test.ts` holds 4 tests. Real server: 3 new checks:
+  - the page is readable without forms;
+  - a foreign-origin create is refused;
+  - the scoped special-case centre is shown.
+- **Mutation checks** (`evidence/mutation-certifications-2026-10-29.txt`): 39 in total (26 code, 12 database, 1 real-server). Four were MISSED at first; the tests were tightened and all four are now CAUGHT.
+- **Checks:** one local CI run timed out in the exports suite while the machine was asleep. The rerun was green, and the full suite alone runs in 60 s. A fresh clone with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0:
+  - no drift; 0 type errors;
+  - **184 passed + 3 todo** (19 files);
+  - build and bundle scan;
+  - admin journey and all security smoke checks passed (`evidence/ci-certifications-2026-10-29.txt`).
+- **Limits and next steps:**
+  - Special cases by region or area, exams (R-114) and fees (R-059) come later.
+  - The 57 legacy certifications await migration (paused).
+  - Not yet on Supabase (migrations 0012–0019).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0019_certifications/migration.sql | cdfba0149b77b9bc8cfacd7402324265abdc0d74db82c75551cd5c6de697da88 |
+| prisma/schema.prisma | 8287c2d7f7a848a147714770862d644993b51507ee3e38b556af68feda7bd7a6 |
+| src/server/catalogue.ts | 8d804d4cb9d1b7198d1a2a862d57c58966552908c7846b3cde02d36ebb2414a4 |
+| src/server/people.ts | 901f9c2e6f08bebce70abca41c6b8702bbaeab735e289af083dee86138ce2d42 |
+| src/server/course-offer.ts | 3b2b0a979b50ec24418db88f202a77d0010ccbd7caf0494c3dc20e23e9434f49 |
+| src/server/details.ts | 8339c696fab7fbf872eb8f3df70d1708d5e1c67df75983e7e037a8c1beec07d2 |
+| src/server/enquiry.ts | 3153fcc076387c474baa5640085d04c336cc018367bea098953a19d7aff60332 |
+| app/admin/catalogue/certifications/page.tsx | fd5b90093ef4b18225737f7a79dbc47033e5c46be4edda6cb2e2faa9625c5374 |
+| app/admin/catalogue/certifications/save/route.ts | a2952e72b547f2a9e78b57a66245427d6106a3fdca90d0cf64d2cf772bb608cd |
+| app/admin/catalogue/courses/[id]/page.tsx | 579ceebd4e297795f5ec38714e68c19208da134be5911c884285a4971ac22ae5 |
+| app/admin/catalogue/courses/[id]/save/route.ts | 42fae63bcb7f9b572c610d19c859169b76347b14572905682db296f5bfb54799 |
+| tests/certifications.test.ts | 67a205a06ecbb6353eef925a0706fdf793583a512ecee4d5277499b1bb8ced18 |
+| scripts/smoke-security.mjs | a6fd3b969b5cbbc13a9146ad02fc57340305a9af38c76d5de6273dfbc3fabdc4 |
+| evidence/mutation-certifications-2026-10-29.txt | d247ee23a201e97a0c56f89c6c7f7c6667e698a85c99a4e327d6a1131a5553bc |
+| evidence/ci-certifications-2026-10-29.txt | 843bb60957dd72c5080905996d642a7b745601139a857c612ad1785e3825e6b6 |
