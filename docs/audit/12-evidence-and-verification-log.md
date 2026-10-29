@@ -1482,7 +1482,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - no drift; 0 type errors;
   - **184 passed + 3 todo** (19 files);
   - build and bundle scan;
-  - admin journey and all security smoke checks passed (`evidence/ci-certifications-2026-10-29.txt`).
+  - admin journey and all security smoke checks passed (`evidence/ci-certifications-2026-10-29.txt`). Confirmed on GitHub: run 40909832925 for `ce42271` succeeded.
 - **Limits and next steps:**
   - Special cases by region or area, exams (R-114) and fees (R-059) come later.
   - The 57 legacy certifications await migration (paused).
