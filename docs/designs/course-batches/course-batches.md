@@ -1,7 +1,7 @@
 # Course batches and time slots (Stage 3, ninth piece, WF-X19)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7, which ran in parallel ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md)). Every finding is resolved below. DD-1…DD-5 are recommended options taken under the owner's standing instruction of 2026-10-29.
+*   **Status:** Proposed, revised after EGM steps 5–7, which ran in parallel, and step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), I1–I7 applied) ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md)). Every finding is resolved below. DD-1…DD-5 are recommended options taken under the owner's standing instruction of 2026-10-29.
 *   **Date:** 2026-10-30
 
 **Terms:**
@@ -30,9 +30,9 @@ This piece adds:
     *   only `batch.manage` sets or changes a `batch_id`;
     *   only into an active batch of the same centre;
     *   only for an ACTIVE registration;
-    *   never beyond capacity.
+    *   no placement beyond capacity.
 
-    Reading batches and placements needs `student.view` at the centre [T-CB-001, T-CB-002].
+    Reading batches needs `student.view` at the centre (RLS). For placements the app enforces the same rule; registration rows keep their existing `visible_centre_ids` select policy [T-CB-001, T-CB-002].
 *   **G4:** pages and routes check the origin and return field errors. A malformed, unknown or out-of-scope centre, batch or course parameter gives a 404 [T-CB-003].
 
 ## Non-Goals
@@ -77,11 +77,13 @@ create index registration_batch_id_idx on app.registration (batch_id);
     *   This follows 0020's `centre_write_guard`.
     *   The owner and `gems_etl` are unaffected.
     *   It closes the insert path too: `admit()` never sets `batch_id`.
-2.  **Rules.** These apply to every role when `new.batch_id is not null and new.status = 'ACTIVE'`, and either `batch_id` changed or the row is newly counted (status became ACTIVE, or the centre changed).
+2.  **Rules.** These apply to every role:
+    *   When `batch_id` changes to a non-null value on a registration whose `new.status <> 'ACTIVE'`, it raises `23514` with constraint `batch_registration_guard` (I1).
+    *   The remaining checks run when `new.batch_id is not null and new.status = 'ACTIVE'`, and either `batch_id` changed or the row is newly counted (status became ACTIVE, or the centre changed).
     *   It locks the batch: `select active, capacity from app.batch where id = new.batch_id for no key update`.
-    *   An inactive batch: `raise exception 'batch inactive' using errcode = '23514', constraint = 'batch_active_guard'`.
+    *   `if not found or not active`: `raise exception 'batch inactive' using errcode = '23514', constraint = 'batch_active_guard'` (I2: fails closed).
     *   It counts `registration where batch_id = new.batch_id and status = 'ACTIVE' and id <> new.id`. If the count is ≥ capacity: `raise … using errcode = '23514', constraint = 'batch_capacity_guard'`.
-3.  **Why this is concurrency-safe.** The batch row lock serialises writers, both the app and direct SQL. After the lock, the count statement takes a fresh snapshot under READ COMMITTED, so it sees the earlier writer's committed rows (D1).
+3.  **Why this is concurrency-safe.** The function stays VOLATILE (the default), which this argument depends on. The batch row lock serialises writers, both the app and direct SQL. After the lock, the count statement takes a fresh snapshot under READ COMMITTED, so it sees the earlier writer's committed rows (D1).
 4.  **Why the count is complete under invoker rights.** A caller can only write a row at a centre it can see, and a registration's batch is at the same centre (D9).
 
 **RLS on `batch`:** its own per-command policies, in the codebase's initplan shape.
@@ -119,6 +121,7 @@ create index registration_batch_id_idx on app.registration (batch_id);
 *   23505 on `batch_centre_id_code_key` becomes `RbacError("duplicate", …, "batch.duplicate")`;
 *   23514 on `batch_capacity_guard` becomes `batchId: full`;
 *   23514 on `batch_active_guard` becomes `batchId: inactive or unknown`;
+*   23514 on `batch_registration_guard` becomes `registrationIds: not active here`;
 *   any other 23514 becomes `RbacError("invalid", "invalid value")`;
 *   42501 becomes `Forbidden`;
 *   23503 on `registration_batch_fkey` becomes `batchId: inactive or unknown`.
@@ -131,7 +134,7 @@ type BatchInput = { centreId: number; code: string; name: string; startsAt: stri
 type BatchChanges = Partial<Pick<BatchInput, "name" | "startsAt" | "endsAt" | "capacity">>;
 
 batchCentres(session): Promise<{ id: number; code: string; name: string; active: boolean; canManage: boolean }[]>; // centres with student.view
-listBatches(session, centreId): Promise<{ rows: BatchRow[]; canManage: boolean }>;      // Forbidden without student.view there
+listBatches(session, centreId): Promise<BatchRow[]>;                                   // Forbidden without student.view there; canManage comes from batchCentres (I5)
 createBatch(session, input: BatchInput): Promise<{ id: number }>;                        // batch.create
 updateBatch(session, centreId, id, changes: BatchChanges): Promise<void>;               // batch.update
 setBatchActive(session, centreId, id, active: boolean, reason: string): Promise<void>;  // batch.activate / batch.deactivate
@@ -159,10 +162,10 @@ placeLearners(session, centreId, batchId: number | null, registrationIds: string
 | Time order (merged row) | `endsAt` after `startsAt` | `endsAt: after startsAt` |
 | `capacity` | Integer 1–500 (PMC) | `capacity: 1-500` |
 | Capacity (merged row, under lock) | Not below the ACTIVE learners placed | `capacity: below the learners placed` |
-| `batchId` (place) | null, or a safe integer ≥ 1; then (under lock) a batch at this centre that is active | `batchId: inactive or unknown` |
+| `batchId` (place) | null, or a safe integer ≥ 1; a target at another centre or inactive is refused by the guard and the FK (mapped by `batchDb`) | `batchId: inactive or unknown` |
 | `registrationIds` | 1–200 distinct UUIDs | `registrationIds: 1-200 distinct ids` |
 | Each registration (under lock) | At this centre and ACTIVE | `registrationIds: not active here` |
-| Capacity (place, under lock) | Placed + newcomers ≤ capacity | `batchId: full` |
+| Capacity (place) | Placed + newcomers ≤ capacity, checked by the guard trigger only (I4: one copy of the rule) | `batchId: full` |
 
 **Writes:**
 *   **`createBatch`:** `nextval('app.batch_id_seq')` runs first in a pre-flight `withScope`, so the id can be the audit target (C4, Z4). It then inserts with the explicit id and returns `{ id }`.
@@ -197,7 +200,7 @@ Every page parses its parameters itself and calls `notFound()` (C12, D11) when:
 | Route | What |
 |---|---|
 | `/batches` | The centre picker, from `batchCentres`. A 404 when the list is empty. One centre goes straight to it. |
-| `/batches?centre=<id>` | That centre's batches. Managers also get an add form, a per-row edit form, and Activate/Deactivate with a reason. An inactive centre shows "This centre is not active yet." and no forms. |
+| `/batches?centre=<id>` | That centre's batches. Managers also get an add form, a per-row edit form, and Activate/Deactivate with a reason. An inactive centre shows "This centre is not active." and no forms (DD-5; learners stay in its batches). |
 | `/batches/place?centre=<id>[&course=<code>[&batch=<id>]]` | The course picker (`placementCourses`). With `course`, the list; `batch` **filters** the list to that batch (C10). Managers get tick boxes, a target select (the active batches, or "No batch") and Save. |
 | `POST /batches/save` | `adminPost`; back `/batches?centre=<centreId>`; success `…&saved=1` ("Saved."). |
 | `POST /batches/place/save` | `adminPost`; back and success are the place page with `centre`, `course` and `batch` as posted; success adds `saved=1` ("Saved."). |
@@ -262,6 +265,8 @@ All five are recommended options taken under the standing instruction.
 
 *   **Lowering capacity is checked only in the app**, under the batch lock. Direct SQL by a manager could lower it below the placed count. That leaves the batch over-full but harmless: no new placement passes.
 *   **A centre transfer** that cascades `registration.centre_id` fails with 23503 while `batch_id` is set. The transfer must clear the batch first (D7).
-*   **A future legacy batch import** must fit the named checks and the capacity rule, or record its exceptions (D12).
+*   **A future legacy batch import** must fit the named checks and the capacity rule, or record its exceptions (D12). Under invoker rights, the guard's lock needs UPDATE on `app.batch` for that role (I3).
+*   **At a centre deactivated later, learners cannot be moved or removed** until it is active again (DD-5, I7: accepted).
+*   **A writer that disables triggers** (`session_replication_role = replica`, owner only) skips the guard. This is out of scope.
 *   **A deadlock** (40P01) from raw SQL is not retried by `withScope`. The fixed lock order (batch, then registrations by id) avoids one.
 *   **A registration that leaves ACTIVE keeps its `batch_id`** and stops counting. If it becomes ACTIVE again, the guard re-checks capacity.
