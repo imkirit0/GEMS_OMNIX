@@ -169,6 +169,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-CM-005 | The share | A manager reads the KELTRON share; other users get none, from the course read and the list |
 | T-CM-006 | Invisible courses | Not offered and refused by `admit()` ("no such course"); an existing registration stays |
 
+### T-MS: catalogue masters pages (`docs/designs/catalogue-masters/catalogue-masters.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-MS-001 | Master and year lists | Every signed-in user lists the course categories, divisions and centre classes (inactive ones included, by code) and the academic years (newest first, ISO dates); `canManage` only for catalogue managers |
+| T-MS-002 | A centre's class | A catalogue manager at ALL scope sets, changes and clears a centre's class with a reason, audited by code; an inactive class is never newly set, one deactivated later is kept; nobody else can, also by direct SQL or with `catalogue.manage` at one centre; only that centre column is writable; the lock does not hold up admissions; the class page shows only centres the user may view |
+| T-MS-003 | Admin routes | Create, rename, (de)activate masters; create, date and open/close years; set and clear a centre's class; step-up and same origin; field details; unknown slugs and operations; the shared error component is safe against crafted query values |
+
 ### T-COR: correction tickets (`docs/designs/correction-tickets/correction-tickets.md`)
 | ID | Test | Expected |
 |---|---|---|

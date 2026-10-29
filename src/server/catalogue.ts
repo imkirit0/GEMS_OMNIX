@@ -88,9 +88,10 @@ async function lockYear(tx: Tx, yc: string): Promise<YearRow> {
   return r;
 }
 // DD-10: a course is created in, or moved to, an active category and division only
-async function liveRef(tx: Tx, t: Prisma.Sql, field: string, rowId: number) {
-  const [r] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from ${t} where id = ${rowId} and active for share`;
+async function liveRef(tx: Tx, t: Prisma.Sql, field: string, rowId: number): Promise<string> {
+  const [r] = await tx.$queryRaw<{ code: string }[]>`select code from ${t} where id = ${rowId} and active for share`;
   if (!r) throw bad(`${field}: inactive or unknown`);
+  return r.code;
 }
 const already = (state: string) => bad(`already ${state}`);
 const done = () => undefined;
@@ -131,6 +132,15 @@ export async function setMasterActive(session: string | undefined, kind: MasterK
     ? adminWrite(session, { action: "catalogue.activate", permission: MANAGE, targetType: kind, targetId: String(i), reason: r }, run, (x) => x)
     : adminWrite(session, { action: "catalogue.deactivate", permission: MANAGE, targetType: kind, targetId: String(i), reason: r }, run, (x) => x)
   ).then(done);
+}
+
+/** Every row of one master, inactive ones included (catalogue-masters DD-9); readable by every signed-in user (DD-4). */
+export async function listMasters(session: string | undefined, kind: MasterKind) {
+  const t = table(kind); // before the session: an unknown kind needs none
+  return withScope(session, async (tx) => ({
+    rows: await tx.$queryRaw<Master[]>`select id, code, name, active from ${t} order by code`,
+    canManage: await canManage(tx),
+  }));
 }
 
 // ---------- Courses (course master: docs/designs/course-master/course-master.md) ----------
@@ -373,6 +383,15 @@ export function durationSummary(c: Pick<CourseDetails, "durationType" | "duratio
 
 // ---------- Academic years (R-028; dates are reference data, DD-6) ----------
 
+/** The academic years, newest first, with ISO dates. */
+export async function listAcademicYears(session: string | undefined) {
+  return withScope(session, async (tx) => ({
+    years: await tx.$queryRaw<YearRow[]>`select code, starts_on::text as "startsOn", ends_on::text as "endsOn", open
+      from app.academic_year order by code desc`,
+    canManage: await canManage(tx),
+  }));
+}
+
 export async function openAcademicYear(session: string | undefined, y: { code: string; startsOn: string; endsOn: string }) {
   const c = yearCode(y.code), s = date("startsOn", y.startsOn), e = date("endsOn", y.endsOn);
   datesOk(s, e);
@@ -410,4 +429,39 @@ export async function setAcademicYearOpen(session: string | undefined, yc: strin
     ? adminWrite(session, { action: "catalogue.activate", permission: MANAGE, targetType: "academic_year", targetId: c, reason: r }, run, (x) => x)
     : adminWrite(session, { action: "catalogue.deactivate", permission: MANAGE, targetType: "academic_year", targetId: c, reason: r }, run, (x) => x)
   ).then(done);
+}
+
+// ---------- A centre's class (catalogue-masters DD-2; supersedes catalogue DD-7) ----------
+
+export type CentreClassRow = { id: number; code: string; name: string; classId: number | null; classCode: string | null };
+
+/** The centres the session may view (RLS plus org.centre.view, as listCentres; managers see all) with their class. */
+export async function listCentreClasses(session: string | undefined) {
+  return withScope(session, async (tx) => ({
+    centres: await tx.$queryRaw<CentreClassRow[]>`select c.id, c.code, c.name, c.centre_class_id as "classId", k.code as "classCode"
+      from app.centre c left join app.centre_class k on k.id = c.centre_class_id
+      where app.has_permission('catalogue.manage', null) or c.id in (select unnest(app.scoped_centre_ids('org.centre.view')))
+      order by c.code`,
+    classes: await tx.$queryRaw<Master[]>`select id, code, name, active from app.centre_class
+      where active or id in (select centre_class_id from app.centre) order by code`,
+    canManage: await canManage(tx),
+  }));
+}
+
+/** Sets, changes or clears (null) a centre's class; a reason is required (DD-5). Network-wide: ALL-scope managers only. */
+export async function setCentreClass(session: string | undefined, centreId: number, classId: number | null, reason: string) {
+  const i = id("centreId", centreId), k = classId === null ? null : id("classId", classId), r = reasonOf(reason);
+  return adminWrite(session, { action: "catalogue.centre.class", permission: MANAGE, targetType: "centre", targetId: String(i), reason: r },
+    async (tx) => {
+      // no key update: serialises two managers without blocking the key-share lock an admission insert takes here (D2);
+      // a scalar subquery, since a row lock cannot cover the nullable side of an outer join (C1)
+      const [row] = await tx.$queryRaw<{ classId: number | null; classCode: string | null }[]>`select c.centre_class_id as "classId",
+          (select code from app.centre_class where id = c.centre_class_id) as "classCode"
+        from app.centre c where c.id = ${i} for no key update`;
+      if (!row) throw new RbacError("notfound", "centre not found");
+      if (row.classId === k) throw bad("nothing to change");
+      const code = k === null ? null : await liveRef(tx, TABLES.centre_class, "classId", k); // never newly an inactive class (DD-7)
+      await tx.$executeRaw`update app.centre set centre_class_id = ${k}::int where id = ${i}`;
+      return { before: { classCode: row.classCode }, after: { classCode: code } };
+    }, (x) => x).then(done);
 }

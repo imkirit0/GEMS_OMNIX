@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { durationSummary, getCourse } from "@/server/catalogue";
 import { pageRead } from "@/server/page-read";
-import { CourseErrors, CourseForm, FLAG_LABELS } from "../course-form";
+import { AdminErrors } from "../../admin-errors";
+import { COURSE_FIELD_LABELS, CourseForm, FLAG_LABELS } from "../course-form";
 
 // One course: the form, centre classes and the switch for catalogue managers; a read-only view without the KELTRON
 // share for everyone else (DD-13). The save route dispatches on the hidden op field.
@@ -17,7 +18,7 @@ export default async function Course({ params, searchParams }: { params: Promise
       <p><a href="/admin/catalogue/courses">All courses</a></p>
       <h1>{c.code}: {c.name}</h1>
       {saved && <p role="status">Saved.</p>}
-      <CourseErrors error={error} detail={detail} />
+      <AdminErrors error={error} detail={detail} labels={COURSE_FIELD_LABELS} />
       <p>{c.active ? "Active" : "Inactive"} · {c.visible ? "Offered for admission" : "Not offered for admission"}</p>
       {canManage ? (
         <>

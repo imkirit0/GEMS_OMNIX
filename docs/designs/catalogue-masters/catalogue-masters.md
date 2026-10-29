@@ -1,7 +1,7 @@
 # Catalogue masters pages (Stage 3, fifth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (no new decisions); step 7: [`critic_report.md`](critic_report.md) (no new decisions); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions).
+*   **Status:** Approved for build by the design owner on 2026-10-29, after the EGM review (steps 5–9); built the same day (evidence E-041). The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (no new decisions); step 7: [`critic_report.md`](critic_report.md) (no new decisions); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).

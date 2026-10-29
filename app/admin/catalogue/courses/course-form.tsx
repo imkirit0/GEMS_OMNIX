@@ -1,6 +1,5 @@
 // The course form and error lines shared by the new and edit pages (course-master design). A server component: the
 // form posts as a plain HTML form to the course routes.
-import { ADMIN_MESSAGES } from "@/server/admin-http";
 import type { CourseDetails } from "@/server/catalogue";
 
 export const FLAG_LABELS = {
@@ -15,13 +14,6 @@ export const COURSE_FIELD_LABELS: Record<string, string> = {
   durationDays: "Days", durationHours: "Hours", capacity: "Capacity", examMinDays: "Exam minimum days",
   sortOrder: "Sort order", keltronShare: "KELTRON share (%)", classIds: "Centre classes", reason: "Reason", ...FLAG_LABELS,
 };
-
-export function CourseErrors({ error, detail }: { error?: string | undefined; detail?: string | undefined }) {
-  if (!error) return null;
-  if (error !== "invalid") return <p role="alert">{ADMIN_MESSAGES[error] ?? "Some values were invalid."}</p>;
-  const label = detail ? COURSE_FIELD_LABELS[detail] : undefined;
-  return <p role="alert">Some values were invalid.{label && <> Check: {label}</>}</p>;
-}
 
 type Entry = { id: number; code: string; name: string; active: boolean };
 export type CourseValues = CourseDetails & { code: string; name: string; categoryId: number; divisionId: number };

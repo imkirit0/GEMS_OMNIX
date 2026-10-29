@@ -180,7 +180,7 @@ export const CODE_RULE = /^[!-~]+( [!-~]+)*$/; // the code check, mirrored for f
     end $$;
     ```
 
-    No Stage 2 function sets the new column (DD-7); the Stage 3 centre form or the class-revision ticket does.
+    No Stage 2 function sets the new column (DD-7); the Stage 3 centre form or the class-revision ticket does. *(Superseded by catalogue-masters DD-2: `setCentreClass`, 2026-10-29.)*
 
 ### Access
 
@@ -260,7 +260,7 @@ Accepted by the design owner on 2026-10-28; each stays PRO until the design owne
 4.  **DD-4: Audited server functions behind one permission** (`catalogue.manage`), no screens; approval tickets for new courses come with Stage 3 (D-CAT-2).
 5.  **DD-5: `registration.course_code` references the code, not the id:** the column already holds codes, the code never changes, and the foreign key needs no data move.
 6.  **DD-6: Academic-year dates are reference data** in Stage 2; `admittedOn` is not checked against them.
-7.  **DD-7: No Stage 2 write path for a centre's class;** the column and its foreign key exist, set by the Stage 3 centre form or the class-revision ticket.
+7.  **DD-7: No Stage 2 write path for a centre's class;** the column and its foreign key exist, set by the Stage 3 centre form or the class-revision ticket. *(Superseded by catalogue-masters DD-2: `setCentreClass`, 2026-10-29.)*
 8.  **DD-8: Codes are printable ASCII,** at most 30 characters, so the database check and `normCode()` agree whatever the database locale; non-ASCII input is refused, never folded.
 9.  **DD-9: Deactivating or reactivating any catalogue row** (for a year: closing or reopening) **requires a reason**, stored in the audit row.
 10. **DD-10: A course cannot be created in, or moved to, an inactive category or division;** existing courses keep theirs.

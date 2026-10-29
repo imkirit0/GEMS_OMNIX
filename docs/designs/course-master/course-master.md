@@ -17,7 +17,7 @@ The catalogue skeleton (E-034) gave each course a code, a name, a category, a di
 | Term | Meaning | Where |
 |---|---|---|
 | Catalogue | `course`, `course_category`, `course_division`, `centre_class`, `academic_year`; audited functions behind `catalogue.manage` | `docs/designs/catalogue-skeleton/`, `src/server/catalogue.ts` |
-| Centre class | METRO, A++, A… (16 legacy values, R-033.06); `centre.centre_class_id` exists but no function sets it yet (catalogue DD-7) | migration 0012 |
+| Centre class | METRO, A++, A… (16 legacy values, R-033.06); `centre.centre_class_id` exists but no function sets it yet (catalogue DD-7) (set by `setCentreClass` since catalogue-masters DD-2) | migration 0012 |
 | Availability | Which centre classes may sell a course (D-CAT-1) | this design |
 | `adminWrite()` | Permission check, fresh step-up, the change and its audit row in one transaction | `src/server/rbac.ts` |
 | R-, D-, T- ids | Requirements, decisions, tests | `docs/audit/` |
@@ -40,7 +40,7 @@ The catalogue skeleton (E-034) gave each course a code, a name, a category, a di
 *   **Fee rows and fee types** (R-090 "fee rows per Fee Type"): Stage 4, behind the finance gate.
 *   **Certifications, exams, curriculum, subjects** (R-090, R-092, R-152.01, R-033.09): their own masters, later.
 *   **Special-case availability by region, area or centre** (R-090.01): later; this piece records availability by centre class only.
-*   **Setting a centre's class** (catalogue DD-7): the centre-creation piece.
+*   **Setting a centre's class** (catalogue DD-7): the centre-creation piece. *(Superseded by catalogue-masters DD-2: `setCentreClass`, 2026-10-29.)*
 *   **Approval tickets for new courses** (D-CAT-2): with fees in Stage 4 (DD-3).
 *   **Versioning** (D-CAT-3): edits stay in place, audited.
 *   **Migrating legacy courses** (Stage 0 legacy data).

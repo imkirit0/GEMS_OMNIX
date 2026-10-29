@@ -62,7 +62,7 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "ticket.setup.duplicate": "A ticket type with that code already exists.",
   "ticket.setup.numbering": "Ticket types cannot be switched on until the ticket numbering policy is signed and its counter is set.",
   "ticket.setup.storage": "A type that needs documents cannot be switched on until document storage is approved (ADR-002) and its safeguards are in place.",
-  "catalogue.duplicate": "A course with that code already exists.",
+  "catalogue.duplicate": "A record with that code already exists.",
   duplicate: "That login or key already exists.",
   notfound: "Not found.",
   invalid: "Some values were invalid. Check the scope fields.",

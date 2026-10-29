@@ -1,0 +1,21 @@
+import { canManageCatalogue } from "@/server/catalogue";
+import { pageRead } from "@/server/page-read";
+
+// The catalogue index (catalogue-masters design): readable by every signed-in user (DD-4).
+export default async function Catalogue() {
+  await pageRead((s) => canManageCatalogue(s)); // requires a session
+  return (
+    <main>
+      <p><a href="/">Home</a></p>
+      <h1>Catalogue</h1>
+      <ul>
+        <li><a href="/admin/catalogue/courses">Courses</a></li>
+        <li><a href="/admin/catalogue/masters/categories">Course categories</a></li>
+        <li><a href="/admin/catalogue/masters/divisions">Course divisions</a></li>
+        <li><a href="/admin/catalogue/masters/classes">Centre classes</a></li>
+        <li><a href="/admin/catalogue/years">Academic years</a></li>
+        <li><a href="/admin/catalogue/centres">Class per centre</a></li>
+      </ul>
+    </main>
+  );
+}

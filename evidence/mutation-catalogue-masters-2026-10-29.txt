@@ -1,0 +1,55 @@
+Catalogue masters mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-29, local Docker database.
+Code mutations: each applied, the named test run (vitest -t), the file restored. Database mutations of 0017 (1-6):
+applied to the local database as SQL, the named test run, the SQL restored. 8: a column added to app.centre, the drift
+gate (prisma migrate diff --exit-code) run, the column dropped, then no drift. Page mutations (43-44): next build, fresh
+database, next start on 3101, scripts/smoke-security.mjs, the server stopped by port before and after. git status clean
+of mutations afterwards. Numbering follows the report's table.
+
+CAUGHT 9 table(kind) inside withScope
+CAUGHT 10 listMasters active only
+CAUGHT 11 listMasters order by id
+CAUGHT 12 years ascending
+CAUGHT 13 year dates not text
+CAUGHT 14 canManage always true
+CAUGHT 15 no org.centre.view gate
+CAUGHT 16 no manager branch
+CAUGHT 17 classes active only
+CAUGHT 18 classes unfiltered
+CAUGHT 19 no centreId check
+CAUGHT 20 no classId check
+CAUGHT 21 no reason check
+CAUGHT 22 no notfound
+CAUGHT 23 no same-class check
+CAUGHT 24 liveRef skipped
+CAUGHT 25 liveRef without active
+CAUGHT 26 for update
+CAUGHT 27 no lock
+CAUGHT 29 audit ids not codes
+CAUGHT 30 centreId in meta
+CAUGHT 31 wrong targetType
+CAUGHT 32 action not catalogued
+CAUGHT 33 duplicate text reverted
+CAUGHT 34 slug check with in
+CAUGHT 35 slug 404 removed
+CAUGHT 36 flag accepts anything
+CAUGHT 37 empty classId not null
+CAUGHT 38a centres unknown op accepted
+CAUGHT 38b masters unknown op accepted
+CAUGHT 40 safeRoute removed
+CAUGHT 41a AdminErrors message lookup by []
+CAUGHT 41b AdminErrors label lookup by []
+CAUGHT 1 grant dropped
+CAUGHT 2 every centre column granted
+CAUGHT 3 name granted too
+CAUGHT 4 policy dropped
+CAUGHT 5 policy using (true)
+CAUGHT 6 policy centre-scoped
+CAUGHT 8 extra centre column (drift gate)
+CAUGHT 43 forms shown to non-managers  | FAIL  T-MS /admin/catalogue/masters/categories readable by a non-manager, without forms  (200)
+CAUGHT 44 unknown slug not 404  | FAIL  T-MS unknown master slugs are 404  (500 500)
+
+Result: 42 mutations (33 code, 6 database, 1 drift, 2 real-server), all caught, none missed.
+Not run: 7 (policy 'with check (true)' only; equivalent, USING already filters the rows), 28 (lock as a left join;
+Postgres refuses it), 39 and 45 (adminPost's origin check is shared and covered by T-MS-003 and the course tests),
+46 (home link text). The first form of mutation 44 did not compile (next build refused it); it was rewritten to
+compile and then caught by the smoke.

@@ -19,7 +19,7 @@ export default async function Home() {
       {centres.length > 0 && <p><a href="/centres">Centres</a> ({centres.length})</p>}
       <p><a href="/students">Students</a> · <a href="/tickets">Tickets</a> · <a href="/tickets/approvals">My approvals</a></p>
       {admin && <p><a href="/admin/users">User and role administration</a></p>}
-      {catalogue && <p><a href="/admin/catalogue/courses">Courses</a></p>}
+      {catalogue && <p><a href="/admin/catalogue">Catalogue</a></p>}
       <form method="post" action="/auth/logout"><button type="submit">Sign out</button></form>
     </main>
   );

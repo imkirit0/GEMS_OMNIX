@@ -155,6 +155,21 @@ try {
     headers: { cookie: `__Host-gems_session=${catTok}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
     body: new URLSearchParams({ code: "EVIL", name: "Evil", categoryId: "1", divisionId: "1", sortOrder: "0" }) });
   check("T-CM course create from a foreign origin is refused", foreignCreate.status === 403, String(foreignCreate.status));
+
+  // ---------- catalogue masters pages (T-MS: everyone reads, no forms for non-managers; slugs; origin) ----------
+  for (const [path, marker] of [["/admin/catalogue/masters/categories", "SMK"], ["/admin/catalogue/years", "2026-27"], ["/admin/catalogue/centres", "SMK-A"]]) {
+    const r = await get(path, viewer);
+    const body = await r.text();
+    check(`T-MS ${path} readable by a non-manager, without forms`, r.status === 200 && body.includes(marker) && !body.includes('method="post"'), String(r.status));
+  }
+  const managerCentres = await (await get("/admin/catalogue/centres", catTok)).text();
+  check("T-MS a catalogue manager gets the class forms", managerCentres.includes('method="post"') && managerCentres.includes('name="classId"'));
+  const [noSlug, protoSlug] = [await get("/admin/catalogue/masters/nope", viewer), await get("/admin/catalogue/masters/constructor", viewer)];
+  check("T-MS unknown master slugs are 404", noSlug.status === 404 && protoSlug.status === 404, `${noSlug.status} ${protoSlug.status}`);
+  const foreignClass = await fetch(`${BASE}/admin/catalogue/centres/save`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${catTok}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ op: "class", centreId: String(ids.A), classId: "", reason: "evil" }) });
+  check("T-MS a centre class change from a foreign origin is refused", foreignClass.status === 403, String(foreignClass.status));
   await db.query(`insert into app.global_number_series (series, period, current) values ('REGISTER', 'ALL', 1), ('ADMISSION', '2026-27', 0) on conflict do nothing`);
   const studentRole = (await db.query(`insert into app.role (key, name) values ('smoke_student', 'Smoke student admin') returning id`)).rows[0].id;
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'student.view'), ($1, 'student.admit')`, [studentRole]);

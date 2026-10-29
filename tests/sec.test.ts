@@ -48,7 +48,7 @@ describe("T-SEC application-level isolation", () => {
     expect(codes(await listCentres(T.hoAll))).toEqual(["KL2-25", "KL3-07", "TN1-03"]);
   });
 
-  test("T-SEC-007 HO-global masters cannot be mutated by the app role at all", async () => {
+  test("T-SEC-007 HO-global masters cannot be mutated by the app role at all (except a centre's class, 0017)", async () => {
     const app = new pg.Client({ connectionString: process.env["APP_DATABASE_URL"] });
     await app.connect();
     try {

@@ -50,7 +50,7 @@ model Centre {
   code            String           @unique
   name            String
   areaId          Int              @map("area_id")
-  centreClassId   Int?             @map("centre_class_id") // FR-033.06; set by the Stage 3 centre form (catalogue DD-7)
+  centreClassId   Int?             @map("centre_class_id") // FR-033.06; set by setCentreClass (catalogue-masters DD-2)
   // D-ORG-1 default (UNAPPROVED): centres are created inactive and activated through a checklist
   status          CentreStatus     @default(INACTIVE)
   area            Area             @relation(fields: [areaId], references: [id])

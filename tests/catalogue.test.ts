@@ -163,7 +163,7 @@ describe("T-CAT catalogue skeleton", () => {
       expect((await as(T.uA, sql)).rowCount, sql).toBe(0);
     }
     for (const sql of ["update app.course set code = 'X' where id = 1", "delete from app.course where id = 6",
-      "delete from app.academic_year where code = '2029-30'", "update app.centre set centre_class_id = 1 where id = 1"]) {
+      "delete from app.academic_year where code = '2029-30'"]) { // a centre's class is writable since 0017 (T-MS-002)
       await expect(as(CA, sql), sql).rejects.toMatchObject({ code: "42501" });
     }
   });
