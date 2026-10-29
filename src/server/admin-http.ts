@@ -63,6 +63,7 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "ticket.setup.numbering": "Ticket types cannot be switched on until the ticket numbering policy is signed and its counter is set.",
   "ticket.setup.storage": "A type that needs documents cannot be switched on until document storage is approved (ADR-002) and its safeguards are in place.",
   "catalogue.duplicate": "A record with that code already exists.",
+  "enquiry.setup.keep": "This status cannot be switched off: it is the enrolled status or the last active one of its kind.",
   duplicate: "That login or key already exists.",
   notfound: "Not found.",
   invalid: "Some values were invalid. Check the scope fields.",

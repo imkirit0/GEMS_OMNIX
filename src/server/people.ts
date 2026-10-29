@@ -3,7 +3,7 @@
 // scopedAction(): authorise, write person/admission/registrations with their numbers, audit person.admit.
 import { randomUUID } from "node:crypto";
 import { Prisma } from "../../generated/prisma/client";
-import { Forbidden, scopedAction } from "./action";
+import { authorize, Forbidden, scopedAction } from "./action";
 import { withScope, type Tx } from "./db";
 import { allocateGlobal } from "./numbering";
 import { limitSearch } from "./rate-limit";
@@ -264,6 +264,8 @@ export type AdmitInput = {
   admissionId?: string;
   /** contact and family details (learner-details); for an existing person saved only when none exist (DD-13) */
   details?: Partial<Details>;
+  /** the enquiry this admission enrols (enquiry design DD-9); linked in the same transaction */
+  enquiryId?: string;
 };
 export type Admitted = { personId: string; admissionId: string; admissionNo: string; registrations: { id: string; courseCode: string; registerNo: string }[] };
 
@@ -281,6 +283,8 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
   if (input.admissionId !== undefined && (typeof input.admissionId !== "string" || !UUID.test(input.admissionId))) {
     throw invalid("admissionId", "invalid");
   }
+  const enquiryId = input.enquiryId;
+  if (enquiryId !== undefined && (typeof enquiryId !== "string" || !/^\d{1,18}$/.test(enquiryId))) throw invalid("enquiry", "not found");
   const personId = existingId ?? randomUUID();
   // the FAILED audit rows below carry this person id even when, for a fresh identity, it was never created
   const admissionId = input.admissionId?.toLowerCase() ?? randomUUID();
@@ -299,6 +303,18 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`admit-form:${admissionId}`}))`;
     const [used] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from app.admission where id = ${admissionId}::uuid`;
     if (used) throw new AdmissionExists();
+    if (enquiryId !== undefined) {
+      // enrol from an enquiry (enquiry design C8): after the resubmit check, so a resubmit still reports "saved"
+      await authorize(tx, "enquiry.manage", input.centreId); // the DENIED row names enquiry.manage (I7)
+      const [e] = await tx.$queryRaw<{ centreId: number; admissionId: string | null; kind: string }[]>`
+        select e.centre_id as "centreId", e.admission_id::text as "admissionId", s.kind from app.enquiry e
+          join app.enquiry_status s on s.id = e.status_id
+        where e.id = ${enquiryId}::bigint for no key update of e`;
+      if (!e) throw invalid("enquiry", "not found");
+      if (e.centreId !== input.centreId) throw invalid("enquiry", "other centre");
+      if (e.admissionId) throw invalid("enquiry", "already enrolled");
+      if (e.kind === "LOST" || e.kind === "JUNK") throw invalid("enquiry", "closed");
+    }
     // the catalogue: the year must be open and every course active and visible (course-master DD-12); plain reads,
     // no lock (catalogue DD-13)
     const [year] = await tx.$queryRaw<{ open: boolean }[]>`select open from app.academic_year where code = ${input.academicYear}`;
@@ -348,6 +364,11 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     const admissionNo = `${PERSON_POLICY.admissionPrefix(input.academicYear)}${String(seq).padStart(PERSON_POLICY.admissionPad, "0")}`;
     await tx.$executeRaw`insert into app.admission (id, person_id, centre_id, academic_year, admission_no, admitted_on)
       values (${admissionId}::uuid, ${personId}::uuid, ${input.centreId}, ${input.academicYear}, ${admissionNo}, ${admittedOn}::date)`;
+    if (enquiryId !== undefined) {
+      // the guard allows exactly this: admission and the ENROLLED status together, once (enquiry DD-6, DD-15)
+      await tx.$executeRaw`update app.enquiry set admission_id = ${admissionId}::uuid,
+        status_id = (select id from app.enquiry_status where kind = 'ENROLLED') where id = ${enquiryId}::bigint`;
+    }
     if (saveDetails) {
       // after the admission, so the insert policy (student.admit where the person is admitted) passes
       await insertDetails(tx, personId, details);
@@ -367,6 +388,7 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     registrations: r.registrations.map(({ id, registerNo }) => ({ id, registerNo })),
     ...(dismissed.length > 0 ? { dismissedCandidates: dismissed } : {}),
     ...(written.length > 0 ? { detailFields: written } : {}),
+    ...(enquiryId !== undefined ? { enquiryId } : {}),
   }), (e) => { // DD-15: the refusals that show or probe another record; no names or dates in the row
     if (e instanceof PossibleDuplicate) return { action: "person.admit", extra: { reason: "duplicate", candidates: e.candidates.map((c) => c.id) } };
     if (e instanceof AdmissionExists) return { action: "person.admit", extra: { reason: "already_submitted", admissionId } };

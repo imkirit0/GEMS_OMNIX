@@ -5,6 +5,8 @@ import { withScope, type Ctx, type Tx } from "./db";
 
 export class Forbidden extends Error {
   override name = "Forbidden";
+  /** the permission that was missing, when it differs from the action's own (enquiry I7) */
+  constructor(message?: string, readonly permission?: string) { super(message); }
 }
 
 export type ActionMeta = {
@@ -19,7 +21,7 @@ export type ActionMeta = {
 export async function authorize(tx: Tx, permission: string, centreId?: number): Promise<void> {
   const [row] = await tx.$queryRaw<{ ok: boolean }[]>`
     select app.has_permission(${permission}, ${centreId ?? null}::int) as ok`;
-  if (!row?.ok) throw new Forbidden(`${permission} denied${centreId == null ? "" : ` for centre ${centreId}`}`);
+  if (!row?.ok) throw new Forbidden(`${permission} denied${centreId == null ? "" : ` for centre ${centreId}`}`, permission);
 }
 
 /** What an action may add to its audit row. `before`/`after` and `reason` get their own columns (T-AUD-001). */
@@ -52,7 +54,7 @@ export async function scopedAction<T>(
     // Runs once, after withScope's retries. Forbidden wins: DENIED, and the hook is not asked.
     const failed = e instanceof Forbidden ? null : onFailure?.(e);
     try {
-      if (e instanceof Forbidden) await withScope(session, (tx) => audit(tx, meta, "DENIED", { permission: meta.permission }));
+      if (e instanceof Forbidden) await withScope(session, (tx) => audit(tx, meta, "DENIED", { permission: e.permission ?? meta.permission }));
       else if (failed) await withScope(session, (tx) => audit(tx, { ...meta, action: failed.action }, "FAILED", failed.extra));
     } catch (auditError) {
       // never let a failed audit write hide why the action failed

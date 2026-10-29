@@ -65,6 +65,8 @@ model Centre {
   admissions      Admission[]
   registrations   Registration[]
 
+  enquiries Enquiry[]
+
   @@map("centre")
   @@schema("app")
 }
@@ -105,6 +107,9 @@ model AppUser {
   ticketEventsActed       TicketEvent[]      @relation("ticketEventActor")
   ticketEventsTo          TicketEvent[]      @relation("ticketEventToUser")
   ticketUploads           TicketUpload[]
+  enquiriesCounselled     Enquiry[]          @relation("enquiryCounsellor")
+  enquiriesCreated        Enquiry[]          @relation("enquiryCreatedBy")
+  enquiryFollowups        EnquiryFollowup[]  @relation("enquiryFollowupBy")
 
   @@map("app_user")
   @@schema("app")
@@ -562,6 +567,7 @@ model Person {
   detail      PersonDetail?
 
   @@index([matchKey])
+  @@index([mobile]) // enquiry duplicate lookup (enquiry D14)
   @@map("person")
   @@schema("app")
 }
@@ -609,6 +615,7 @@ model Admission {
   centre        Centre         @relation(fields: [centreId], references: [id], onDelete: Restrict)
   year          AcademicYear   @relation(fields: [academicYear], references: [code], onDelete: Restrict, onUpdate: Restrict)
   registrations Registration[]
+  enquiries     Enquiry[]
 
   @@unique([id, centreId])
   @@unique([personId, centreId, academicYear], map: "admission_person_centre_year_key") // admission-screens DD-16
@@ -709,6 +716,9 @@ model Course {
   selected          Boolean             @default(false)
   keltronShare      Decimal?            @map("keltron_share") @db.Decimal(5, 2)
   classes           CourseCentreClass[]
+  enquiries1        Enquiry[]           @relation("enquiryCourse1")
+  enquiries2        Enquiry[]           @relation("enquiryCourse2")
+  enquiries3        Enquiry[]           @relation("enquiryCourse3")
 
   @@map("course")
   @@schema("app")
@@ -736,5 +746,115 @@ model AcademicYear {
   admissions Admission[]
 
   @@map("academic_year")
+  @@schema("app")
+}
+
+// Enquiry to admission (docs/designs/enquiry/enquiry.md; migration 0018). Checks, triggers, RLS and grants in SQL.
+model EnquiryPath {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  enquiries Enquiry[]
+
+  @@map("enquiry_path")
+  @@schema("app")
+}
+
+model EnquiryType {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  enquiries Enquiry[]
+
+  @@map("enquiry_type")
+  @@schema("app")
+}
+
+model EnquiryStatus {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  kind      String
+  colour    String
+  sortOrder Int       @map("sort_order")
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  enquiries Enquiry[]
+
+  @@map("enquiry_status")
+  @@schema("app")
+}
+
+model Enquiry {
+  id             BigInt            @id @default(autoincrement())
+  centreId       Int               @map("centre_id")
+  givenName      String            @map("given_name")
+  familyName     String?           @map("family_name")
+  dateOfBirth    DateTime          @map("date_of_birth") @db.Date
+  gender         Gender
+  mobile         String
+  email          String?
+  currentAddress String?           @map("current_address")
+  currentPincode String?           @map("current_pincode")
+  qualification  String?
+  guardianName   String?           @map("guardian_name")
+  guardianPhone  String?           @map("guardian_phone")
+  whatsapp       String?
+  landline       String?
+  instagram      String?
+  lastSchool     String?           @map("last_school")
+  remark         String?
+  pathId         Int               @map("path_id")
+  typeId         Int               @map("type_id")
+  statusId       Int               @map("status_id")
+  courseCode1    String            @map("course_code_1")
+  courseCode2    String?           @map("course_code_2")
+  courseCode3    String?           @map("course_code_3")
+  counsellorId   String?           @map("counsellor_id") @db.Uuid
+  enquiredOn     DateTime          @map("enquired_on") @db.Date
+  nextFollowUpOn DateTime?         @map("next_follow_up_on") @db.Date
+  lastContactAt  DateTime?         @map("last_contact_at") @db.Timestamptz
+  admissionId    String?           @unique @map("admission_id") @db.Uuid // written only by admit()
+  version        Int               @default(1)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  createdBy      String            @map("created_by") @db.Uuid // set by app.enquiry_guard()
+  centre         Centre            @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  path           EnquiryPath       @relation(fields: [pathId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  type           EnquiryType       @relation(fields: [typeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  status         EnquiryStatus     @relation(fields: [statusId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  course1        Course            @relation("enquiryCourse1", fields: [courseCode1], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  course2        Course?           @relation("enquiryCourse2", fields: [courseCode2], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  course3        Course?           @relation("enquiryCourse3", fields: [courseCode3], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  counsellor     AppUser?          @relation("enquiryCounsellor", fields: [counsellorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator        AppUser           @relation("enquiryCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  admission      Admission?        @relation(fields: [admissionId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  followUps      EnquiryFollowup[]
+
+  @@unique([id, centreId])
+  @@index([centreId, mobile])
+  @@index([nextFollowUpOn])
+  @@map("enquiry")
+  @@schema("app")
+}
+
+model EnquiryFollowup {
+  id          BigInt    @id @default(autoincrement())
+  enquiryId   BigInt    @map("enquiry_id")
+  centreId    Int       @map("centre_id")
+  at          DateTime  @default(now()) @db.Timestamptz
+  kind        String
+  durationMin Int?      @map("duration_min")
+  note        String
+  nextOn      DateTime? @map("next_on") @db.Date
+  byUser      String    @map("by_user") @db.Uuid
+  enquiry     Enquiry   @relation(fields: [enquiryId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  author      AppUser   @relation("enquiryFollowupBy", fields: [byUser], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([enquiryId])
+  @@map("enquiry_followup")
   @@schema("app")
 }

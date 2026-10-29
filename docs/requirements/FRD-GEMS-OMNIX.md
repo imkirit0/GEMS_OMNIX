@@ -1219,7 +1219,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Admissions (2), Admissions/PRO (2), Marketing (1)
 - **Workflows (05):** WF-X1 BDO activity planning; WF-X16 Front office & call log; WF-X4 CRM lead pipeline; WF1 Enquiry to admission
 - **Open decisions (04):** D-ADM-1, D-ADM-4, D-GAP-1, D-GAP-2, PR-02
-- **Distinct acceptance tests (09):** 5
+- **Distinct acceptance tests (09):** 11
 
 #### FR-080: Set Up Front Office (4 masters)
 
@@ -1249,7 +1249,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-150, FR-085 |
 | Business owner | Admissions/PRO |
 | Open decisions | D-ADM-1, D-ADM-4 |
-| Acceptance tests | T-E2E-001 |
+| Acceptance tests | T-E2E-001, T-ENQ-001, T-ENQ-002, T-ENQ-004, T-ENQ-005 |
 | Workflows | WF-X4 CRM lead pipeline; WF1 Enquiry to admission |
 | Data migration | enquiries IMPORTED; merged with CRM leads per D-ADM-1 |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -1265,7 +1265,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-085 |
 | Business owner | Admissions |
 | Open decisions | D-ADM-1 |
-| Acceptance tests | T-SEC-002 |
+| Acceptance tests | T-SEC-002, T-ENQ-002 |
 | Workflows | WF-X16 Front office & call log |
 | Data migration | IMPORTED if used |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -1281,7 +1281,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-081 |
 | Business owner | Admissions/PRO |
 | Open decisions | D-ADM-1, PR-02 |
-| Acceptance tests | T-E2E-X04 |
+| Acceptance tests | T-E2E-X04, T-ENQ-002, T-ENQ-003, T-ENQ-005, T-ENQ-006 |
 | Workflows | WF-X4 CRM lead pipeline; WF1 Enquiry to admission |
 | Data migration | leads MERGED with enquiries per D-ADM-1 |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

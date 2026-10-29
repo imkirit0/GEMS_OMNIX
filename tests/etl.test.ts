@@ -218,7 +218,8 @@ describe("refusals and confinement (G5, G6)", () => {
   });
 
   test("an empty catalogue is refused before anything is written", async () => {
-    await asAdmin((db) => db.query(`truncate app.course, app.academic_year cascade`));
+    // replica: the cascade reaches the append-only enquiry follow-up log (0018), as reset() clears it
+    await asAdmin((db) => db.query(`set session_replication_role = replica; truncate app.course, app.academic_year cascade; set session_replication_role = origin`));
     expect(((await run({ mode: "dry", asOf: AS_OF }).catch((x) => x)) as RunRefused).reasons).toEqual(["catalogue is empty: load courses and academic years"]);
   });
 

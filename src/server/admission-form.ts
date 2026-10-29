@@ -18,6 +18,7 @@ export type AdmitFormState = {
   formError?: string;
   candidates?: Candidate[]; // from PossibleDuplicate
   savedPersonId?: string; // AdmissionExists, when the learner is in the caller's student.view scope
+  enquiryId?: string; // the enquiry being enrolled (enquiry design DD-9), carried like admissionId
 };
 
 const ROWS = [1, 2, 3] as const; // DD-7
@@ -53,14 +54,23 @@ export const ADMIT_MESSAGES = {
   saved: "This form was already saved; nothing new was admitted.",
   thisYear: "Already admitted at this centre this year.",
   dropped: "The connection dropped. Submit again; this form cannot admit twice.",
+  enquiryNotFound: "This enquiry is no longer available.",
+  enquiryOtherCentre: "This enquiry belongs to another centre.",
+  enquiryEnrolled: "This enquiry is already enrolled.",
+  enquiryClosed: "This enquiry is closed (lost or junk).",
 } as const;
+const ENQUIRY_RULES: Record<string, string> = {
+  "not found": ADMIT_MESSAGES.enquiryNotFound, "other centre": ADMIT_MESSAGES.enquiryOtherCentre,
+  "already enrolled": ADMIT_MESSAGES.enquiryEnrolled, closed: ADMIT_MESSAGES.enquiryClosed,
+};
 
 /** Maps the posted form to admit() and its outcome to a redirect or the form state (G1–G3, DD-10…DD-16). */
 export async function submitAdmission(session: string, h: Headers, fd: FormData): Promise<AdmitFormState | { redirect: string }> {
   if (!hasOrigin(h)) throw new Forbidden("missing Origin"); // Next refuses a foreign Origin, not a missing one
   const text = (name: string) => { const v = fd.get(name); return typeof v === "string" ? v : ""; };
   const values = Object.fromEntries(FORM_NAMES.map((n) => [n, text(n)]).filter(([, v]) => v !== ""));
-  const state: AdmitFormState = { values, admissionId: text("admissionId"), fieldErrors: {} };
+  const state: AdmitFormState = { values, admissionId: text("admissionId"), fieldErrors: {},
+    ...(text("enquiryId") ? { enquiryId: text("enquiryId") } : {}) };
   const fail = (patch: Partial<AdmitFormState>) => ({ ...state, ...patch });
 
   // ---------- map the form (an empty string means absent) ----------
@@ -88,6 +98,7 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
     },
     centreId: Number(text("centreId")), academicYear: text("academicYear"), admittedOn: text("admittedOn"), courses,
     admissionId: state.admissionId, ...(confirmNew ? { confirmNew } : {}), details: detailsFrom(fd),
+    ...(state.enquiryId ? { enquiryId: state.enquiryId } : {}),
   };
 
   // ---------- admit and map the outcome ----------
@@ -109,6 +120,7 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
       if (e.field === "admissionId") return fail({ formError: ADMIT_MESSAGES.reload });
       if (e.field === "admission") return fail({ formError: ADMIT_MESSAGES.thisYear });
       if (e.field === "details") return fail({ formError: e.rule! }); // learner-details I7
+      if (e.field === "enquiry") return fail({ formError: Object.hasOwn(ENQUIRY_RULES, e.rule!) ? ENQUIRY_RULES[e.rule!] : e.message });
       const row = /^courses\[(\d+)\]\.(\w+)$/.exec(e.field ?? "");
       const name = row ? `course.${rowOf[Number(row[1])]}.${row[2]}` : e.field;
       if (name && FORM_NAMES.includes(name)) return fail({ fieldErrors: { [name]: e.rule! } });

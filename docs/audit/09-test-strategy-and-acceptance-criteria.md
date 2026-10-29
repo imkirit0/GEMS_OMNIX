@@ -186,6 +186,16 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-COR-005 | Go-live gates | No ticket type switches on before the numbering policy is signed; no document-requiring type or upload before ADR-002 and its safeguards; committed defaults closed |
 | T-COR-006 | Who sees the values | Ticket viewers without `student.view` who cannot act see "Request hidden" |
 
+### T-ENQ: enquiry to admission (`docs/designs/enquiry/enquiry.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-ENQ-001 | Recording an enquiry | A centre user with `enquiry.manage` records an enquiry with the R-081 fields and up to three course preferences; app and database refuse the same values; the same mobile (an open enquiry at the centre, or a learner the user may view) warns before saving and is audited as a refused attempt with ids only; creates count against the search limit; other centres and users without the permission are refused |
+| T-ENQ-002 | Working an enquiry | Edits carry a version; status changes follow the fixed kinds (lost and junk need a note and can be reopened, enrolled is never set by hand); a counsellor must be able to receive enquiries at the centre; follow-ups set last contact and the next date and can never be changed; an enrolled enquiry refuses every change |
+| T-ENQ-003 | Bulk changes | Status or counsellor for up to 100 enquiries of one centre, all or nothing; overlapping bulk changes do not deadlock |
+| T-ENQ-004 | Enroll | The admission form opens pre-filled from an open enquiry; saving the admission links the enquiry and marks it enrolled in the same transaction, once; closed, enrolled, other-centre or not-permitted enrolments are refused (a view-only other centre answers "not found"); the database guards refuse every forbidden insert or change |
+| T-ENQ-005 | Scope and reads | Other centres' enquiries are invisible and unwritable, also by SQL; nothing can be deleted; every role that manages enquiries can view them; the counsellor and name functions answer only callers who may view the centre; list filters, POST-only search (number, mobile, name) and the follow-up calendar |
+| T-ENQ-006 | Enquiry setup | Paths and types through the shared masters with `enquiry.setup`; statuses keep their kind and code; the enrolled status is never duplicated or switched off; the last active status of a kind is kept, also under concurrent deactivation |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

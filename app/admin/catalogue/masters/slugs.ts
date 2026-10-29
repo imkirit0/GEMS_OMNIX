@@ -6,6 +6,8 @@ export const SLUGS: Record<string, { kind: MasterKind; title: string }> = {
   categories: { kind: "course_category", title: "Course categories" },
   divisions: { kind: "course_division", title: "Course divisions" },
   classes: { kind: "centre_class", title: "Centre classes" },
+  "enquiry-paths": { kind: "enquiry_path", title: "Enquiry paths" },
+  "enquiry-types": { kind: "enquiry_type", title: "Enquiry types" },
 };
 /** The master for a URL slug, or undefined (own keys only: "constructor" is no slug). */
 export const slugOf = (slug: string) => (Object.hasOwn(SLUGS, slug) ? SLUGS[slug] : undefined);

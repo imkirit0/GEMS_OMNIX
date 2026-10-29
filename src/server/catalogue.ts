@@ -8,12 +8,19 @@ import { withScope, type Tx } from "./db";
 import { academicYearOk, ACADEMIC_YEAR_RULE, CODE_RULE, isoDate, normCode, PersonError } from "./people";
 import { adminWrite, RbacError } from "./rbac";
 
-export type MasterKind = "course_category" | "course_division" | "centre_class";
+export type MasterKind = "course_category" | "course_division" | "centre_class" | "enquiry_path" | "enquiry_type";
 // fixed fragments: no caller-supplied text reaches SQL as an identifier
 const TABLES: Record<MasterKind, Prisma.Sql> = {
   course_category: Prisma.sql`app.course_category`,
   course_division: Prisma.sql`app.course_division`,
   centre_class: Prisma.sql`app.centre_class`,
+  enquiry_path: Prisma.sql`app.enquiry_path`, // enquiry design Z7: the same shape, its own permission
+  enquiry_type: Prisma.sql`app.enquiry_type`,
+};
+/** Who maintains each master kind; the table's RLS write policy checks the same permission (0012, 0018). */
+const MASTER_PERMISSION: Record<MasterKind, string> = {
+  course_category: "catalogue.manage", course_division: "catalogue.manage", centre_class: "catalogue.manage",
+  enquiry_path: "enquiry.setup", enquiry_type: "enquiry.setup",
 };
 
 type Master = { id: number; code: string; name: string; active: boolean };
@@ -67,7 +74,7 @@ function datesOk(startsOn: string, endsOn: string) {
 }
 
 // A duplicate code gives its own message, not db()'s login-or-key text.
-async function unique<T>(run: () => Promise<T>): Promise<T> {
+export async function unique<T>(run: () => Promise<T>): Promise<T> {
   try { return await run(); } catch (e) {
     if (e instanceof RbacError && e.reason === "duplicate") throw new RbacError("duplicate", "a record with that code already exists", "catalogue.duplicate");
     throw e;
@@ -99,17 +106,17 @@ const done = () => undefined;
 // ---------- Masters: course category, course division, centre class ----------
 
 export async function createMaster(session: string | undefined, kind: MasterKind, m: { code: string; name: string }) {
-  const t = table(kind);
+  const t = table(kind), p = MASTER_PERMISSION[kind];
   const c = code(m.code), n = name(m.name);
-  return unique(() => adminWrite(session, { action: "catalogue.create", permission: MANAGE, targetType: kind },
+  return unique(() => adminWrite(session, { action: "catalogue.create", permission: p, targetType: kind },
     async (tx) => (await tx.$queryRaw<Master[]>`insert into ${t} (code, name) values (${c}, ${n}) returning id, code, name, active`)[0]!,
     (r) => ({ after: r }))).then((r) => ({ id: r.id, code: r.code }));
 }
 
 export async function updateMaster(session: string | undefined, kind: MasterKind, rowId: number, m: { name: string }) {
-  const t = table(kind);
+  const t = table(kind), p = MASTER_PERMISSION[kind];
   const i = id("id", rowId), n = name(m.name);
-  return adminWrite(session, { action: "catalogue.update", permission: MANAGE, targetType: kind, targetId: String(i) },
+  return adminWrite(session, { action: "catalogue.update", permission: p, targetType: kind, targetId: String(i) },
     async (tx) => {
       const before = await lockMaster(tx, t, kind, i);
       if (before.name === n) throw bad("nothing to change");
@@ -120,7 +127,7 @@ export async function updateMaster(session: string | undefined, kind: MasterKind
 
 // Two calls, not one with a computed action name, so the audit catalogue gate can read both names.
 export async function setMasterActive(session: string | undefined, kind: MasterKind, rowId: number, active: boolean, reason: string) {
-  const t = table(kind);
+  const t = table(kind), p = MASTER_PERMISSION[kind];
   const i = id("id", rowId), a = bool("active", active), r = reasonOf(reason);
   const run = async (tx: Tx) => {
     const row = await lockMaster(tx, t, kind, i);
@@ -129,17 +136,17 @@ export async function setMasterActive(session: string | undefined, kind: MasterK
     return { before: { active: row.active }, after: { active: a } };
   };
   return (a
-    ? adminWrite(session, { action: "catalogue.activate", permission: MANAGE, targetType: kind, targetId: String(i), reason: r }, run, (x) => x)
-    : adminWrite(session, { action: "catalogue.deactivate", permission: MANAGE, targetType: kind, targetId: String(i), reason: r }, run, (x) => x)
+    ? adminWrite(session, { action: "catalogue.activate", permission: p, targetType: kind, targetId: String(i), reason: r }, run, (x) => x)
+    : adminWrite(session, { action: "catalogue.deactivate", permission: p, targetType: kind, targetId: String(i), reason: r }, run, (x) => x)
   ).then(done);
 }
 
 /** Every row of one master, inactive ones included (catalogue-masters DD-9); readable by every signed-in user (DD-4). */
 export async function listMasters(session: string | undefined, kind: MasterKind) {
-  const t = table(kind); // before the session: an unknown kind needs none
+  const t = table(kind), p = MASTER_PERMISSION[kind]; // before the session: an unknown kind needs none
   return withScope(session, async (tx) => ({
     rows: await tx.$queryRaw<Master[]>`select id, code, name, active from ${t} order by code`,
-    canManage: await canManage(tx),
+    canManage: await canManage(tx, p),
   }));
 }
 
@@ -332,8 +339,8 @@ async function picklists(tx: Tx, courseId: number | null) {
       where active or id in (select centre_class_id from app.course_centre_class where course_id = ${keep}) order by code`,
   };
 }
-const canManage = async (tx: Tx) =>
-  (await tx.$queryRaw<{ ok: boolean }[]>`select app.has_permission('catalogue.manage', null) as ok`)[0]!.ok;
+const canManage = async (tx: Tx, permission = MANAGE) =>
+  (await tx.$queryRaw<{ ok: boolean }[]>`select app.has_permission(${permission}, null) as ok`)[0]!.ok;
 const CLASS_CODES = (alias: Prisma.Sql) => Prisma.sql`coalesce((select array_agg(k.code order by k.code) from app.course_centre_class cc
   join app.centre_class k on k.id = cc.centre_class_id where cc.course_id = ${alias}.id), '{}') as classes`;
 
@@ -371,7 +378,7 @@ export async function getCourse(session: string | undefined, courseId: number) {
 }
 
 /** For the home link: does this session hold catalogue.manage? */
-export const canManageCatalogue = (session: string | undefined) => withScope(session, canManage);
+export const canManageCatalogue = (session: string | undefined) => withScope(session, (tx) => canManage(tx));
 
 const UNITS = [["durationMonths", "month"], ["durationWeeks", "week"], ["durationDays", "day"], ["durationHours", "hour"]] as const;
 /** "6 months · 120 hours"; NA or no counts → "—" (DD-10). */
