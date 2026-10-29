@@ -1,0 +1,42 @@
+Correction tickets mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-29, local Docker database.
+Each mutation applied, the named test run, the file restored (git status clean afterwards). Real-server ones: fresh
+database, next build, next start, scripts/smoke-security.mjs, the server stopped by port 3101 before and after.
+
+vitest (tests/corrections.test.ts unless noted): every one CAUGHT
+  gateRefusal always null                          policy.ts                 T-COR-005
+  numberingSigned committed true                   policy.ts                 T-COR-005 committed defaults
+  No requestUpload gate                            engine.ts                 T-COR-005 (upload, 0 rows)
+  No updateType storage gate                       setup.ts                  T-COR-005
+  No student.view check in prepare                 identity-handlers.ts      T-COR-001
+  Admission lookup without the centre              identity-handlers.ts      T-COR-001 (raiser who can see the other centre)*
+  No re-raise person check                         identity-handlers.ts      T-COR-002
+  Raiser check after prepare (pre-D1 order)        engine.ts                 T-COR-002 (non-raiser, unknown number)*
+  No person lock in revalidate                     identity-handlers.ts      T-COR-002 concurrent approvals
+  No oldValue comparison                           identity-handlers.ts      T-COR-002
+  No format re-check                               identity-handlers.ts      T-COR-002 stale format
+  Raw value kept in parse                          identity-handlers.ts      T-COR-001 (mobile normalised)
+  Values in apply's audit                          identity-handlers.ts      T-COR-003
+  named ignored                                    identity-handlers.ts      T-COR-004
+  approverMatches by visible_centre_ids            people.ts                 T-COR-004 (member-only centre)
+  approverMatches without excluding the person     people.ts                 T-COR-004 (case-only correction)*
+  ticketReview without onFailure                   engine.ts                 T-COR-004 engine (FAILED row)
+  Lost connection swallowed                        engine.ts                 T-COR-004 engine
+  valuesPermission ignored                         engine.ts                 T-COR-006
+  Payload always hidden                            engine.ts                 T-COR-006 positive controls
+  No catch around describe                         engine.ts                 T-COR-006 engine
+  No invalid detail in adminPost                   admin-http.ts             T-COR-001 route case
+  An invalidMessages entry deleted                 identity-handlers.ts      T-COR-001 message coverage
+  Review action not catalogued                     tests/audit-catalogue.ts  T-AUD-009 (tests/audit.test.ts)
+
+real server: CAUGHT
+  Raise page without the specific message          app/tickets/new/page.tsx  smoke T-COR-001 message
+  Ticket page never hides the request              app/tickets/[id]/page.tsx smoke T-COR-006
+  control, unmutated                                                          all security smoke checks passed
+
+* Test cases added before or during this round because the mutation would otherwise have survived: the non-raiser
+  naming an unknown number (the order change gave the same message for a known one), the case-only correction (the
+  person never matched itself otherwise), and a raiser who can also see the other centre (RLS alone hid its admission;
+  the first run reported this mutation MISSED, the rerun after adding the case CAUGHT).
+
+Not covered by a test (recorded): the advisory lock that apply() takes on the corrected match key (design D7, R19);
+the re-raise source of another payload shape (D9) is guarded in prepare but not exercised.
