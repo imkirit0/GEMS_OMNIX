@@ -1,7 +1,7 @@
 # Student correction tickets (Stage 3, third piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-10…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14, DD-15); step 7: [`critic_report.md`](critic_report.md) (DD-16…DD-19); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
+*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-10…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14, DD-15); step 7: [`critic_report.md`](critic_report.md) (DD-16…DD-19); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -212,13 +212,13 @@ type P = { admissionNo: string; personId: string; field: IdentityKey; oldValue: 
 
 ## Detailed Implementation Plan
 
-Outline; the file-by-file plan is written against the code during EGM step 9:
+The file-by-file plan (phases C1–C4, each ending with `bash scripts/ci.sh` exit 0) and the 24 mutation checks are in [`implementation_readiness_report.md`](implementation_readiness_report.md) (EGM step 9). Contract notes from that step, binding for the build:
 
-| Phase | Items |
-|---|---|
-| C1 Documents | T-COR-001…006 in audit 09; matrix links on R-095 and the DD-19 deviation note |
-| C2 Engine | `errors.ts` (and `test-handler.ts` importing it); re-raise checks before `prepare`; `prepare`, `review` (`ticketReview` as a `scopedAction`), `describe`, `invalidMessages`, `valuesPermission`, `select` fields; `adminPost` invalid detail; `TICKET_GATES` and `gateRefusal` in `setTypeActive`, `updateType`, `requestUpload`; `ticket.review.duplicates` in the audit catalogue; comments updated; existing ticket tests set the gates and pass |
-| C3 Handlers | `identity-handlers.ts`, registration; tests |
-| C4 Pages and evidence | raise-form select; ticket page review lines and described payload; smoke; mutation checks; E-entry |
+*   **Review failure (R1):** `ticketReview` catches **outside** its `scopedAction`; its `onFailure` writes `ticket.review.duplicates` FAILED (`{ error: <name> }`) in a fresh transaction, except for a lost connection or `ScopeError`; the outer catch rethrows lost connection, `ScopeError` and `Forbidden`, and turns anything else into the line "Review unavailable". Inside, `ticket_may_act(t.id)` is checked first (R15).
+*   **`getTicket` (R3):** selects `ty.handler_key as "handlerKey"` and returns `payload: unknown | null`, `described: [string, string][] | null` (null when hidden, absent or throwing; caught there) and `hasReview: boolean`; the page renders "Request hidden", the table, or the JSON.
+*   **`revalidate` (R4):** a missing person row → `TicketError("stale", "changed")`; in `prepare` → `"admission.unknown"`.
+*   **Gates (R5, R6):** `setTypeActive` checks `gateRefusal` after its existing handler and levels check; numbering before storage; `updateType` refuses when `before.active && u.documentRequired && !before.document_required && !TICKET_GATES.documentsLive`; `requestUpload` puts `!TICKET_GATES.documentsLive` first in its `inactive` condition. A manual Supabase run opens `documentsLive` locally before `next build` and never commits it; a test asserts the committed values are both `false`.
+*   **Handlers (R9–R17):** `parse` stores the normalised value; `readIdentity` aliases columns to camelCase; `validate` is an empty function; `IdentityKey` is declared in `identity-handlers.ts` (`person-rules.ts` stays untouched, it is hashed with the ETL rules); `changeIdentity(..., { [field]: v } as IdentityChanges)`; `approverMatches` excludes the person itself; `apply` re-reads the identity for the corrected key; each handler uses its own field constant, `payload.field` is for display only.
+*   **Tests (R2, R8):** a `test.review` handler with `select 1/0` for the failing review; an OPEN identity ticket for a person admitted only at another centre for `ApplyFailed`; page text is checked in `scripts/smoke-security.mjs`, route redirects and `getTicket` fields in vitest. The advisory lock in `apply` (D7) has no test (recorded).
 
 *Drafted with EGM (draft step followed manually)*
