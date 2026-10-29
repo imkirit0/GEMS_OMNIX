@@ -211,6 +211,9 @@ describe("correction tickets: identity handlers (T-COR)", () => {
     await grant(TK.l2, TK_ROLE.raiser, C.A);
     await grant(TK.l2, ST_ROLE, C.A);
     expect(await reraise(tok("l2"))).toBe("invalid:only the raiser can re-raise a rejected ticket");
+    // even naming an unknown number: the raiser check answers before any domain check (D1)
+    expect(await keyOf(raise(tok("l2"), { ticketId: randomUUID(), typeId: type, centreId: C.A,
+      payload: { admissionNo: "ADM-NOPE", newValue: "X" }, uploadIds: [], reraiseOf: t5 }))).toBe("invalid:only the raiser can re-raise a rejected ticket");
     expect(await reraise(tok("raiser"))).toBe("invalid:reraise.person");
     // a value the rules no longer accept is refused as stale at approval
     const bad = await openTicket(type, C.A, { admissionNo: ben.no, personId: ben.id, field: "givenName", oldValue: "Ben", newValue: "x".repeat(101) });
@@ -252,6 +255,9 @@ describe("correction tickets: identity handlers (T-COR)", () => {
     expect((await rows("ticket.review.duplicates")).map((r) => [r.outcome, r.detail.matches])).toEqual([["OK", [dup.id]], ["OK", [dup.id]]]);
     const none = await raiseAt(tok("raiser"), type, { admissionNo: (await learner(C.A, { given: "Zed" })).no, newValue: "Zack" });
     expect(await ticketReview(tok("l1"), none)).toEqual(["No likely duplicates at centres you approve for"]);
+    // a case-only correction keeps the match key: the learner never lists itself
+    const caseOnly = await raiseAt(tok("raiser"), type, { admissionNo: (await learner(C.A, { given: "Kim" })).no, newValue: "KIM" });
+    expect(await ticketReview(tok("l1"), caseOnly)).toEqual(["No likely duplicates at centres you approve for"]);
     const nokey = await raiseAt(tok("raiser"), type, { admissionNo: (await learner(C.A, { given: "Nod", dob: null })).no, newValue: "Noddy" });
     expect(await ticketReview(tok("l1"), nokey)).toEqual(["Duplicate check not possible: date of birth or mobile missing"]);
     await approve(tok("l1"), id); // the warning never blocks (DD-3)

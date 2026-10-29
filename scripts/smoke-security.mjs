@@ -233,6 +233,48 @@ try {
     && (dOk.headers.get("location") ?? "").endsWith(`/students/${own}`) && JSON.stringify(await detailAudits()) === '["OK"]', String(dOk.status));
   check("T-LD-002 the learner's page shows the saved detail", (await (await get(`/students/${own}`, stu)).text()).includes("Smoke town"));
 
+  // ---------- correction tickets (T-COR-001 raise page, DD-12 message, T-COR-004 review, T-COR-006 hidden) ----------
+  // types inserted active by SQL (the go-live gates guard switching on through the app, not raising)
+  const corCat = (await db.query(`insert into app.ticket_category (name) values ('Smoke corrections') returning id`)).rows[0].id;
+  const corRole = (await db.query(`insert into app.role (key, name) values ('smoke_corr', 'Smoke correction raiser') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'ticket.raise'), ($1, 'ticket.view')`, [corRole]);
+  await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', $3)`, [stuId, corRole, ids.A]);
+  const apprRole = (await db.query(`insert into app.role (key, name) values ('smoke_corr_appr', 'Smoke correction approver') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'ticket.approve'), ($1, 'ticket.view')`, [apprRole]);
+  const apprId = (await db.query(`insert into app.app_user (id, login, display_name) values (gen_random_uuid(), 'smoke.appr', 'Smoke Approver') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', $3)`, [apprId, apprRole, ids.A]);
+  const appr = randomBytes(32).toString("base64url");
+  await db.query(`insert into app.app_session (token_hash, user_id, expires_at, step_up_at) values ($1, $2, now() + interval '1 hour', now())`, [sha(appr), apprId]);
+  const corType = async (code, handler) => {
+    const id = (await db.query(`insert into app.ticket_type (code, name, category_id, handler_key, number_prefix, active)
+      values ($1, $1, $2, $3, 'TK-26', true) returning id`, [code, corCat, handler])).rows[0].id;
+    await db.query(`insert into app.ticket_type_level (type_id, level, approver_role_id) values ($1, 1, $2)`, [id, apprRole]);
+    await db.query(`insert into app.ticket_type_viewer (type_id, user_id) values ($1, $2)`, [id, viewerId]);
+    return id;
+  };
+  const fnc = await corType("FNC", "identity.givenName");
+  const gdr = await corType("GDR", "identity.gender");
+  const gdrPage = await (await get(`/tickets/new?type=${gdr}&centre=${ids.A}`, stu)).text();
+  check("T-COR-001 the gender correction offers a select", /<select name="p\.newValue" required="">/.test(gdrPage) && gdrPage.includes('value="MALE"'));
+  const raiseCor = (fields) => fetch(`${BASE}/tickets/create`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ ticketId: randomUUID(), typeId: String(fnc), centreId: String(ids.A), ...fields }) });
+  const unknown = await raiseCor({ "p.admissionNo": "NO-SUCH", "p.newValue": "Renamed" });
+  const unknownAt = unknown.headers.get("location") ?? "";
+  const unknownPage = await (await get(unknownAt.replace(/^https?:\/\/[^/]+/, ""), stu)).text();
+  check("T-COR-001 an unknown Admission No shows the handler's own message", unknown.status === 303
+    && unknownAt.includes("detail=admission.unknown") && unknownPage.includes("No admission with that number at this centre."), unknownAt);
+  const [{ admission_no: ownNo }] = (await db.query(`select admission_no from app.admission where person_id = $1`, [own])).rows;
+  const raised = await raiseCor({ "p.admissionNo": ownNo, "p.newValue": "Smokey" });
+  const corId = (raised.headers.get("location") ?? "").replace(/^.*\/tickets\//, "");
+  check("T-COR-001 a valid correction is raised", raised.status === 303 && /^[0-9a-f-]{36}$/.test(corId), String(raised.status));
+  const asAppr = await (await get(`/tickets/${corId}`, appr)).text();
+  const reviews = (await db.query(`select count(*)::int n from app.audit_log where action = 'ticket.review.duplicates' and target_id = $1`, [corId])).rows[0].n;
+  check("T-COR-004 the approver sees the request and the duplicate check, audited", asAppr.includes(">Old value</th>") && asAppr.includes(">Smoke<")
+    && asAppr.includes("Duplicate check") && reviews === 1, String(reviews));
+  const asViewer = await (await get(`/tickets/${corId}`, viewer)).text();
+  check("T-COR-006 a ticket viewer without student.view sees no values", asViewer.includes("Request hidden") && !asViewer.includes("Smokey"));
+
   // unauthenticated access to scoped pages
   const anon = await get(`/centres/${ids.A}`);
   check("no session: scoped page redirects to /login", [303, 307, 308].includes(anon.status) && (anon.headers.get("location") ?? "").includes("/login"), String(anon.status));

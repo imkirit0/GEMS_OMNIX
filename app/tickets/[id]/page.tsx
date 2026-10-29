@@ -1,6 +1,6 @@
 import { ADMIN_MESSAGES } from "@/server/admin-http";
 import { pageRead } from "@/server/page-read";
-import { getTicket } from "@/server/tickets/engine";
+import { getTicket, ticketReview } from "@/server/tickets/engine";
 import { HANDLERS } from "@/server/tickets/handlers";
 
 // Detail, history and documents; the action buttons are offered only when act() would allow them.
@@ -8,6 +8,8 @@ export default async function TicketDetail({ params, searchParams }: { params: P
   const { id } = await params;
   const { error, detail } = await searchParams;
   const t = await pageRead((s) => getTicket(s, id)); // hidden or missing: 404
+  // the handler's review, for those who may act, in its own audited transaction (correction-tickets DD-6, DD-17)
+  const review = t.canAct && t.hasReview ? await pageRead((s) => ticketReview(s, t.id)) : null;
   const name = (u: string | null) => (u ? t.names[u] ?? "someone" : "");
   const self = `/tickets/${t.id}`;
   // the stale text comes from the handler's fixed list, never from the URL (design D10)
@@ -23,7 +25,10 @@ export default async function TicketDetail({ params, searchParams }: { params: P
       <p>Raised by {name(t.raisedBy)} on {t.createdAt.toISOString().slice(0, 10)}
         {t.reraiseOf && <> · Re-raise of <a href={`/tickets/${t.reraiseOf}`}>an earlier ticket</a></>}</p>
       <h2>Request</h2>
-      <pre>{JSON.stringify(t.payload, null, 2)}</pre>
+      {t.payload === null ? <p>Request hidden</p> /* DD-16: needs the handler's permission or the right to act */
+        : t.described ? (
+          <table><tbody>{t.described.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}</tbody></table>
+        ) : <pre>{JSON.stringify(t.payload, null, 2)}</pre>}
 
       <h2>Levels</h2>
       <ol>{t.levels.map((l) => <li key={l.level}>{l.approverUserId ? name(l.approverUserId) : `Role: ${l.roleName ?? l.approverRoleId}`}</li>)}</ol>
@@ -37,6 +42,13 @@ export default async function TicketDetail({ params, searchParams }: { params: P
             </form> ({d.contentType}, {String(d.sizeBytes)} bytes)
           </li>))}
         </ul>
+      )}
+
+      {review && (
+        <>
+          <h2>Duplicate check</h2>
+          <ul>{review.map((line) => <li key={line}>{line}</li>)}</ul>
+        </>
       )}
 
       {t.canAct && (

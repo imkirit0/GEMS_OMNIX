@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ADMIN_MESSAGES } from "@/server/admin-http";
 import { pageRead } from "@/server/page-read";
 import { getTicket, raiseOptions } from "@/server/tickets/engine";
+import { HANDLERS } from "@/server/tickets/handlers";
 import Upload from "./upload";
 
 // Two steps without client JavaScript: choose type and centre (GET), then fill in the type's fields.
@@ -18,7 +19,10 @@ export default async function NewTicket({ searchParams }: { searchParams: Promis
   const centreId = source?.centreId ?? Number(q.centre);
   const type = source ? null : options.types.find((t) => t.id === typeId);
   const centre = options.centres.find((c) => c.id === centreId);
-  const error = q.error && <p role="alert">{ADMIN_MESSAGES[q.error] ?? ADMIN_MESSAGES["ticket.invalid"]}</p>;
+  // a handler's specific reason comes from its fixed list, never from the URL (correction-tickets DD-12)
+  const specific = q.error === "ticket.invalid" && q.detail
+    ? Object.values(HANDLERS).map((h) => h.invalidMessages?.[q.detail!]).find(Boolean) : undefined;
+  const error = q.error && <p role="alert">{specific ?? ADMIN_MESSAGES[q.error] ?? ADMIN_MESSAGES["ticket.invalid"]}</p>;
 
   if (options.types.length === 0) {
     return <main><p><a href="/tickets">All tickets</a></p><h1>Raise a ticket</h1><p>No ticket types are available.</p></main>;
@@ -59,7 +63,9 @@ export default async function NewTicket({ searchParams }: { searchParams: Promis
         <p>Centre: {centre ? `${centre.code} ${centre.name}` : source?.centreCode}</p>
         {fieldsOf.fields.map((f) => (
           <label key={f.name} style={{ display: "block" }}>{f.label}{" "}
-            <input name={`p.${f.name}`} type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"} />
+            {f.kind === "select"
+              ? <select name={`p.${f.name}`} required>{f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+              : <input name={`p.${f.name}`} type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"} />}
           </label>
         ))}
         {fieldsOf.documentRequired && <Upload typeId={fieldsOf.id} centreId={centreId} form="raise" />}

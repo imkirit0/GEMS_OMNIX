@@ -1,5 +1,7 @@
 // Usage (from the repo root, app running with TICKET_TEST_HANDLER=1 and real storage): node scripts/manual-supabase-run.mts [baseUrl]
 // WARNING: resets the local Docker database (tests/fixtures.ts reset()).
+// Before `next build`, set TICKET_GATES.documentsLive = true (and numberingSigned) in src/server/tickets/policy.ts for this
+// run only; never commit them (correction-tickets DD-14, DD-18; tests/corrections.test.ts asserts the committed values).
 // Manual Supabase run, part 2 (design Verification Plan, E2E): the real app (next start, TICKET_TEST_HANDLER=1,
 // real Supabase Storage) over HTTP, as the browser would call it: upload request, PUT to storage, raise, approve at
 // two levels, download. Local Docker database with the test fixtures. Prints a JSON report.
