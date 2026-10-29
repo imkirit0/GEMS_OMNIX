@@ -1,7 +1,7 @@
 # Catalogue masters pages (Stage 3, fifth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (no new decisions); step 7: [`critic_report.md`](critic_report.md) (no new decisions); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
+*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (no new decisions); step 7: [`critic_report.md`](critic_report.md) (no new decisions); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -181,18 +181,47 @@ Z-, C-, D- and I- ids are the findings of [`zoom_out_report.md`](zoom_out_report
 | The update policy opens other centre columns | A manager could change centre data | Only `centre_class_id` is granted; other columns give 42501 | T-SEC-007 |
 | Duplicate-code text shared by every master | — | One generic message (DD-10) | T-MS-003 |
 | Deactivating a class stops its centres selling once availability is enforced (D6) | Every centre on that class refused at admission | The deactivate form carries a reason and step-up; the course-master switch stays off until classes are set | T-CM-003 |
-| No centre has a class at cutover (D7) | Enforcing availability would refuse every admission | The ETL imports no class; enforcement stays off until every ACTIVE centre has an active class (a go-live check query in the runbook) | none |
+| No centre has a class at cutover (D7) | Enforcing availability would refuse every admission | The ETL imports no class; enforcement stays off until every ACTIVE centre has an active class (go-live check, also in `docs/STATUS.md`: `select code from app.centre c where status = 'ACTIVE' and not exists (select 1 from app.centre_class k where k.id = c.centre_class_id and k.active)` returns no rows) | none |
 | Year codes and dates are not cross-checked (D10) | A typo such as `2026-27` from `2062-06-01` is accepted | Accepted: dates are reference data (catalogue DD-6, DD-3 here) | none |
 
 ## Detailed Implementation Plan
 
-Outline; the file-by-file plan is written against the code during EGM step 9:
+The file-by-file plan (phases P1–P4, each ending with `bash scripts/ci.sh` exit 0) and the mutation checks are in [`implementation_readiness_report.md`](implementation_readiness_report.md) (EGM step 9). These contract notes from that step are binding for the build.
 
-| Phase | Items |
-|---|---|
-| P1 Documents | T-MS-001…003 in audit 09; matrix links on R-033.06–.08, R-028 |
-| P2 Server | Migration 0017; `listMasters`, `listAcademicYears`, `listCentreClasses`, `setCentreClass`, `liveRef` returning the code; audit catalogue entry; message text; T-CAT-003's centre statement dropped, the T-RLS-002 comment and T-SEC-007 title (Z1); superseded notes in the two earlier designs; tests |
-| P3 Pages | `/admin/catalogue` index, masters, years, centres pages and routes; the shared `AdminErrors`; home link; tests |
-| P4 Evidence | Smoke additions; mutation checks; E-entry |
+*   **Toggles (R1, R11):**
+    *   `app/admin/catalogue/masters/slugs.ts` exports `SLUGS` and `flag(field, v)`.
+    *   `flag` returns `true` for `"1"` and `false` for `"0"`; anything else throws `RbacError("invalid", `${field}: invalid`)`.
+    *   The calls become `setMasterActive(s, kind, Number(f["id"]), flag("active", f["active"]), f["reason"] ?? "")` and `setAcademicYearOpen(s, f["code"] ?? "", flag("open", f["open"]), f["reason"] ?? "")`.
+*   **Typecheck (R2):** every string parameter in the route table is written `f["x"] ?? ""`. `updateAcademicYear`'s optional dates stay `f["startsOn"]`, `f["endsOn"]`.
+*   **Classes in `listCentreClasses` (R12):** `select id, code, name, active from app.centre_class where active or id in (select centre_class_id from app.centre) order by code`. The subquery is RLS-filtered.
+*   **Page order (R16):** on the masters page, `notFound()` for an unknown slug runs before `pageRead`. The GET 404 is checked by the smoke.
+*   **T-MS-001 (R7, R8):**
+    *   The extra division is `ADV` (inactive), so divisions are `[ADV inactive, GEN active]`.
+    *   The first year row matches `{ code: "2028-29", startsOn: "2028-06-01", endsOn: "2029-05-31", open: true }`.
+*   **T-MS-002 (R3, R4, R6, R9):**
+    *   **Column grant:** `information_schema.column_privileges` UPDATE for `gems_app` on `app.centre` is exactly `["centre_class_id"]`.
+    *   **Lock kind:** an admin client holding `for key share` on centre 1 does not delay `setCentreClass`, which must win a 3 s race.
+    *   **Lock presence:** an admin client's uncommitted `update … set centre_class_id = 2` is committed 500 ms into a `setCentreClass`. The audit `before` is then `{ classCode: "A++" }`.
+    *   **ALL scope only:**
+        *   Role 18 at CENTRE 1 for `T.uA` (admin SQL): `setCentreClass` is Forbidden, and the direct SQL still matches 0 rows.
+        *   OK audit rows have `target_centre_id: null`.
+    *   **Kept class:** classes are exactly `[A++ (active: false), METRO]`; OLD is absent.
+    *   **Invalid ids:** `setCentreClass(CA, NaN, 1, "r")` → `centreId: invalid`; `(CA, 1, 1.5, "r")` → `classId: invalid`.
+*   **T-MS-003 (R5, R10, R13):**
+    *   **Unknown slugs:** POST slugs `nope` and `constructor`, with a same-origin and a foreign Origin, all return 404.
+    *   **Bad values:** `open=x` → `detail=open`; `op=nope` → `error=invalid`.
+    *   **Origin:** a missing Origin → 403.
+    *   **`safeRoute` proof:** one route-written audit row has a non-null `request_id`.
+    *   **DD-10 text:** `ADMIN_MESSAGES["catalogue.duplicate"]` is "A record with that code already exists.".
+    *   **`AdminErrors` render:** `renderToStaticMarkup(createElement(AdminErrors, { error: "__proto__", detail: "constructor", labels: MASTER_FIELD_LABELS }))` is `<p role="alert">Some values were invalid.</p>`. With `error: "invalid", detail: "__proto__"` it shows no "Check:".
+*   **Smoke (R14), after the course-master block:** for a non-manager:
+    *   `/admin/catalogue/masters/categories` (contains `SMK`), `/admin/catalogue/years` (contains `2026-27`) and `/admin/catalogue/centres` (contains `SMK-A`) return 200 with no `method="post"`.
+    *   A foreign-Origin POST to `/admin/catalogue/centres/save` with the manager's token returns 403.
+    *   GET `/admin/catalogue/masters/nope` and `/admin/catalogue/masters/constructor` return 404.
+*   **Superseded statements (R15):**
+    *   `schema.prisma`'s `centreClassId` comment.
+    *   course-master.md's Terms row and non-goal.
+    *   catalogue-skeleton.md's DD-7 and the statements repeating it.
+*   **Matrix (R17):** R-033.06 gets `T-MS-001,T-MS-002,T-MS-003`; R-033.07, R-033.08 and R-028 each get `T-MS-001,T-MS-003`.
 
 *Drafted with EGM (draft step followed manually)*
