@@ -1308,20 +1308,20 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Admissions/PRO (6), PRO (1), Academics (1)
 - **Workflows (05):** WF-X15 Bulk imports; WF-X2 ID card generation; WF1 Enquiry to admission; WF7 Student data & course change
 - **Open decisions (04):** D-ADM-1, D-ADM-2, D-ADM-3, D-ADM-4, D-FEE-4, D-SCH-2, D-SEC-4, D-SEC-5, D-STU-1, D-STU-2, D-STU-3, D-STU-4
-- **Distinct acceptance tests (09):** 22
+- **Distinct acceptance tests (09):** 28
 
 #### FR-095: Student correction tickets (FNC, LNC, MNC, GPC, FPC, SMS, GDR, EMC, GNC, NC), CSC, CC
 
 | Field | Value |
 |---|---|
-| Description (legacy behaviour) | Centre states old/new value + proof; HO approves; record rewritten by the system |
+| Description (legacy behaviour) | Centre states old/new value + proof; HO approves; record rewritten by the system; until ADR-002, proof-less correction types may go live (correction-tickets DD-19: temporary deviation, PRO to confirm) |
 | Source | SPEC p.37; WF 13-14; legacy path `tickets` |
 | Evidence class | SRC |
 | Actors / permissions | centre raise / PRO approve |
 | Depends on | FR-094 |
 | Business owner | PRO |
 | Open decisions | D-STU-1, D-STU-2, D-STU-3 |
-| Acceptance tests | T-E2E-007, T-TKT-011, T-PER-005 |
+| Acceptance tests | T-E2E-007, T-TKT-011, T-PER-005, T-COR-001, T-COR-002, T-COR-003, T-COR-004, T-COR-005, T-COR-006 |
 | Workflows | WF7 Student data & course change |
 | Data migration | n/a |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

@@ -159,6 +159,16 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-LD-003 | Scope and integrity | Other centres cannot read or change details, also by direct SQL; identity and match key never change; concurrent first edits save once |
 | T-LD-004 | Values | App and database accept and refuse the same values (nationality: format only in the database), independent of the database locale; the migration reset clears details |
 
+### T-COR: correction tickets (`docs/designs/correction-tickets/correction-tickets.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-COR-001 | Raising a correction | A raiser with `ticket.raise` and `student.view` names an admitted learner of the centre by Admission No; the old value is read from the record; unknown, foreign, unseen or unchanged requests get the handler's specific message |
+| T-COR-002 | Stale and re-raise | A second correction of a field changed meanwhile is refused as stale, also when approvals run concurrently; a re-raise is for the same learner only and reads the value afresh; a non-raiser learns nothing |
+| T-COR-003 | Applying | The final approval changes the field and its match key through `changeIdentity()`; the audit row names the field only; a failing apply is audited as FAILED |
+| T-COR-004 | Duplicate review | The approver sees likely duplicates at centres they approve for, by Admission No and centre (names only with `student.view`); every review is audited; a failing review degrades to one line |
+| T-COR-005 | Go-live gates | No ticket type switches on before the numbering policy is signed; no document-requiring type or upload before ADR-002 and its safeguards; committed defaults closed |
+| T-COR-006 | Who sees the values | Ticket viewers without `student.view` who cannot act see "Request hidden" |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

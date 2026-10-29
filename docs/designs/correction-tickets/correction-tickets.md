@@ -1,7 +1,7 @@
 # Student correction tickets (Stage 3, third piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-10…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14, DD-15); step 7: [`critic_report.md`](critic_report.md) (DD-16…DD-19); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
+*   **Status:** Approved for build by the design owner on 2026-10-29, after the EGM review (steps 5–9). The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29. Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-10…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14, DD-15); step 7: [`critic_report.md`](critic_report.md) (DD-16…DD-19); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
