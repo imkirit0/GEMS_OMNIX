@@ -147,6 +147,8 @@
 
 ## 5. Waiting on you or others
 
+**Paused by the owner on 2026-10-29** ("pause the legacy data and all those and start working on the ERP creation"): legacy access and Stage 0 migration, Supabase setup (migrations 0012–0017, the `gems_etl` grant, key rotation, the `resumes` bucket) and chasing business sign-offs. Work continues on ERP features; unsigned PMC defaults stay parameters.
+
 | Item | Who | Since |
 |---|---|---|
 | Read-only access to legacy GEMS MySQL (blocks Stage 0) | You / vendor d'Katia | 2026-10-26 |
