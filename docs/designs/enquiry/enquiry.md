@@ -1,7 +1,7 @@
 # Enquiry to admission (Stage 3, sixth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-14 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions).
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-14 on 2026-10-29 (DD-15 at step 6); build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-15).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Every seeded list value is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -52,7 +52,7 @@ Fees, schemes and discounts on the course preferences wait for Stage 4.
 
 ## Technical Plan (Architecture)
 
-Z- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5).
+Z- and C- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5) and [`comprehension_report.md`](comprehension_report.md) (step 6).
 
 ### Data Model (migration `0018_enquiry`)
 
@@ -86,14 +86,7 @@ Z- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5).
 *   Columns: `id`, `enquiry_id`, `centre_id`, `at` (default now), `kind` (`CALL_IN`, `CALL_OUT`, `VISIT`, `MESSAGE` or `NOTE`), `duration_min` (0–600), `note` (1–2000), `next_on`, `by_user`.
 *   It is append-only: the existing generic `app.ticket_immutable()` trigger refuses update and delete (Z1, DD-8).
 
-**RLS (Z1):**
-
-*   `enquiry` and `enquiry_followup` use the 0002/0009 scope loop: select, insert, update and delete policies.
-    *   Select needs `enquiry.view` at the centre.
-    *   The write policies need `enquiry.manage` at the centre.
-*   Both tables join the T-RLS-002 expected list.
-*   `gems_app` gets **no delete grant**.
-*   `enquiry` is also updated by `admit()`, which runs as `gems_app` under the enrolling user's session. That user must therefore hold `enquiry.manage` there; DD-3 already requires it.
+**RLS (Z1, C1):** `enquiry` and `enquiry_followup` have select, insert, update and delete policies (the four-command shape of 0002/0009, with the permission expressions under Contracts), ENABLE and FORCE, and join the T-RLS-002 expected list. `gems_app` gets **no delete grant**. `admit()` updates `enquiry` under the enrolling user's session, who therefore needs `enquiry.manage` there (DD-3).
 
 **Grants (Z3):**
 
@@ -189,6 +182,218 @@ Z- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5).
 | Masters page | `enquiry-paths`, `enquiry-types` (shared slug page) |
 | Home | "Enquiries" for holders of `enquiry.view` anywhere |
 
+### Contracts (step 6, C1–C20)
+
+**Types (C2, C12).** Enquiry ids are strings everywhere: in signatures, URLs and audit rows (`returning id::text`).
+
+```ts
+type EnquiryInput = {
+  centreId: number; givenName: string; familyName?: string | null; dateOfBirth: string; gender: string; mobile: string;
+  email?: string | null; currentAddress?: string | null; currentPincode?: string | null; qualification?: string | null;
+  guardianName?: string | null; guardianPhone?: string | null; whatsapp?: string | null; landline?: string | null;
+  instagram?: string | null; lastSchool?: string | null; remark?: string | null;
+  pathId: number; typeId: number; statusId: number; enquiredOn?: string; courseCodes: string[]; // 1–3
+};
+type Warning = { kind: "enquiry"; id: string; givenName: string; familyName: string | null }
+             | { kind: "learner"; personId: string; givenName: string; familyName: string | null };
+createEnquiry(session, input: EnquiryInput, confirm?: string[]): Promise<{ id: string }>; // throws SameMobile(warnings)
+updateEnquiry(session, id: string, version: number, changes: Partial<Omit<EnquiryInput, "centreId" | "statusId">>):
+  Promise<{ version: number; changed: string[] }>;
+setEnquiryStatus(session, ids: string[], statusId: number, note: string | null): Promise<{ count: number }>;
+setCounsellor(session, ids: string[], userId: string | null): Promise<{ count: number }>;
+addFollowUp(session, id: string, f: { kind: string; durationMin?: number | null; note: string; nextOn?: string | null }): Promise<{ id: string }>;
+```
+
+**Messages** (`invalid(field, rule)` → `PersonError`):
+
+*   Identity and detail fields keep the `identityField` and `detailField` messages.
+*   Required fields: `dateOfBirth: required`, `gender: required`, `mobile: required`.
+*   Own fields:
+    *   `whatsapp` and `landline`: `10 digits` (normalised like the detail phones);
+    *   `instagram`: `1-100 characters, no control characters`;
+    *   `lastSchool`: `1-100 characters`;
+    *   `remark`: `1-1000 characters`.
+*   Masters: `pathId`, `typeId` and `statusId`: `inactive or unknown`; also `statusId: open statuses only` on create (DD-15).
+*   Courses: `courseCodes: 1-3`, `courseCodes: distinct`, `courseCodes[i]: no such course` (active and visible, plain read; an unchanged inactive preference is kept, C18).
+*   Dates: `enquiredOn: not in the future`.
+*   Updates:
+    *   stale version: `enquiry: changed since you opened it; reload the page`;
+    *   nothing changed: `enquiry: nothing to change`;
+    *   enrolled enquiry: `enquiry: enrolled` (DD-15).
+*   Status changes:
+    *   `statusId: not by hand` (ENROLLED);
+    *   `note: required` (LOST or JUNK, and reopening);
+    *   `ids: 1-100`, `ids: one centre`.
+*   Follow-ups:
+    *   `kind: one of the listed values`;
+    *   `durationMin: 0-600`;
+    *   `note: 1-2000 characters`;
+    *   `nextOn: not in the past`.
+*   Counsellor: `userId: cannot receive enquiries here`.
+
+**RLS (C1; replaces the loop wording).** Policies:
+
+| Policy | Expression |
+|---|---|
+| `enquiry_select`, `enquiry_followup_select` | `using (centre_id = any ((select app.scoped_centre_ids('enquiry.view'))::int[]))` |
+| insert, update, delete | the same expression with `'enquiry.manage'`; update uses it in both `using` and `with check` |
+
+An UPDATE, and the `for no key update` lock, also need the select policy. So every role that holds `enquiry.manage` holds `enquiry.view`: the seeds and fixtures do, and a test asserts it (as admission-screens DD-9).
+
+**Integrity (C6, C15, C20):**
+
+*   **`enquiry_guard`** runs `before insert or update`.
+    *   On insert: `admission_id` is null, the status kind is not ENROLLED, and `version = 1`.
+    *   On update: rules 1–4 above, with the kind read from `app.enquiry_status`.
+    *   Refusals raise P0001.
+*   **`unique (id, centre_id)`** on `enquiry`. The FK `enquiry_followup (enquiry_id, centre_id) → enquiry (id, centre_id)` stops a follow-up from naming another centre.
+*   **`enquiry_followup_immutable`** (`app.ticket_immutable()`, update and delete) and **`enquiry_followup_no_truncate`**, as 0009.
+*   **`enquiry_status`:**
+    *   `kind` is text with `check (kind in ('OPEN','ENROLLED','LOST','JUNK'))`;
+    *   a `before update` trigger refuses `active = false` on the ENROLLED row and any change of `kind`;
+    *   the partial unique index on the ENROLLED kind is hand-written (the drift gate ignores it).
+*   **Grants:**
+    *   `update (name, active)` on paths and types;
+    *   `update (name, active, colour, sort_order)` on statuses;
+    *   `usage` on every new sequence.
+*   **Prisma:** the new models are added to `schema.prisma`.
+
+**Columns (C17):**
+
+*   `created_by` and `by_user` default to `app.session_user_id()` (FK `app_user`); they are never inputs.
+*   A follow-up's `at` is `now()`, and `last_contact_at` takes that value.
+*   `enquired_on` is set on create only: today in IST, or a past date.
+*   An absent `nextOn` clears the date.
+
+**Seeds (C3; codes satisfy `<table>_code_check`; all PMC).** Fourteen paths are seeded; the SPEC's other two are unknown.
+
+| Table | code: name |
+|---|---|
+| `enquiry_path` | `SOCIAL_MEDIA` Social Media, `WALK_IN` Walk In, `DIRECT_CALL` Direct Call, `MESSAGE` Message, `TELE_CALLING` Tele Calling, `ALUMNI` Alumnus/Alumna, `FRIENDS` Friends, `GTEC_STUDENT` G-TEC Student's, `NOTICE_BOARD` Notice Boards/Hoardings, `TV_AD` TV Advertisements, `NEWSPAPER_AD` Newspaper Advertisements, `MAIL` Mail, `STAFF` Staff, `OTHER_REF` Other Ref |
+| `enquiry_type` | `WALK_IN` Walk In, `ONLINE` Online, `WEBSITE` Website, `TELECALLER` TeleCaller, `PHONE` Phone Enquiry, `OTHER_REF` Other Ref, `DIRECT_CALL` Direct Call |
+
+`enquiry_status`:
+
+| code | Name | Kind | Colour | Order |
+|---|---|---|---|---|
+| `NEW` | New | OPEN | #1e88e5 | 10 |
+| `CONTACTED` | Contacted | OPEN | #43a047 | 20 |
+| `AFFORDABILITY` | Affordability | OPEN | #fb8c00 | 30 |
+| `ENROLLED` | Enrolled | ENROLLED | #2e7d32 | 900 |
+| `LOST` | Lost | LOST | #757575 | 950 |
+| `JUNK` | Junk | JUNK | #b71c1c | 990 |
+
+**Permissions (C16).** Only `enquiry.setup` is sensitive: sensitive permissions require TOTP (0013). The descriptions are:
+
+*   `enquiry.view`: "View enquiries of a centre";
+*   `enquiry.manage`: "Record and work enquiries of a centre";
+*   `enquiry.setup`: "Maintain enquiry paths, types and statuses".
+
+**Authorisation of writes (C4).**
+
+*   **Single-id writes.** First, in `withScope`, read the `centre_id` of a row visible under `enquiry.view`. No row gives `PersonError("notfound")`, which `pageRead` already maps to 404. Then call `scopedAction({ action, permission: "enquiry.manage", centreId, targetType: "enquiry", targetId: id })`.
+*   **Bulk writes.** All the ids must be at one centre, so the bulk form requires a centre filter; otherwise `ids: one centre`. Each call writes one audit row, with `ids` and the fields in its detail.
+
+**Duplicate warnings (C5).**
+
+*   The lookup runs inside the action. On a match it throws `SameMobile(warnings)`, which is not audited, and the form shows the warnings.
+*   It finds two kinds of match:
+    *   OPEN-kind enquiries at `centreId` with the same normalised mobile;
+    *   persons with that mobile who have an admission in `scoped_centre_ids('student.view')`.
+*   `confirm` carries the ids that were shown. A match that was not shown warns again.
+
+**Definer functions (C7).**
+
+*   `enquiry_may_receive` returns false unless `app.has_permission('enquiry.view', p_centre)` holds for the caller.
+*   All three functions get `revoke all … from public; grant execute … to gems_app`.
+*   They join the T-RLS-005 list in sorted order.
+
+**Lifecycle (C10, DD-15).**
+
+*   An ENROLLED enquiry is read-only to every enquiry write: `updateEnquiry`, `setEnquiryStatus`, `setCounsellor` and `addFollowUp` all refuse it (`enquiry: enrolled`).
+*   A LOST or JUNK enquiry may be reopened to an OPEN status by `setEnquiryStatus`, with a note. It still takes follow-ups and edits.
+*   `createEnquiry` accepts OPEN-kind statuses only; the default is the lowest `sort_order` OPEN status.
+
+**`admit()` (C8).** When `enquiryId` is set, these steps run after the form lock and the `used` check, so a resubmit still reports "saved":
+
+1.  The caller lacks `has_permission('enquiry.manage', centreId)` → Forbidden. This is audited DENIED; a hand-crafted post gets the 404.
+2.  Lock: `select e.centre_id, e.admission_id, s.kind from app.enquiry e join app.enquiry_status s on s.id = e.status_id where e.id = $1::bigint for no key update of e`. No row → `invalid("enquiry", "not found")`.
+3.  The enquiry is at another centre → `invalid("enquiry", "other centre")`.
+4.  `admission_id` is already set → `invalid("enquiry", "already enrolled")`.
+5.  The kind is LOST or JUNK → `invalid("enquiry", "closed")`.
+
+After the admission insert: `update app.enquiry set admission_id = …, status_id = (select id from app.enquiry_status where kind = 'ENROLLED')`; `version` is unchanged. The admit audit records `enquiryId`.
+
+`ADMIT_MESSAGES` adds four texts, mapped on `e.field === "enquiry"` by `e.rule`:
+
+| Key | Text |
+|---|---|
+| `enquiryNotFound` | "This enquiry is no longer available." |
+| `enquiryOtherCentre` | "This enquiry belongs to another centre." |
+| `enquiryEnrolled` | "This enquiry is already enrolled." |
+| `enquiryClosed` | "This enquiry is closed (lost or junk)." |
+
+**The Enroll page (C9): `/students/new?enquiry=<id>`.**
+
+*   It returns 404 when the id fails `^\d{1,18}$`, when `getEnquiry` fails, without `canEnrol`, or when the enquiry is enrolled, LOST or JUNK.
+*   `initial.values` holds these keys; empty ones are omitted and join dates are left blank:
+    *   `nationality: "IN"`, `centreId`;
+    *   `givenName`, `familyName`, `dateOfBirth`, `gender`, `mobile`, `email`;
+    *   `course.1.courseCode` … `course.3.courseCode`;
+    *   `currentAddress`, `currentPincode`, `qualification`, `guardianName`, `guardianPhone`.
+*   A hidden input `enquiryId` carries the link. `AdmitFormState.enquiryId` is read with `text("enquiryId")` and passed to `admit` only when not empty. The success redirect is unchanged.
+
+**The list (C13).**
+
+*   **GET filters:**
+    *   `centre`, `status`, `kind` (default all), `counsellor`;
+    *   `from` and `to` (YYYY-MM-DD, on `enquired_on`);
+    *   `due` (`next_follow_up_on <= due`).
+    *   An invalid value matches no rows; it never raises an error.
+*   **Row:** `{ id, enquiredOn, givenName, familyName, statusName, statusColour, kind, counsellorName, nextFollowUpOn, centreCode }`. It carries no mobile.
+*   **Scope:** a user with no `enquiry.view` scope gets Forbidden.
+*   **Search `q`:** an id when it matches `^\d{1,18}$`; otherwise a mobile through `identityField`; otherwise a name prefix (escaped as `listAdmissions` does).
+*   **Order:** `order by id desc limit 100`. A rate-limited search returns the `rateLimited` state, as `SearchState` does.
+
+**The calendar and home link (C19).**
+
+*   `month` must match `^\d{4}-(0[1-9]|1[0-2])$`; anything else is a 404.
+*   The calendar returns `{ day: string; rows: { id, givenName, familyName, statusName, counsellorName }[] }[]`, capped at 1000 rows.
+*   `canViewEnquiries(session)` is `cardinality(scoped_centre_ids('enquiry.view')) > 0`.
+
+**Setup pages (C14).**
+
+*   `/enquiries/statuses` posts to the route handler `/enquiries/statuses/save` through `adminPost`, with step-up.
+*   `listMasters.canManage` uses `has_permission(MASTERS[kind].permission, null)`.
+*   Paths and types live at `/admin/catalogue/masters/enquiry-paths` and `enquiry-types`. They are linked from `/admin/catalogue`, and from `/enquiries` for holders of `enquiry.setup`.
+
+**Fixtures and tests (C11).**
+
+*   `reset()` changes:
+    *   add the three permissions;
+    *   add `app.enquiry_followup` and `app.enquiry` to the truncate list;
+    *   reset the three masters to the seeds above.
+*   Roles:
+
+| Role | Permissions |
+|---|---|
+| 19 `enquiry_worker` | view, manage |
+| 20 `enquiry_viewer` | view |
+| 21 `enquiry_setup` | setup |
+
+*   Users:
+
+| User | Roles and scope | Token |
+|---|---|---|
+| `EQ.wa` | 19 and 17 at A | `tok-eqA` |
+| `EQ.wb` | 19 at B | `tok-eqB` |
+| `EQ.va` | 20 at A | `tok-eqView` |
+| `EQ.ma` | 19 at A only | `tok-eqNoAdmit` |
+| `EQ.setup` | 21 at ALL | `tok-eqSetup` |
+
+*   `ST.sa` serves as a user with `student.admit` but no `enquiry.manage`.
+*   T-AUD-009 scans `src/server/enquiry.ts` for `"enquiry.*"` actions.
+
 ### Tests
 
 | ID | Goal | What it does | Expected |
@@ -218,6 +423,7 @@ Every audit action above is listed in `tests/audit-catalogue.ts` and asserted in
 12. **DD-12: Edits carry a version** (as learner-details DD-8); bulk actions cap at 100 and are all-or-nothing (accepted by the design owner, 2026-10-29).
 13. **DD-13: The masters need a third permission, `enquiry.setup` at ALL scope,** separate from day-to-day work (accepted by the design owner, 2026-10-29).
 14. **DD-14: Audit rows of enquiry edits list field names only** (contact data is PII, as learner-details DD-14); follow-up notes are not copied into audit rows (accepted by the design owner, 2026-10-29).
+15. **DD-15: An enrolled enquiry is read-only; a lost or junk one may be reopened to an open status (with a note) and still takes follow-ups; new enquiries start open** (design owner, 2026-10-29, C10).
 
 ## Open Questions
 
