@@ -191,11 +191,26 @@ describe("T-CB course batches", () => {
     try {
       for (const c of [app, other]) { await c.query("begin"); await c.query("select set_config('app.session_id', $1, true)", [A]); }
       await app.query(`update app.registration set batch_id = 1 where id = $1`, [l2.id]);
-      const second = other.query(`update app.registration set batch_id = 1 where id = $1`, [l4.id]).then(() => null, (e: { constraint?: string }) => e.constraint);
+      const pid = (await other.query("select pg_backend_pid() p")).rows[0].p;
+      let done = false;
+      const second = other.query(`update app.registration set batch_id = 1 where id = $1`, [l4.id])
+        .then(() => null, (e: { constraint?: string }) => e.constraint).finally(() => { done = true; });
+      // B must be waiting on the batch lock before A commits; without the lock it finishes first, unrefused
+      const waiting = () => sql(`select wait_event_type = 'Lock' w from pg_stat_activity where pid = $1`, [pid]).then((r) => r[0]?.w === true);
+      for (let i = 0; i < 100 && !done && !(await waiting()); i++) await new Promise((r) => setTimeout(r, 20));
+      expect(done, "B was not blocked by A's batch lock").toBe(false);
       await app.query("commit");
       expect(await second).toBe("batch_capacity_guard");
     } finally { await other.query("rollback").catch(() => null); await other.end(); }
     expect(await sql(`select count(*)::int n from app.registration where batch_id = 1 and status = 'ACTIVE'`)).toEqual([{ n: 1 }]);
+
+    // a writer who sees two centres (bmR1: region 1) cannot cross them: the app names the learner, not the batch
+    const la2 = await learner(C.A2, ST_TOKEN.sr);
+    await bt.updateBatch(A, C.A, 1, { capacity: 5 });
+    expect(await msg(bt.placeLearners(R1, C.A, 1, [la2.id]))).toBe("registrationIds: not active here");
+    // a registration that left ACTIVE cannot be moved, not even out of its batch
+    await sql(`update app.registration set status = 'DROP' where id = $1`, [l2.id]);
+    expect(await msg(bt.placeLearners(A, C.A, null, [l2.id]))).toBe("registrationIds: not active here");
   });
 
   test("T-CB-003 routes: batches and placement; origin, field details, unknown op, repeated ids", async () => {
