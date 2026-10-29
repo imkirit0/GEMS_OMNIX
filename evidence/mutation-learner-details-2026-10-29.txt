@@ -1,0 +1,44 @@
+Learner details mutation checks (design "Mutation Checks"), 2026-10-29, local Docker database.
+Each mutation applied, the named test run, then restored (code: file restored, git status clean; database: a freshly
+migrated database). Real-server ones: fresh database, next build, next start, scripts/smoke-security.mjs; the server
+stopped by port 3101 before and after each run (the stale-server problem of E-037).
+
+code (vitest): every one CAUGHT
+  person_detail dropped from the reset              scripts/etl/reset.sql            etl.test P8 (beforeEach)
+  A rule imports people.ts again                    etl/rules/centre.ts              etl.test hash import guard
+  Absent inputs read as empty                       admission-form.ts detailsFrom    T-LD-002 edit form (missing input kept)
+  No person lock in updateDetails                   people.ts                        T-LD-003 concurrent first edits
+  Values in the audit detail                        people.ts                        T-LD-002 exact detail
+  person.details.update not catalogued              tests/audit-catalogue.ts         T-AUD-009 coverage gate
+  No required check on edit                         admission-form.ts submitDetails  T-LD-002 edit form
+  No version comparison                             people.ts updateDetails          T-LD-002 (stale version, no row yet)
+  No digits check on centre and version             people.ts updateDetails          T-LD-002 ("1e0")
+  No 23514 detail mapping                           people.ts personDb               T-LD-004 check violation case
+  Existing-person path always writes                people.ts admit                  T-LD-001
+  No detailFields in the admit audit                people.ts admit                  T-LD-001
+  editCentreId by student.view                      people.ts getPerson              T-LD-002 view-only
+  `in` instead of Object.hasOwn                     details.ts                       T-LD-004 "constructor"
+  No ASCII check on nationality                     details.ts                       T-LD-004 "ß" (would become SS, South Sudan)
+  No lone-surrogate check                           details.ts                       T-LD-004
+  No hasOrigin in submitDetails                     admission-form.ts                T-LD-002 edit form (no Origin)
+  A second export in the details actions file       details/actions.ts               T-ADM-006 exports test
+  Details inserted before the admission             people.ts admit                  T-LD-001 (insert policy refuses)
+
+database (fresh migrated database each): every one CAUGHT
+  Update policy without the student.admit scope     0015                             T-LD-003 view-only direct update
+  update (person_id) granted                        0015                             T-LD-003 42501
+  NOT_KNOWN dropped from the employment list        0015                             T-LD-004 list equality
+  Locale-dependent \s instead of the explicit class 0015 father_name                 T-LD-004 NBSP / U+0085
+  Newline-sensitive flag on the address check       0015 current_address             T-LD-004 " x\ny"
+  No control-character clause                       0015 father_name                 T-LD-004 "a\tb"
+  person_detail select policy dropped               0015                             T-RLS-002
+
+real server: CAUGHT
+  No hasOrigin in submitDetails                     admission-form.ts                smoke: Origin-less details post 303
+  No notFound() on the edit page                    details/page.tsx                 smoke: view-only edit page 200
+  control, unmutated                                                                  all security smoke checks passed
+
+Note: the notFound() mutation first survived: the smoke's only refused caller (another centre) was already a 404 from
+getPerson(). A view-only smoke user was added (sees the learner, no edit link, edit page 404); the mutation is then caught.
+Similarly "No version comparison" would have survived (the guarded update also refuses a stale save); a test of a stale
+version for a learner without a details row was added first. The rule-version bump to v4 is checked in review only.

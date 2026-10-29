@@ -204,6 +204,17 @@ try {
   check("T-LD-002 own learner's edit page 200 with a version", editPage.status === 200 && /name="version" value="\d+"/.test(editHtml), String(editPage.status));
   const [eHidden, eMissing] = [await get(`/students/${bPerson}/details`, stu), await get(`/students/${randomUUID()}/details`, stu)];
   const [eh, em] = [normalT(await eHidden.text()), normalT(await eMissing.text())];
+  // a user who may see the learner but not edit: the edit page is the same 404 (the page's own guard, not getPerson's)
+  const viewRole = (await db.query(`insert into app.role (key, name) values ('smoke_student_view', 'Smoke student viewer') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'student.view')`, [viewRole]);
+  const svId = (await db.query(`insert into app.app_user (id, login, display_name) values (gen_random_uuid(), 'smoke.sview', 'Smoke Viewer') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', $3)`, [svId, viewRole, ids.A]);
+  const sv = randomBytes(32).toString("base64url");
+  await db.query(`insert into app.app_session (token_hash, user_id, expires_at, step_up_at) values ($1, $2, now() + interval '1 hour', now())`, [sha(sv), svId]);
+  const [svView, svEdit] = [await get(`/students/${own}`, sv), await get(editPath, sv)];
+  const svHtml = await svView.text();
+  check("T-LD-002 a view-only user sees the learner without an edit link, and the edit page is 404",
+    svView.status === 200 && !svHtml.includes("Edit details") && svEdit.status === 404, `${svView.status} ${svEdit.status}`);
   check("T-LD-002 other centre's edit page 404 and identical to a missing one", eHidden.status === 404 && eMissing.status === 404 && eh === em,
     eh === em ? "" : "pages differ");
   const editHidden = [...editHtml.matchAll(/<input\b[^>]*type="hidden"[^>]*>/g)]
