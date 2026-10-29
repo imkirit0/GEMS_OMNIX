@@ -1,7 +1,7 @@
 # Course master (Stage 3, fourth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-11…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14…DD-17); step 7: [`critic_report.md`](critic_report.md) (DD-18).
+*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-10 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (DD-11…DD-13); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-14…DD-17); step 7: [`critic_report.md`](critic_report.md) (DD-18); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-13 revised).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -47,7 +47,7 @@ The catalogue skeleton (E-034) gave each course a code, a name, a category, a di
 
 ## Technical Plan (Architecture)
 
-Z-, C- and D- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6) and [`critic_report.md`](critic_report.md) (step 7).
+Z-, C-, D- and I- ids are the findings of [`zoom_out_report.md`](zoom_out_report.md) (step 5), [`comprehension_report.md`](comprehension_report.md) (step 6), [`critic_report.md`](critic_report.md) (step 7) and [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (step 8).
 
 ### Data Model (migration `0016_course_master`)
 
@@ -63,28 +63,27 @@ New columns on `app.course`, all nullable or defaulted so existing rows stay val
 | `exam_min_days` | int, null | 0–3650 |
 | `sort_order` | int, not null, default 0 | 0–100000 |
 | `visible` | boolean, not null, default true | DD-12 |
-| `materials_required`, `marklist_required`, `no_reg_fee`, `it_magic`, `keltron`, `internship_keltron`, `selected` | boolean, not null, default false | stored only in this piece (Z8) |
-| `keltron_share` | numeric(5,2), null | `between 0 and 100`; `course_keltron_share_check`: `(keltron and keltron_share is not null) or (not keltron and keltron_share is null)` (DD-6, DD-11) |
+| `materials_required`, `marklist_required`, `no_reg_fee`, `it_magic`, `keltron`, `internship_keltron`, `selected` | boolean, not null, default false | stored only in this piece |
+| `keltron_share` | numeric(5,2), null | one check `course_keltron_share_check`: `(keltron and keltron_share between 0 and 100) or (not keltron and keltron_share is null)` (DD-6, DD-11; I5) |
 
-*   **Grants (Z1):** `grant update (<the 19 new columns>) on app.course to gems_app`.
-*   **The share for managers only (DD-13, C1–C3):** `revoke select on app.course from gems_app; grant select (<every column except keltron_share>) on app.course to gems_app`. No app query names `keltron_share` except in `insert` and `update … set`. Reads go through
-
-    ```sql
-    create function app.course_keltron_share(p_course_id int) returns numeric
-    language sql volatile security definer set search_path = pg_catalog, app as $$
-      select case when app.has_permission('catalogue.manage', null)
-        then (select keltron_share from app.course where id = p_course_id) end $$;
-    revoke all on function app.course_keltron_share(int) from public;
-    grant execute on function app.course_keltron_share(int) to gems_app;
-    ```
-
-    `volatile`; added to the T-RLS-005 inventory between `can_grant_permission` and `has_permission`. Read back as `app.course_keltron_share(id)::float8 as "keltronShare"`, and **never inside a locking `select … for update`**: `lockCourse` takes the row lock first and reads the share in a second statement after it, so the value is the committed one even when the lock waited behind a concurrent update, whatever the function's volatility (D1; a lost update of the share otherwise).
-*   **Column privileges are tested (D6):** a test reads `information_schema.column_privileges` and asserts `gems_app` may select exactly every `course` column except `keltron_share` (a future column fails it until granted), and a grep test refuses Prisma `.course.` model calls in `src/`.
-*   **Checked queries (C3):** every current `gems_app` query on `course` names its columns (`catalogue.ts` `lockCourse` and the insert's `returning`; `people.ts` `getPerson`, `admitOptions`, `admit`); tests as other users read `code`. The Prisma model API (`tx.course.findMany()`) must not be used from `gems_app`: it selects every column. The migration role `gems_etl` keeps its table-level select and may read the share (accepted, DD-14).
+*   **Grants (Z1):** `grant update (<the 19 new columns>) on app.course to gems_app`. The table-level select stays as it is.
 *   **`app.course_centre_class`** (`course_id` → `course`, `centre_class_id` → `centre_class`, both restrict; primary key on the pair): RLS `setup_select` (`using (true)`), `setup_insert` and `setup_delete` on `catalogue.manage`, as 0009; `grant select, insert, delete` to `gems_app`.
-*   **Prisma (Z7):** `Course` gains the 19 fields (`keltronShare Decimal? @db.Decimal(5,2)`) and `classes CourseCentreClass[]`; `CourseCentreClass` with `@@id([courseId, centreClassId])` and restrict relations; `CentreClass` gains the back-relation.
+*   **Prisma (Z7):** `Course` gains the 19 fields (`keltronShare Decimal? @db.Decimal(5,2)`) and `classes CourseCentreClass[]`; `CourseCentreClass` with `@@id([courseId, centreClassId])` and restrict relations; `CentreClass` gains the back-relation. Raw reads cast `keltron_share::float8`.
 
-### Types and Validation (`src/server/catalogue.ts`; C4–C6)
+### Flags (I11)
+
+| Column | Form label | Meaning in this piece |
+|---|---|---|
+| `visible` | Offered for admission | DD-12: an invisible course is not offered and `admit()` refuses it |
+| `materials_required` | Materials required | stored |
+| `marklist_required` | Marklist required | stored |
+| `no_reg_fee` | No registration fee | stored (Stage 4 fees) |
+| `it_magic` | IT MAGIC programme | stored (legacy programme flag) |
+| `keltron` | KELTRON course | requires a share (DD-6) |
+| `internship_keltron` | KELTRON internship | stored |
+| `selected` | Selected course | stored (legacy "SELECTED COURSE" flag) |
+
+### Types and Validation (`src/server/catalogue.ts`)
 
 ```ts
 export type DurationType = "MONTH" | "WEEK" | "DAY" | "NA";
@@ -98,7 +97,7 @@ export type CourseDetails = {
 ```
 
 *   **`createCourse(session, { code, name, categoryId, divisionId } & Partial<CourseDetails>)`:** absent keys take the column defaults.
-*   **`updateCourse(session, id, Partial<{ name, categoryId, divisionId } & CourseDetails>)`:** absent = unchanged; `null` clears a nullable field; `null` on a not-null field → `<field>: invalid`. Every rule, including Keltron's, is checked on the **merged** after-row; turning `keltron` off requires `keltronShare: null` in the same call. "Nothing to change" compares every field of the merged row.
+*   **`updateCourse(session, id, Partial<{ name, categoryId, divisionId } & CourseDetails>)`:** absent = unchanged; `null` clears a nullable field; `null` on a not-null field → `<field>: invalid`. Every rule, Keltron's included, is checked on the **merged** after-row; turning `keltron` off requires `keltronShare: null` in the same call. "Nothing to change" compares every field of the merged row.
 *   **Messages** (`RbacError("invalid", "<field>: <rule>")`):
 
 | Field | Rule text |
@@ -106,69 +105,72 @@ export type CourseDetails = {
 | `displayName` | `1-200 characters` |
 | `department` | `1-100 characters` |
 | `durationType` | `invalid` |
-| `durationMonths` / `Weeks` / `Days` / `Hours` | `0-120` / `0-520` / `0-3650` / `0-10000` (whole numbers) |
+| `durationMonths` / `Weeks` / `Days` / `Hours` | `0-120` / `0-520` / `0-3650` / `0-10000` |
 | `capacity` | `1-100000` |
 | `examMinDays` | `0-3650` |
 | `sortOrder` | `0-100000` |
 | any flag | `invalid` (not a boolean) |
-| `keltronShare` | `required with Keltron`, `only with Keltron`, `0-100, two decimals` (a third decimal is refused, never rounded; D2: a posted string must match `^\d{1,3}(\.\d{1,2})?$` before it is converted; a number from code passes when `Math.abs(x * 100 - Math.round(x * 100)) < 1e-6`, so 1.1, 1.15 and 4.35 are accepted) |
+| `keltronShare` | `required with Keltron`, `only with Keltron`, `0-100, two decimals` |
 | `classIds` | `duplicate`, `inactive or unknown` |
 
-*   **Duration (C8, DD-10):** the counts are stored as given, independent of the type; the summary shown is the non-null, non-zero counts joined as "6 months · 120 hours" (singular for 1, in the order months, weeks, days, hours); `NA` or no counts → "—".
-*   **Audit (Z2, C14, DD-17):** `createCourse`, `updateCourse` and the activate/deactivate functions audit the whole row except `created_at`, the share included (`lockCourse` reads it through the definer function; `createCourse`'s `after` takes it from the validated input).
+*   **Numbers (D2, I10):** every int field must be `Number.isSafeInteger` within its range, else its range message. The share passes when `Math.abs(x * 100 - Math.round(x * 100)) < 1e-6` and `0 <= x <= 100` (1.1, 1.15, 4.35 accepted; 12.345 refused, never rounded).
+*   **Duration (DD-10):** counts stored as given, independent of the type; the summary is the non-null, non-zero counts joined as "6 months · 120 hours" (singular for 1; months, weeks, days, hours), `NA` or no counts → "—".
+*   **Audit (Z2, DD-17):** create, update and activate/deactivate audit the whole row except `created_at`, the share included; `lockCourse` and the insert's `returning` list those columns.
 
-### Course Classes (`setCourseClasses`; C16)
+### The Share (DD-13 revised at step 8, I3)
 
-`setCourseClasses(session, courseId, classIds: number[])`: one `adminWrite` with the literal action `catalogue.course.classes`, `targetType: "course"`, `targetId: <id>`; locks the course row (`lockCourse`); duplicates → `classIds: duplicate`; an unknown or inactive class **newly added** → `classIds: inactive or unknown` (an assigned class deactivated later is kept, Z3); delete and insert the set; audit `{ before: { classes: [codes sorted] }, after: { classes: [...] } }`; equal sets → "nothing to change".
+*   `getCourse` selects `case when app.has_permission('catalogue.manage', null) then keltron_share::float8 end as "keltronShare"`; `listCourses` never selects it; the course pages show it only to managers. Audit rows keep it (DD-17); the future audit viewer redacts it for non-managers (DD-18).
 
-### Reads (C11, C17, C19)
+### Course Classes (`setCourseClasses`)
 
-*   **`listCourses(session, { categoryId?, divisionId?, active?: boolean, q? })`** and **`getCourse(session, id)`**: plain `withScope` reads, no `authorize` (every signed-in user), the list ordered by `sort_order, code` (D13). They return the courses (with `classes` as codes; `keltronShare` only in `getCourse`, from the definer function, so null for non-managers; the list does not read it, D8), the picklists `{ categories, divisions, classes }` (active entries, plus a course's current inactive ones), and `canManage` from `app.has_permission('catalogue.manage', null)`. `q`: case-insensitive contains on code, name and display name, `%` and `_` escaped. `getCourse` on an unknown id throws `Forbidden`, so `pageRead` answers 404.
-*   **`canManageCatalogue(session)`** (new, like `canAdminister`) for the home link.
+One `adminWrite` with the literal action `catalogue.course.classes` (`targetType: "course"`, `targetId: <id>`; in `tests/audit-catalogue.ts`, asserted by a test); locks the course row; duplicates → `classIds: duplicate`; an unknown or inactive class **newly added** → `classIds: inactive or unknown` (an assigned class deactivated later is kept, Z3); delete and insert the set; audit `{ before: { classes: [codes sorted] }, after: { classes: [...] } }`; equal sets → "nothing to change". Concurrent saves serialise on the course row lock.
 
-### Admission (`people.ts`; C9, C10, DD-12, DD-15, DD-16)
+### Reads
 
-*   `CATALOGUE_GATES = { enforceAvailability: false }`, exported from `people.ts`, mutable, committed `false` (a test asserts it).
-*   **One rule (D4):** the availability rule lives in one SQL function, `app.centre_course_codes(p_centre_id int) returns setof text` (stable, invoker rights, so RLS applies; the codes a centre's active class may sell), used by both `admit()` and `admitOptions()`; special cases (R-090.01) and later fees extend this one function.
-*   **`admit()`:** the existing course check becomes `… and active and visible` (same "no such course"). Then, when `CATALOGUE_GATES.enforceAvailability`, the codes not in `app.centre_course_codes(centreId)` are refused; the function's body is:
+*   **`listCourses(session, { categoryId?, divisionId?, active?: boolean, q? })`** and **`getCourse(session, id)`:** plain `withScope` reads, no `authorize`; the list ordered by `sort_order, code`; `q` case-insensitive contains on code, name and display name, `%` and `_` escaped. Both return `classes` (codes), the picklists `{ categories, divisions, classes }` (active entries, plus a course's current inactive ones) and `canManage` (`app.has_permission('catalogue.manage', null)`). `getCourse` on an unknown id throws `Forbidden` (the page 404s).
+*   **`canManageCatalogue(session)`** for the home link.
+
+### Admission (`people.ts`, the admission form; DD-2, DD-12, DD-15, DD-16; I1, I2, I7)
+
+*   `CATALOGUE_GATES = { enforceAvailability: false }`, exported from `people.ts`, mutable, committed `false` (a test asserts it; tests that switch it reset it in `afterEach`).
+*   **`admit()`:** the existing course check becomes `… and active and visible` (same "no such course"). Then, when `CATALOGUE_GATES.enforceAvailability`, the codes this centre may sell are
 
     ```sql
     select co.code from app.course co
       join app.course_centre_class cc on cc.course_id = co.id
       join app.centre_class k on k.id = cc.centre_class_id and k.active
-      join app.centre ce on ce.centre_class_id = cc.centre_class_id
-    where ce.id = ${centreId} and co.code = any (${codes}::text[])
+      join app.centre ce on ce.centre_class_id = k.id
+    where ce.id = ${input.centreId} and co.code = any (${codes}::text[])
     ```
 
-    the first course not in the result → `invalid("courses[i].courseCode", "not offered at this centre")`; a centre without a class matches nothing (DD-7). This runs before the duplicate-person lookup.
-*   **`admitOptions()`:** `where active and visible order by code` (order unchanged); each course also carries `classCodes` (its active allowed classes) and each centre its `classCode`, plus `enforced` (D5: no courses × centres payload). With enforcement on, the form holds the selected centre in state (starting from the posted value), lists only courses whose `classCodes` include the centre's class, shows all courses while no centre is chosen, and clears a chosen course that becomes invalid; the server check stays the gate. With enforcement off, no filtering.
-*   **No lock (D10):** like the active check (catalogue DD-13), the availability check takes no lock: an admission that read the class set just before a change commits completes (accepted). Concurrent `setCourseClasses` calls serialise on the course row lock and read the before-set after it.
-*   Tests that switch `CATALOGUE_GATES` reset it in `afterEach` (D11).
-*   The migration rules are unchanged: they check course existence only (catalogue DD-11), never visibility or availability.
+    and the first course not among them → `invalid("courses[i].courseCode", "not offered at this centre")`; a centre without a class matches nothing (DD-7). It runs before the duplicate-person lookup and takes no lock: an admission that read the set just before a change commits completes, as catalogue DD-13 accepts (D10).
+*   **`admitOptions()`:** `where active and visible order by code`; each course also carries `classCodes` (its active allowed classes, from the same joins), each centre its `classCode`, and the result `enforced`.
+*   **The form** (`app/students/new/form.tsx`): one exported pure function `offeredCourses(courses, centre, enforced)` (in `src/server/course-offer.ts`, client-safe) decides the list: enforcement off → all; no centre chosen → all; a centre without a class → none (DD-7); otherwise the courses whose `classCodes` include the centre's class. The form holds the selected centre in state (from the posted value), lists the offered courses, and clears a chosen course that becomes invalid. Before hydration every course is listed; the server check is the gate.
+*   The migration rules are unchanged: they check course existence only (catalogue DD-11).
 
-### Pages (`/admin/catalogue/courses`; C7, C12, C13; DD-8)
+### Pages (`/admin/catalogue/courses`)
 
 | Route | What |
 |---|---|
 | `GET /admin/catalogue/courses` | List with the GET filter form (`categoryId`, `divisionId`, `active` = `''` all, `'1'`, `'0'`, `q`); "New course" link for managers |
 | `GET /admin/catalogue/courses/new` | The form (managers; others 404) |
-| `GET /admin/catalogue/courses/[id]` | Read-only for non-managers; the form, the classes checkboxes and activate/deactivate for managers; the code is shown read-only (codes never change) |
+| `GET /admin/catalogue/courses/[id]` | Read-only for non-managers; the form, the classes checkboxes and activate/deactivate for managers; the code shown read-only |
 | `POST /admin/catalogue/courses/create` | `createCourse` |
 | `POST /admin/catalogue/courses/[id]/save` | `op` = `details` (every field posted), `classes` (`classId` repeated), `active` (`active` = `1`/`0`, `reason`) |
 
-*   **Form mapping:** trimmed `''` → `null` for text and number fields; whole-number fields must match `^\d+$` before `Number()` (so `1e2` and `0x10` are refused with the field's message), the share as above (D2); checkboxes `=== "1"`; classes `data.getAll("classId").map(Number)`. One shared form component for new and edit; an assigned inactive class is shown ticked and labelled "(inactive)".
-*   **Field errors (Z4):** `adminPost()`, for an `RbacError` with reason `invalid` whose message matches `/^([A-Za-z]+):/`, appends `&detail=<prefix>` (URL-encoded); other errors get no detail. The course pages hold `COURSE_FIELD_LABELS` in the shared form module and show "Check: <label>"; an unknown detail shows nothing extra. `ADMIN_MESSAGES` gains `"catalogue.duplicate"`; the generic `invalid` text becomes "Some values were invalid." (the users pages' scope hint moves into those pages).
+*   **Form mapping:** trimmed `''` → `null`; whole-number fields must match `^\d+$` and the share `^\d{1,3}(\.\d{1,2})?$` before conversion (so `1e2` is refused with the field's message); checkboxes `=== "1"`; classes `data.getAll("classId").map(Number)`. One shared form component; an assigned inactive class shown ticked and labelled "(inactive)".
+*   **Field errors (I8):** `adminPost()`, for an `RbacError` with reason `invalid` whose message matches `/^([A-Za-z]+):/`, appends `&detail=<prefix>`; other pages ignore it. The course pages show "Some values were invalid." and "Check: <label>" from `COURSE_FIELD_LABELS` (the form labels above); `ADMIN_MESSAGES` gains `"catalogue.duplicate"` ("A course with that code already exists."); `ADMIN_MESSAGES.invalid` is unchanged.
 *   The home page shows a "Courses" link when `canManageCatalogue`.
 
 ### Tests
 
 | ID | Goal | What it does | Expected |
 |---|---|---|---|
-| T-CM-001 | G1 | Create and update with every field; absent vs null; each message; Keltron on/off on the merged row; shares 1.1, 1.15, 4.35, 100.00 (accepted) and 12.345 (refused); `1e2` and a value above the bound; direct inserts violating each check; a concurrent share update during `updateCourse(name)` | Saved, whole-row audit incl. defaults; the listed messages; 23514 per check; the new share kept |
+| T-CM-001 | G1 | Create and update with every field; absent vs null; each message; Keltron on/off on the merged row; shares 1.1, 1.15, 4.35, 100.00 (accepted) and 12.345 (refused); 1.5 and a value above the bound for an int field; direct inserts violating each check | Saved, whole-row audit incl. defaults; the listed messages; 23514 per check |
 | T-CM-002 | G2 | Set, change, clear classes; add an inactive or unknown class; keep one deactivated after assignment; duplicates; the same set; a non-manager; direct SQL delete by a non-manager | Audited as codes; refused; kept; `duplicate`; "nothing to change"; Forbidden; 0 rows |
-| T-CM-003 | G3 | Admit with enforcement off and on: allowed class, not allowed, centre without a class, assigned class deactivated; `admitOptions` with enforcement on; the committed default | Off: admitted; on: admitted / refused / refused / refused; options filtered; `false` |
+| T-CM-003 | G3 | Admit with enforcement off and on: allowed class, not allowed, centre without a class, assigned class deactivated; `admitOptions` returns `classCodes`, `classCode`, `enforced`; `offeredCourses` for off, no centre, centre without class, allowed, not allowed; for each test centre and course, `admit()` and `offeredCourses` agree; the committed default | As listed; agreement holds; `false` |
 | T-CM-004 | G4 | The admin routes: create, details, classes, active; no step-up; foreign Origin; a field error's `detail` | Redirects and audit rows; step-up; 403; `detail=keltronShare` |
-| T-CM-005 | G1 | The share: a manager's `getCourse` includes it; a centre user's omits it; as `gems_app`: `select keltron_share`, `select *`, `where keltron_share > 50`, `order by keltron_share`, `insert … returning *`, and `select count(*)`/`exists`; the create audit's `after`; the column-privilege and Prisma-call tests | Present; null; 42501 for each; count and exists work; the given share; pass |
+| T-CM-005 | G1 | The share: a manager's `getCourse` includes it; a centre user's gets null; `listCourses` never returns it | As listed |
 | T-CM-006 | G3 | An invisible course | Not in `admitOptions`; `admit()` refuses "no such course"; an existing registration stays |
 
 ## Decisions
@@ -185,8 +187,8 @@ export type CourseDetails = {
 10. **DD-10: Duration fields are stored as given** (type plus up to four counts); the summary shown is computed, not stored.
 11. **DD-11: The Keltron share has two decimals** (0.00–100.00) (design owner, 2026-10-29, Z7).
 12. **DD-12: An invisible course is not offered on the admission form and `admit()` refuses it;** it stays active for existing learners (design owner, 2026-10-29, Z8).
-13. **DD-13: Only catalogue managers see the Keltron share,** enforced by a column grant and a definer function (design owner, 2026-10-29, Z9).
-14. **DD-14: The migration role may read the share** (an operator tool; accepted) (design owner, 2026-10-29, C3).
+13. **DD-13: Only catalogue managers see the Keltron share,** enforced in the app (`getCourse` returns it only to managers; the list never selects it) (design owner, 2026-10-29, Z9; revised at step 8, I3: the earlier column grant and definer function were dropped).
+14. **DD-14: ~~The migration role may read the share~~:** moot since DD-13's revision (every role may read the column; the app shows it only to managers).
 15. **DD-15: Only an active centre class allows a course to be sold;** an assignment to a class deactivated later stays on record (design owner, 2026-10-29, C9).
 16. **DD-16: With enforcement on, the admission form offers only the courses the selected centre may sell** (design owner, 2026-10-29, C10).
 17. **DD-17: Audit rows of course changes keep the share** (who changed it, from what to what) (design owner, 2026-10-29, C15).
@@ -221,11 +223,9 @@ export type CourseDetails = {
 | Risk | Impact | Mitigation or acceptance | Test |
 |---|---|---|---|
 | Switching enforcement on before centres have classes | Every admission refused | DD-7 makes this visible; the switch is one constant | T-CM-003 |
-| Free-text department | Spelling variants | Accepted until a master (DD-5) | none |
+| Free-text department | Spelling variants; must be cleaned before a department master can reference it | Accepted until a master (DD-5, D14) | none |
+| The share moves to fee structures in Stage 4 | Its manager-only rule moves with it | Recorded for Stage 4 (D14) | none |
 | Course edits change history in place | Reports change retroactively | Audited before/after (D-CAT-3 default) | T-CM-001 |
-| The share moves to fee structures in Stage 4 | The column grant and definer pattern must be redone there | Recorded for Stage 4 (D14) | none |
-| Free-text department | Must be cleaned before a department master can reference it | Recorded (DD-5, D14) | none |
-| A new course column without a select grant | The app cannot read it | The column-privilege test fails until granted (D6) | T-CM-005 |
 
 ## Detailed Implementation Plan
 
@@ -234,8 +234,8 @@ Outline; the file-by-file plan is written against the code during EGM step 9:
 | Phase | Items |
 |---|---|
 | M1 Documents | T-CM-001…006 in audit 09; matrix links on R-090, R-091 |
-| M2 Server | Migration 0016 (columns, checks, grants, share column grant and definer function, link table); `schema.prisma`; `catalogue.ts` fields, `setCourseClasses`, reads; `CATALOGUE_GATES` and the visible/availability checks in `people.ts`; audit catalogue entry and test literal; T-RLS-005 inventory; tests |
-| M3 Pages | `/admin/catalogue/courses` list, new, edit; routes; home link; tests |
+| M2 Server | Migration 0016 (columns, checks, grants, link table); `schema.prisma`; `catalogue.ts` fields, `setCourseClasses`, reads; `CATALOGUE_GATES`, the visible/availability checks and the `admitOptions` payload in `people.ts`; `course-offer.ts`; audit catalogue entry and test literal; tests |
+| M3 Pages | `/admin/catalogue/courses` list, new, edit; routes; `admin-http.ts` detail and message; the admission form's offered-course list; home link; tests |
 | M4 Evidence | Smoke additions; mutation checks; E-entry |
 
 *Drafted with EGM (draft step followed manually)*
