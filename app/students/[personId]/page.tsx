@@ -2,7 +2,7 @@ import { pageRead } from "@/server/page-read";
 import { getPerson } from "@/server/people";
 
 // A learner as the viewer may see them: identity, then each admission in their student.view scope.
-// Malformed, missing or out-of-scope ids: the same 404 (T-SEC-001). No edits here (DD-5).
+// Malformed, missing or out-of-scope ids: the same 404 (T-SEC-001). Identity is corrected by ticket only (admission-screens DD-5).
 export default async function Student({ params }: { params: Promise<{ personId: string }> }) {
   const { personId } = await params;
   const { person: p, admissions } = await pageRead((s) => getPerson(s, personId));

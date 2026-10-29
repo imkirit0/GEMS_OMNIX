@@ -186,7 +186,7 @@ Lock order is always form lock, match-key lock, then the series rows, so there i
 2.  **DD-2: Unstyled pages** until a design system is chosen (design owner, 2026-10-29).
 3.  **DD-3: No documents** in this piece (design owner, 2026-10-29).
 4.  **DD-4: The admit form submits to a Server Action** that returns the typed values and any candidates to the page, so the duplicate choice needs no retyping and no personal data enters a URL. The rest of the app keeps route handlers (design owner, 2026-10-29).
-5.  **DD-5: No edits after save.** A wrong admission is corrected by a later R-095 ticket (D-ADM-3's proposed default: identity and contact fields via ticket only).
+5.  **DD-5: No edits after save.** A wrong admission is corrected by a later R-095 ticket (D-ADM-3's proposed default: identity and contact fields via ticket only). *Superseded for contact and family details by learner-details DD-10 (2026-10-29): those are edited directly; identity stays ticket-only.*
 6.  **DD-6: The list searches by Admission No, Register No, name start and mobile,** at most 100 rows, under the existing search rate limit; it never shows the mobile.
 7.  **DD-7: A plain select of active courses** per course row, three rows.
 8.  **DD-8: The admission date defaults to today (Asia/Kolkata)** and is not checked against the academic year's dates (catalogue DD-6).

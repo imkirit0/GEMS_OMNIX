@@ -1,7 +1,7 @@
 # Learner details (Stage 3, second piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-10…DD-12).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list below is PMC (a parameter until its owner signs). Input: [`input-brief.md`](input-brief.md).
@@ -46,66 +46,114 @@ The admission form (admission-screens design, E-037) collects only the identity 
 
 ## Technical Plan (Architecture)
 
+Z- and C- ids refer to the findings in [`zoom_out_report.md`](zoom_out_report.md) (step 5) and [`comprehension_report.md`](comprehension_report.md) (step 6).
+
 ### Data Model (migration `0015_person_detail`)
 
 `app.person_detail`, one row per person at most (`person_id` primary key, foreign key to `person`, restrict):
 
-| Column | Type | Rule (named check `person_detail_<column>_check`) |
+| Column | Type | Named check `person_detail_<column>_check` |
 |---|---|---|
-| `current_address`, `permanent_address` | text, null | trimmed, 1–500 characters |
-| `current_place`, `permanent_place` | text, null | trimmed, 1–100 |
-| `current_pincode`, `permanent_pincode` | text, null | `^[1-9][0-9]{5}$` (Indian PIN) |
-| `nationality` | text, null | `^[A-Z]{2}$` only: the database checks the format, the app checks the code against the list (the only list not mirrored, Z2) |
-| `blood_group` | text, null | one of `A+ A- B+ B- AB+ AB- O+ O-` |
-| `employment_status` | text, null | one of `STUDENT EMPLOYED SELF_EMPLOYED UNEMPLOYED` (PMC) |
-| `qualification` | text, null | one of `BELOW_SSLC SSLC PLUS_TWO DIPLOMA DEGREE POSTGRADUATE OTHER` (PMC) |
+| `current_address`, `permanent_address` | text, null | `col = btrim(col) and char_length(col) between 1 and 500` |
+| `current_place`, `permanent_place` | text, null | the same, 1–100 |
+| `current_pincode`, `permanent_pincode` | text, null | `col ~ '^[1-9][0-9]{5}$'` (Indian PIN) |
+| `nationality` | text, null | `col ~ '^[A-Z]{2}$'` only: the database checks the format, the app checks the code against the list (Z2) |
+| `blood_group` | text, null | `col in ('A+','A-','B+','B-','AB+','AB-','O+','O-')` |
+| `employment_status` | text, null | `col in ('STUDENT','EMPLOYED','SELF_EMPLOYED','UNEMPLOYED')` (PMC) |
+| `qualification` | text, null | `col in ('BELOW_SSLC','SSLC','PLUS_TWO','DIPLOMA','DEGREE','POSTGRADUATE','OTHER')` (PMC) |
 | `father_name`, `mother_name`, `guardian_name` | text, null | trimmed, 1–100 |
 | `father_occupation`, `mother_occupation`, `guardian_occupation` | text, null | trimmed, 1–100 |
-| `mother_phone`, `father_phone`, `guardian_phone` | text, null | `^[0-9]{10}$` (normalised as `mobile` is) |
+| `father_phone`, `mother_phone`, `guardian_phone` | text, null | `col ~ '^[0-9]{10}$'` |
 | `guardian_relation` | text, null | trimmed, 1–50 |
-| `version` | int, not null, default 1 | optimistic lock for edits (DD-8); a person without a row is version 0 |
+| `version` | int, not null, default 1 | optimistic lock (DD-8); a person without a row has version 0 |
 
-*   **Why a separate table (DD-4):** the identity columns of `person` keep their only update path (`changeIdentity()`), their column grants and their match-key trigger; details get their own grants and edit path. A row is created only when at least one detail is given.
-*   **RLS:** as `person` (0011): `select` and `update` when an admission of the person is visible; `insert` when the caller holds `student.admit` somewhere; no delete policy. The edit function adds the stricter check (below).
+*   **Why a separate table (DD-4):** the identity columns of `person` keep their only update path (`changeIdentity()`), their column grants and their match-key trigger.
+*   **RLS** as `person` (0011): `select` and `update` when an admission of the person is visible (`exists (select 1 from app.admission a where a.person_id = person_detail.person_id)`); `insert` when the caller holds `student.admit` somewhere; no delete policy. The edit function adds the stricter check below.
 *   **Grants** (`gems_app`): `select, insert`; `update` on every column except `person_id`.
-*   **Lists** live in one file, `src/server/details-lists.ts` (blood groups, employment statuses, qualifications with labels, ISO country codes), imported by validation, the form and the view. Country names come from `Intl.DisplayNames(['en'], { type: 'region' })`, so the file holds codes only. The database checks mirror the three short lists, and a test asserts they agree; nationality is excluded from that agreement (format only in the database).
 
-### Validation (`detailField()` in `src/server/people.ts`)
+### Types and Lists
 
-One function per field, as `identityField()` does: trims, normalises phones (spaces, dashes, a leading `+91` or `0` removed), turns `""` into `null`, and throws `invalid(<field>, <rule>)` (`PersonError` with `field` and `rule`). A detail set where every field is `null` writes no row.
+```ts
+// src/server/details-lists.ts (codes only; labels for the three short lists)
+export const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
+export const EMPLOYMENT_STATUSES = { STUDENT: "Student", EMPLOYED: "Employed", SELF_EMPLOYED: "Self-employed", UNEMPLOYED: "Unemployed" };
+export const QUALIFICATIONS = { BELOW_SSLC: "Below SSLC", SSLC: "SSLC", PLUS_TWO: "Plus Two", DIPLOMA: "Diploma", DEGREE: "Degree", POSTGRADUATE: "Postgraduate", OTHER: "Other" };
+export const COUNTRY_CODES: readonly string[]; // the 249 officially assigned ISO 3166-1 alpha-2 codes, written out
+export const DEFAULT_NATIONALITY = "IN"; // DD-12
+// src/server/people.ts
+export const DETAIL_KEYS = ["currentAddress", "currentPlace", "currentPincode", "permanentAddress", "permanentPlace",
+  "permanentPincode", "nationality", "bloodGroup", "employmentStatus", "qualification", "fatherName", "fatherOccupation",
+  "fatherPhone", "motherName", "motherOccupation", "motherPhone", "guardianName", "guardianRelation", "guardianPhone",
+  "guardianOccupation"] as const; // the 20 columns in camelCase; no version, no permanentSame
+export type DetailKey = (typeof DETAIL_KEYS)[number];
+export type Details = Record<DetailKey, string | null>;
+export function detailField(k: DetailKey, v: unknown): string | null; // throws invalid(k, rule); k is also the input name
+```
 
-### Admission Form
+*   Country names come from `new Intl.DisplayNames(["en"], { type: "region" })`; `Intl` cannot list regions, so the codes are written out once, and a test asserts each has a display name other than itself (C13).
+*   A test asserts the three short lists equal the database checks (by inserting each value and one outsider); nationality is excluded (format only in the database).
 
-*   `AdmitInput` gains `details?: Partial<Details>`; `admit()` validates them before the transaction and, after inserting the admission, inserts the `person_detail` row **only for a new person**. Linking an existing person (`existingId`) ignores the typed details, as it ignores the typed identity; the existing details are edited on the learner's page.
-*   **Shared parts (Z4):** one `DETAIL_NAMES` list (the inputs, named after the columns in camelCase: `currentAddress`, `fatherPhone`, …, plus the checkbox `permanentSame`), spread into `FORM_NAMES`; one `detailsFrom(fd)` in `admission-form.ts` that maps them and, when `permanentSame` is checked, copies the three current fields to the permanent ones; one `<DetailsFields values errors>` component in `app/students/details-fields.tsx`, rendered by the admit form and the edit form (both offer "same as current").
-*   The admit form gains the two sections "Contact" and "Family" through that component. Required for a new person: `currentPincode`, `employmentStatus`, `qualification` (DD-6), checked by the form layer as `dateOfBirth` and `mobile` are (admission-screens DD-14).
+### Validation (`detailField`)
+
+Every value: `typeof v === "string"` (else `invalid(k, "invalid")`), trimmed, `""` → `null`. Then:
+
+| Keys | Rule string (shown to the user) |
+|---|---|
+| addresses | `1-500 characters` |
+| places, names, occupations | `1-100 characters` |
+| `guardianRelation` | `1-50 characters` |
+| pincodes | `6 digits, not starting with 0` |
+| phones | spaces, dashes and a leading `+91` or `0` removed, then `10 digits` |
+| `nationality` | `a country code` (upper-cased, must be in `COUNTRY_CODES`) |
+| `bloodGroup`, `employmentStatus`, `qualification` | `one of the listed values` |
+
+### Admission Form (new person only)
+
+*   **`AdmitInput.details?: Partial<Details>`.** With `existingId`, `admit()` neither validates nor writes `details`, and the form layer skips the required checks (as admission-screens DD-14 does for `dateOfBirth` and `mobile`) (C6). Without `existingId`, `admit()` validates every given key with `detailField` before the transaction (field errors, nothing audited).
+*   **Insert:** in the `fresh` branch, after the admission insert, a plain `insert into app.person_detail (person_id, <given non-null columns>) values (…)` with no `returning` (version defaults to 1), skipped when every value is null (C7). It follows the admission so any later read sees it through the select policy. A check violation here would mean the app and database disagree (T-LD-004 guards that); it is not mapped and shows as the generic error page.
+*   **Shared form parts (Z4):** `DETAIL_NAMES = [...DETAIL_KEYS, "permanentSame"]`, spread into `FORM_NAMES`; `detailsFrom(fd): Partial<Details>` in `admission-form.ts` reads every detail input (`""` → `null`) and, when `permanentSame` is checked, overwrites the three permanent fields with the current ones; `<DetailsFields values errors>` in `app/students/details-fields.tsx` renders the "Contact" and "Family" sections for both forms. The checkbox is unchecked on load (C16). The nationality `<select>` lists every code with its name, defaulting to `IN` on the admit form (DD-12).
+*   **Required (DD-6, DD-11):** `currentPincode`, `employmentStatus`, `qualification` → `fieldErrors[k] = "required"` when empty, on the admit form for a new person and on the edit form always.
 *   Field errors reach their inputs through the existing mapping (`PersonError.field` equals the input name).
 
-### Edit Path (DD-3, DD-7, DD-8)
+### Edit Path (DD-3, DD-7, DD-8, DD-10, DD-11)
 
-*   **The edit centre is known before the action (Z1).** `getPerson()` returns `editCentreId`: the centre of the person's earliest admission in `scoped_centre_ids('student.admit')`, or `null`. It drives the "Edit details" link and a hidden `centreId` on the edit form.
-*   **`updateDetails(session, personId, centreId, version, changes)`** in `people.ts`, through `scopedAction` with action `person.details.update`, permission `student.admit` and `meta.centreId = centreId` (so `authorize()` checks that centre first), then the existing `assertAdmittedAt(tx, centreId, personId)`. A forged centre gives `Forbidden` (audited DENIED, 404 on the page) or `PersonError("notfound")` (404); a view-only user gets the same 404.
-*   Inside the transaction: lock `app.person … for update` first, as `changeIdentity()` does, so two first edits of a person without a row queue instead of colliding on the primary key (Z5); read the detail row (missing = version 0); a different `version` → `invalid("details", "changed since you opened them")`; no field changed → `invalid("details", "nothing to change")`; otherwise upsert the changed fields with `version + 1` and audit `before` and `after` of the changed fields only. `submitDetails` shows field `details` as a form-level message (Z10).
-*   **Page:** `/students/[personId]/details` (form pre-filled from the current row, hidden `version`), a Server Action `saveDetailsAction` in `app/students/[personId]/details/actions.ts` following the admit action's pattern (`hasOrigin()`, thin action over a tested `submitDetails()` in `src/server/admission-form.ts`, values in the state only, redirect to the learner on success). The view page shows the details and an "Edit details" link when the viewer may edit.
-*   The exports test allows the third action name.
+*   **`PersonView` gains** `details: Details | null` (null without a row), `detailsVersion: number` (0 without a row) and `editCentreId: number | null` (C2). `editCentreId` = `select centre_id from app.admission where person_id = $id and centre_id = any (app.scoped_centre_ids('student.admit')) order by created_at, id limit 1`, read in `getPerson()`'s transaction. Since `getPerson()` needs `student.view`, editing needs both: `student.view` to see the person and `student.admit` at the edit centre (DD-9 of admission-screens already gives every admit role view) (C10).
+*   **The view page** shows the details and an "Edit details" link iff `editCentreId !== null`. **The edit page** `/students/[personId]/details` calls `getPerson()` and `notFound()` when `editCentreId` is null; otherwise it renders the form pre-filled from `details`, with hidden `personId`, `centreId` and `version`.
+*   **`updateDetails(session, personId, centreId, version, changes: Partial<Details>): Promise<{ version: number; before: Partial<Details>; after: Partial<Details> }>`** (C2, C3, C5, C8):
+    1.  Before the action: `personId` a UUID, `centreId` and `version` safe integers, `version >= 0`, else `PersonError("notfound")` (a 404, no audit). Every key in `changes` through `detailField` (field errors, no audit). Keys absent from `changes` are left as they are; a key present with `null` clears it.
+    2.  `scopedAction(session, { action: "person.details.update", permission: "student.admit", centreId, targetType: "person", targetId: personId }, fn, (r) => ({ before: r.before, after: r.after }))`, no `onFailure`. A centre without `student.admit` gives `Forbidden`, audited DENIED, a 404 on the page.
+    3.  In the transaction: `assertAdmittedAt(tx, centreId, personId)` (a `notfound` here is not audited, as for `changeIdentity`'s callers, C18); `select 1 from app.person where id = $1 for update` (two first edits queue, Z5); read the detail row. Its `version` (0 without a row) ≠ `version` → `invalid("details", "changed since you opened them; reload the page")`. Changed keys = those whose normalised value differs from the stored one (all-null without a row); none → `invalid("details", "nothing to change")`.
+    4.  No row: `insert` the changed keys with `version = 1`. A row: `update app.person_detail set <changed columns>, version = version + 1 where person_id = $1 and version = $v`; 0 rows → the stale error. Return the new version and `before`/`after` of the changed keys.
+*   **The form:** `saveDetailsAction(prev: DetailsFormState, fd)` in `app/students/[personId]/details/actions.ts`, the thin pattern of `admitAction`: `pageRead(async (s) => submitDetails(s, await headers(), fd))`, redirect on success.
+
+```ts
+export type DetailsFormState = { values: Record<string, string>; personId: string; centreId: string; version: string;
+  fieldErrors: Record<string, string>; formError?: string };
+export async function submitDetails(session: string, h: Headers, fd: FormData): Promise<DetailsFormState | { redirect: string }>;
+```
+
+*   `submitDetails`: `hasOrigin(h)` (else `Forbidden`); `detailsFrom(fd)` with all 20 keys (every input is posted, so an empty input clears); the required check (DD-11); `updateDetails(...)`; success → `{ redirect: "/students/<personId>" }`. `PersonError` `invalid` with `field === "details"` → `formError` = its rule; other fields → `fieldErrors`. It does **not** catch `Forbidden` or `PersonError("notfound")`, so `pageRead()` answers 404 (C9). A stale refusal keeps the posted `version`, so the message tells the user to reload.
 
 ### Visibility and Personal Data
 
-*   Details are read only through `getPerson()` (extended), so they follow its `student.view` scope and 404 parity.
-*   Audit rows of `person.details.update` carry the changed values (addresses, family names and phones), as `changeIdentity()`'s callers carry identity values; `app.redact()` does not mask them (PMC under D-SEC-4). No details enter URLs, logs or exports.
+*   Details are read only through `getPerson()`, so they follow its `student.view` scope and 404 parity.
+*   Audit rows of `person.details.update` carry the changed values unmasked (PMC under D-SEC-4, DD-9). No details enter URLs, logs or exports.
 
-### Migration Framework
+### Migration Framework (Z3, C11)
 
-Today all of `people.ts` is hashed into every mapping rule (`etl/canonical.ts`), so every Stage 3 change to it has forced new rule versions (v2, v3) though no rule changed (Z3). This piece moves the helpers the rules import (`isoDate`, `normCode`, `academicYearOk`, `ACADEMIC_YEAR_RULE`, `ADMITTED_THIS_YEAR`, `identityField`, `IDENTITY_KEYS`, `StoredIdentity`, `PersonError`, `PERSON_POLICY`, `CODE_RULE`) into `src/server/person-rules.ts`, re-exported from `people.ts` so callers do not change, and hashes that module instead. That costs one more bump, to version 4; later changes to `people.ts` (correction tickets, previous marks) no longer do. No rule maps details yet (Non-Goals).
+*   `src/server/person-rules.ts` (new) takes, unchanged: `PersonError`, `invalid` (now exported), `optText`, `istToday`, `isoDate`, `identityField`, `IDENTITY_KEYS`, `StoredIdentity`, `Identity`, `Gender`, `ACADEMIC_YEAR_RULE`, `academicYearOk`, `ADMITTED_THIS_YEAR`, `normCode`, `CODE_RULE`, `PERSON_POLICY` (the last two are not imported by a rule; they move to keep the stored-format rules together). It imports nothing from `./db`, `./action` or Prisma. `people.ts` re-exports all of them, so app callers do not change.
+*   The three rule files change their imports to `../../src/server/person-rules`; `etl/run.ts`, `etl/types.ts` and `etl/checks.ts` may keep importing from `people.ts` (they are not hashed). `HASHED_WITH_EVERY_RULE` (`etl/canonical.ts`) becomes `["src/server/person-rules.ts", "etl/ids.ts"]`, and the comment in `etl/run.ts` says so. All three rules move to version 4 (one last bump); `tests/etl.test.ts` expects `rule centre v4: …`. No rule maps details yet.
 
 ### Tests
 
 | ID | What it does | Expected |
 |---|---|---|
-| T-LD-001 | Admit through `submitAdmission` with details, with "same as current", without the three required fields, with `existingId` | Row written with the admission; permanent copied; three field errors; `existingId` writes no details |
-| T-LD-002 | Edit as `student.admit` at the learner's centre; a second edit with the old `version`; an edit by a centre user who only views; nothing changed | Saved, `version` 2, one audit row with the changed fields before/after; stale refused; view-only user 404; "nothing to change" |
-| T-LD-003 | Read and update as another centre's user; identity unchanged after a details edit; direct SQL as `gems_app` updating `person_id` | Not visible, update 0 rows; identity and match key unchanged; 42501 |
-| T-LD-004 | Each list value and format, in TypeScript and as direct inserts; the lists file against the database checks | App and database accept and refuse the same values (nationality: the database checks the format only) |
+| T-LD-001 | `submitAdmission` with details, with "same as current", without the three required fields, with `existingId` and invalid typed details | Row written with the admission (version 1); permanent copied; three `required` field errors; `existingId` validates and writes no details |
+| T-LD-002 | `submitDetails` as `student.admit` at the learner's centre; a second edit with the old `version`; clearing a field; clearing a required field; posting the stored phone in another spelling; nothing changed; a view-only centre user (GET page and post); a forged `centreId` | Saved, version 2, one audit row with the changed keys only; stale form message; the field cleared; `required`; no change detected; "nothing to change"; 404 and DENIED for the forged centre |
+| T-LD-003 | Read and update as another centre's user; identity and match key unchanged after a details edit; direct SQL as `gems_app` updating `person_id`; two concurrent first edits | Not visible, update 0 rows; identity unchanged; 42501; one saved, the other stale |
+| T-LD-004 | Each list value and format, in TypeScript and as direct inserts; every country code has an `Intl` name | App and database accept and refuse the same values (nationality: format only in the database) |
+| T-ADM-006 (changed) | The exports test | Exactly `["admitAction", "saveDetailsAction", "searchAction"]` |
+| T-AUD-009 | The coverage gate | `person.details.update` is in `AUDIT_CATALOGUE` (the gate finds it in `people.ts` and fails without it) and asserted by T-LD-002 |
 
 ## Decisions
 
@@ -118,12 +166,15 @@ Today all of `people.ts` is hashed into every mapping rule (`etl/canonical.ts`),
 7.  **DD-7: Editing needs `student.admit` at a centre where the learner is admitted;** viewing needs `student.view` as today.
 8.  **DD-8: Optimistic lock by `version`;** a stale edit is refused, not merged.
 9.  **DD-9: Audit rows carry the changed detail values unmasked** (PMC under D-SEC-4).
+10. **DD-10: Contact and family details are edited directly; only identity needs a ticket.** This supersedes admission-screens DD-5 for these fields: D-ADM-3's proposed default becomes "identity fields via ticket only" (design owner, 2026-10-29, C12).
+11. **DD-11: Pincode, employment status and qualification stay required once set:** the edit form requires them too, so a migrated learner without them gets them on the first edit (design owner, 2026-10-29, C4).
+12. **DD-12: Nationality lists all officially assigned ISO 3166-1 alpha-2 codes,** defaulting to India on the admit form (design owner, 2026-10-29, C13).
 
 ## Open Questions
 
 | ID | Decision owner | What it affects here | Default used now (PMC) |
 |---|---|---|---|
-| D-ADM-3 / D-STU-1 | PRO | Which fields need a ticket | Identity only; details edited freely (DD-3) |
+| D-ADM-3 / D-STU-1 | PRO | Which fields need a ticket | Identity only; contact and family details edited directly (DD-3, DD-10; supersedes admission-screens DD-5's default) |
 | D-SEC-4 | IT + Legal | Family data, audit content | Stored plainly, audited unmasked (DD-9) |
 | D-MIG-4 | Owners | Legacy lists | Fixed lists; legacy mapping later |
 
