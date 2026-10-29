@@ -1,7 +1,7 @@
 # Centre onboarding (Stage 3, eighth piece, WF3)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-5 were taken as the recommended options under the owner's standing instruction of 2026-10-29; build approval follows the EGM review (steps 5–9).
+*   **Status:** Proposed. DD-1…DD-5 were taken as the recommended options under the owner's standing instruction of 2026-10-29; build approval follows the EGM review (steps 5–9). Steps 5–7 ran in parallel: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md); DD-3 corrected (recommended option under the standing instruction).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`; fixed lists are PMC. Input: [`input-brief.md`](input-brief.md).
@@ -33,7 +33,6 @@ An inactive centre cannot take new admissions or enquiries. Setting a centre's c
 *   Credentials resend (R-228): the existing user administration creates logins.
 *   Logo and QR code (R-034; needs ADR-002 storage).
 *   Board, affiliation, accreditation, website, parent centre, account number, and the country/state/district cascade: later fields.
-*   Blocking sign-in for inactive centres: they cannot trade (DD-3), which is the outcome WF3 needs.
 
 ## Technical Plan (Architecture)
 
@@ -144,6 +143,83 @@ getCentreRecord(session, id): Promise<CentreRecord>;   listGeography(session): P
 *   `ADMIN_MESSAGES` gains `org.centre.duplicate`, `org.centre.checklist` ("Set the centre's class and complete its GST details before activating it."), `org.region.duplicate` and `org.area.duplicate`.
 *   Form mapping: `""` becomes `null`. The `gstEnabled` checkbox is `=== "1"`. `areaId` uses `Number`. Dates are posted as strings.
 
+### Contracts (steps 5–7: Z-, C- and D- findings; binding; they supersede the text above where they differ)
+
+Steps 5, 6 and 7 ran in parallel on commit `a384097`. Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md).
+
+*   **Sign-in is already blocked (Z1, C1, D1).** DD-3 is corrected; the recommended option was taken under the standing instruction.
+    *   `app.account_usable` (0004) already refuses users whose only assignments are at centres that are not ACTIVE; T-AUTH-012 asserts it. This matches WF3's "If not, the centre's login is blocked".
+    *   So a new centre's staff can sign in only after activation, and deactivating a centre signs out its centre-only staff at their next request.
+    *   The trading gate covers users with wider or other-centre scope.
+    *   The "Create a login" link carries the note "Staff can sign in once the centre is active".
+    *   T-CO-003 asserts that a centre-only user of a new centre is refused until it is activated, and refused again after deactivation.
+*   **Create without RETURNING (Z2, C2, D2, D7).**
+    *   `createCentre` takes `nextval('app.centre_id_seq')` first, then inserts with that explicit id and no RETURNING. Region and area may use RETURNING: their select policy is `true`.
+    *   The insert grant includes `id` and excludes `status` (C7, D6); the column default keeps a new centre INACTIVE.
+    *   0020 sets the region, area and centre sequences with `setval(..., (select coalesce(max(id), 1) from ...))`, so legacy explicit ids cannot collide.
+    *   23505 is mapped by constraint name only:
+
+        | Constraint | Key | Text |
+        |---|---|---|
+        | `centre_code_key` | `org.centre.duplicate` | "A centre with that code already exists." |
+        | `region_code_key` | `org.region.duplicate` | "A region with that code already exists." |
+        | `area_region_id_name_key` | `org.area.duplicate` | "That region already has an area with that name." |
+
+        Any other 23505 is not a duplicate message (C8).
+*   **Each permission keeps its own columns, in the database (D3, Z4).** A `before update` trigger `centre_write_guard` on `app.centre` (security invoker) applies when `current_user = 'gems_app'`, so the owner and fixture writes are unaffected:
+    *   `centre_class_id` changed and `has_permission('catalogue.manage', null)` false → raise 42501;
+    *   any other column changed (`to_jsonb(new) - 'centre_class_id'` against old) and `has_permission('org.centre.manage', null)` false → raise 42501.
+
+    T-CO-001 asserts both: a catalogue manager (`tok-catA`) changing `status` is refused, and a centre manager changing `centre_class_id` is refused.
+*   **No re-parenting (Z3, C12, D4).**
+    *   `updateArea(session, id, { name })` renames only; the area update grant is `update (name)`.
+    *   The region update grant is `update (name)`; the code never changes.
+    *   A centre's `areaId` change is allowed. It moves the centre between REGION scopes, so the audit records the before and after `areaId`.
+*   **Audit values (Z6).** Centre, region and area edits audit `{ before, after }` values of the changed fields. Centre data is not personal data, so this matches the catalogue.
+*   **One read (Z5).** `getCentre` is extended instead of adding `getCentreRecord`. It returns the new fields, `classCode`, `areaId` and `canManage`, keeps its two gates and its 404 parity, and `/centres/[id]` keeps using it.
+*   **Phone (Z7, C5, D10).**
+    *   The phone uses the `detailField` phone normaliser (strips spaces, `-`, `+91` and a leading 0), so an STD landline such as `0484 2300000` is stored as 10 digits.
+    *   The database check is `^[0-9]{10}$`.
+    *   `phone` is required on create. On update, a null phone stays null on a legacy row, but a set phone cannot be cleared: `phone: required`.
+    *   The type is `Partial<Omit<CentreInput, "code" | "phone">> & { phone?: string | null }`.
+*   **GST (C6, D5).**
+    *   With `gstEnabled` false on the merged row: a non-null `gstSupply` gives `gstSupply: only with GST`; otherwise a non-null `gstin` gives `gstin: only with GST`.
+    *   When the locked row is ACTIVE, `updateCentre` also applies the checklist's GST rule to the merged row: enabled requires supply and GSTIN, `gstSupply: required while active` and `gstin: required while active`.
+    *   A class cleared on an active centre through `setCentreClass` is accepted and recorded in DD-2. The class-per-centre page stays catalogue's (E-041).
+*   **Message order (C6).** Code, name, areaId, email, phone, address, category, gstSupply, gstin, ownership, agreementFrom, agreementTo, openedOn; then the GST combination; then agreementTo against agreementFrom.
+*   **Region and area rules and messages (C9, D11).**
+
+    | Field | Rule | Message |
+    |---|---|---|
+    | Region `code` | The catalogue code rule | The catalogue code messages |
+    | Region and area `name` | btrim, 1–100 | `name: 1-100 characters` |
+    | `areaId` | Must exist (`area` has no active flag) | `areaId: unknown` |
+    | `regionId` | Must exist | `regionId: unknown` |
+
+*   **Checks and their pre-checks (C10, C11, C17).** 0020 redeclares the `ws` and `ctl_address` constants from 0018. Before it adds `region_code_check`, `region_name_check`, `area_name_check` and `centre_code_check` (the 0012 rule), a `do $$` block collects the failing rows (`string_agg`) and raises `'<table> rows fail <check>: %'`. `centre_email_check` is `email ~ '^[^@]*@[^@]*$' and length(email) <= 200`; the app messages are `email: one @` and `email: at most 200`.
+*   **Trading gate placement (C3, C4, D8, D9).**
+    *   **`admit()`:** the gate runs right after `if (used) throw new AdmissionExists()` and before the enquiry block: `select status::text from app.centre where id = $centre`. Anything but ACTIVE gives `invalid("centreId", "centre is not active")`. `submitAdmission` checks for that field and rule before its `FORM_NAMES` branch and returns `formError: ADMIT_MESSAGES.centreInactive` ("This centre is not active yet.").
+    *   **`createEnquiry()`:** the gate is the first statement of the action callback, before `liveMaster` and before the same-mobile check, with the same refusal. `enquiry-form.ts` maps it to `formError: ENQUIRY_MESSAGES.centreInactive`.
+    *   **`admitOptions`** lists only ACTIVE centres. A user whose admit centres are all inactive gets Forbidden, so the page is a 404. That is the same answer as having no admit scope, and such users cannot sign in anyway unless they have other scopes.
+    *   **`enquiryOptions`:** `manage` becomes `c.id = any (scoped_centre_ids('enquiry.manage')) and c.status = 'ACTIVE'`. The view list is unchanged, so history stays filterable.
+    *   **Accepted race:** the gate is a plain read, like catalogue DD-13. An admission that read ACTIVE just before a deactivation commits completes.
+*   **Routes (C13).**
+    *   **`POST /centres/create`:** back `/centres/new`; success `/centres/{id}?saved=1`.
+    *   **`POST /centres/[id]/save`:** the id comes from `params` (`^\d{1,9}$`, else 404); back `/centres/{id}`; success `/centres/{id}?saved=1`.
+        *   `op=details` takes the field names of `CentreInput` without `code`.
+        *   `op=active` takes `active` (`flag()`) and `reason`.
+    *   **`POST /centres/geography/save`:** fields `op`, `id`, `code`, `name`, `regionId`; back and success `/centres/geography[?saved=1]`.
+    *   **Any route:** an unknown `op` gives `RbacError("invalid", "op: unknown")`.
+*   **Gates and existing tests (C14, C15, D11).**
+    *   **T-AUD-009** scans `["src/server/centres.ts", /"(org\.[a-z0-9_.]+)"/g]`.
+    *   **T-SEC-007** splits its loop, as `hoAll` (neither permission):
+        *   `insert into app.region` → 42501;
+        *   `update app.area set name` → 0 rows;
+        *   `update app.centre set status` → 0 rows;
+        *   permission and role statements → 42501, unchanged.
+    *   **`foundation.test.ts`:** the `centre` comment and its `needed` list now include INSERT and UPDATE.
+    *   **T-CO-002** asserts ENABLE and FORCE on region and area, with cmds `["INSERT","SELECT","UPDATE"]`.
+
 ### Tests (`tests/centre-onboarding.test.ts`)
 
 | ID | Goal | What it does | Expected |
@@ -168,8 +244,8 @@ getCentreRecord(session, id): Promise<CentreRecord>;   listGeography(session): P
 ## Decisions
 
 1.  **DD-1: `org.centre.manage` (sensitive, ALL) creates and edits centres with identity, category, GST and lifecycle fields;** other R-023 fields later (recommended option, owner's standing instruction, 2026-10-29).
-2.  **DD-2: New centres are INACTIVE; activation needs a reason and a checklist (class set; GST complete when enabled); deactivation needs a reason** (D-ORG-1 default; recommended option, standing instruction).
-3.  **DD-3: An inactive centre cannot take new admissions or enquiries; sign-in is not blocked; existing records stay** (D-ORG-3 default; recommended option, standing instruction).
+2.  **DD-2: New centres are INACTIVE; activation needs a reason and a checklist (class set; GST complete when enabled); deactivation needs a reason; while active, GST stays complete, but a class cleared through the class page is accepted** (D-ORG-1 default; recommended option, standing instruction).
+3.  **DD-3 (corrected at steps 5–7): An inactive centre cannot take new admissions or enquiries; its centre-only staff already cannot sign in (0004 `account_usable`, T-AUTH-012), as WF3 wants; existing records stay** (D-ORG-3 default; recommended option, standing instruction).
 4.  **DD-4: Regions and areas are added and renamed by `org.centre.manage`** (recommended option, standing instruction).
 5.  **DD-5: Credentials, flags, prefixes, logo and QR are out of scope** (recommended option, standing instruction).
 
@@ -177,7 +253,7 @@ getCentreRecord(session, id): Promise<CentreRecord>;   listGeography(session): P
 
 | Alternative | Why not |
 |---|---|
-| Block sign-in for inactive centres | Users can hold roles at several centres; blocking trade at the centre is the effective control, without touching authentication |
+| Relax `account_usable` so centre staff can sign in before activation | Weakens a verified control (T-AUTH-012) and contradicts WF3 ("login is blocked") |
 | An activation ticket with an approver (D-ORG-1's full default) | Ticket types are gated until the numbering policy is signed (correction-tickets DD-18); a reason plus audit now, a ticket later |
 | One permission for catalogue and centres | Centre onboarding is Operations, the catalogue is Academics (audit 04 owners) |
 
