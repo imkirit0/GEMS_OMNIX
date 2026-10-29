@@ -1361,3 +1361,87 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | scripts/smoke-security.mjs | 319589bf40a1fb02a54d43647cdd250cb3c1b71e17a0e67a778173726d11b549 |
 | evidence/mutation-catalogue-masters-2026-10-29.txt | 762c12dd7c7a1df070a6bdf7723727f7e42cfd4b212b2f62eb8908c332904874 |
 | evidence/ci-catalogue-masters-2026-10-29.txt | b08b68c8272aef252684a8304f8e8289cd19c2d2d3760231ae592169ca1cd80d |
+
+## E-042 Enquiry to admission built (sixth Stage 3 piece, WF1) (2026-10-29)
+- **Request:** the owner asked to "go in order" through the roadmap (WF1 first), then left a standing instruction (2026-10-29): "agree on the recommended option and work on everything planned". The design `docs/designs/enquiry/enquiry.md` went through EGM review steps 5–9. Owner decisions: DD-1…DD-4 (before drafting), DD-5…DD-14 (accepted), DD-15 (step 6). Two items were taken as the recommended option under the standing instruction: the build approval, and step 9 R1 (`reset.sql` clears enquiries). Built in phases Q1–Q4.
+- **Q1 (documents):**
+  - Audit 09 gains T-ENQ-001…006.
+  - R-081, R-084 and R-085 are linked.
+  - CSV and FRD regenerated (0 errors).
+- **Q2 (data and server):**
+  - **Migration 0018:**
+    - enquiry, follow-up and the path/type/status masters, with named checks mirroring the app;
+    - `enquiry_guard` (insert open; enrolled rows frozen; ENROLLED exactly with an admission; centre fixed; `created_by` from the session) and `enquiry_followup_guard` (fail-closed parent check);
+    - the follow-up log is append-only with no truncate;
+    - RLS: view to read, manage to write, per centre; no delete grant;
+    - composite FKs tie follow-ups and the admission to the enquiry's centre;
+    - three definer functions (`enquiry_may_receive`, `enquiry_counsellors`, `enquiry_people`) that answer only callers who may view the centre;
+    - seeds (14 paths, 7 types, 6 statuses; PMC);
+    - permissions `enquiry.view`, `enquiry.manage` and `enquiry.setup` (sensitive), all held by `system_admin`.
+  - **`src/server/enquiry.ts`:**
+    - create, with same-mobile warnings that are audited FAILED with ids only and a search-limit hit;
+    - edit with a version;
+    - status, counsellor and follow-up writes, each taking an ordered row lock first;
+    - bulk changes: up to 100, one centre, all or nothing;
+    - list (POST-only search by number, mobile or name), record, calendar, status master.
+  - **Changes to existing code:**
+    - `admit()` links an enquiry in the same transaction, after the resubmit check;
+    - `Forbidden` carries the missing permission, so the DENIED row names it;
+    - the masters registry gains a per-kind permission (paths and types on `enquiry.setup`);
+    - `reset.sql` clears enquiries with admissions.
+  - **Test changes:**
+    - T-CAT/T-RLS lists, T-RLS-005 and T-AUD-009 updated;
+    - the fixtures' enquiry roles are 22–24 (19 is used by learner-details tests);
+    - one ETL test lifts triggers for its cascade truncate.
+- **Q3 (pages):**
+  - `/enquiries` (GET filters, POST search, bulk form);
+  - `/enquiries/new` (warnings, then "Save anyway");
+  - `/enquiries/[id]` (edit, status, counsellor, follow-ups, Enroll);
+  - `/enquiries/calendar`, `/enquiries/statuses`;
+  - enquiry paths and types on the shared masters page;
+  - `/students/new?enquiry=<id>` pre-fills the admission (preference 1; the others listed) and carries the link;
+  - a home link.
+- **Tests:** `tests/enquiry.test.ts` has 7 tests: T-ENQ-001…006, plus the forms and routes. Real server: 5 new checks:
+  - another centre's enquiry and the enrol page are 404 and identical to a missing one;
+  - an Origin-less enquiry post gets 404 and writes nothing;
+  - a same-origin post saves;
+  - the record shows Enroll to a user who may admit.
+- **Mutation checks** (`evidence/mutation-enquiry-2026-10-29.txt`): 61 mutations (39 code, 20 database, 1 drift, 1 real-server). One was MISSED at first (D19: reset() rewrites permissions from the fixtures). A check on the 0018 seed was added, and the mutation is caught. Three were not run; the file gives the reasons.
+- **Checks:** fresh clone with the `ci.yml` environment, `bash scripts/ci.sh` exit 0: no drift; 0 type errors; **180 passed + 3 todo** (18 files); build; bundle scan; admin journey and all security smoke checks passed (`evidence/ci-enquiry-2026-10-29.txt`).
+- **Limits:**
+  - Not built: export, conversion reports, reminders by SMS or e-mail, the R-080 front-office masters, the CRM ticket and profile (later pieces).
+  - Fees, schemes and batches on preferences wait for Stage 4.
+  - Two legacy enquiry paths are unknown.
+  - Unstyled screens; not yet on Supabase (migrations 0012–0018).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0018_enquiry/migration.sql | db1ebd9550137cdb10246c03b3c5816711ab2079cc6e75bad8e0c9a2d5cb9653 |
+| prisma/schema.prisma | 7c0420ff2b78d44017a0d33f8aad3284dbd045d0e00ae7accf10220a4f623a5b |
+| src/server/enquiry.ts | db375b3136865022f10fbb93bf54477c62fa8b9f06bd1966b0cbbf687ba69e1b |
+| src/server/enquiry-form.ts | f3058fb6684bcd8707e8aa16907c55a08c1c546fad8312be7f6d3dd6742a460e |
+| src/server/people.ts | bcd9a120dbaada18b1a7c8dfae8b90bb8f140741a0d2f2a0c9f65c025932bca3 |
+| src/server/action.ts | 9a6124c510d3f06aaefc6b8436a4e65cbc65bf14fafe98d5934dbdfeb82b5fb5 |
+| src/server/admission-form.ts | e9f9a2e3a75320ef1676c6d0ef48e407979018ebc8509065c16077e8a7c6cc50 |
+| src/server/catalogue.ts | 5822d7ea15c736d43f480b7f2a7db8086995dc0535719d7882f9ed32d803dd0f |
+| scripts/etl/reset.sql | 5a46db973b08ff5ce619f8cf11f8559e158e651aef2b4cf16180fc972403ee2c |
+| app/enquiries/page.tsx | cf567606387dd01a5f0fa36161a6297176f9f5459d40e84f2e1dcba4476b3b46 |
+| app/enquiries/list.tsx | 032ce1e58be418c64ac497679a2c5b1c5a3a3b25267bcd89bb2542825dca4c5e |
+| app/enquiries/actions.ts | 2ae5bcf53e364d23c6ede2b5bd368da2c8e4cb1bb09652f701b1a9319f51bcf8 |
+| app/enquiries/enquiry-fields.tsx | f3000b454ce17efc1b63f3d86c9962481fead7511e2d1d730929ebd6719b05f4 |
+| app/enquiries/new/page.tsx | 1ee2959753a7212cdea188603b74a131fecafd54233835fd69c98e2b563a903d |
+| app/enquiries/new/form.tsx | ab92d6185b3dae1a2bbe46c97136fe9e233b3b8b7bd4898d7c00778cfd80d257 |
+| app/enquiries/[id]/page.tsx | e8041d680672f3f3bee3d34a06265d45b122419f7f7c7301cd92eb25f41f4b08 |
+| app/enquiries/[id]/forms.tsx | dff12affec8f2f5d72a28365b410d4ecfa9dad535e2f934ee448e9b9420f41ec |
+| app/enquiries/[id]/actions.ts | 888147afa8fcb9169a5c80dc8af5b4967dc5daa89f28735d8a08a7c15709c867 |
+| app/enquiries/calendar/page.tsx | bffe5dcff0ecf88215a490799521028a9f00522a6a8494908865bb65a092e093 |
+| app/enquiries/statuses/page.tsx | 49219f0d3dd5a7f7287224cec6b07ae11eeaf2a191812f05d9e821762f3e351c |
+| app/enquiries/statuses/save/route.ts | f4adb2c48dd7266c950d58f670b441c5cbde1fc8cb8d89ac79712bab841e45c4 |
+| app/students/new/page.tsx | 8c9bbc4f99e5ce382019167f88c5fa04dda19b884ed68ca7215ac81f40d49e28 |
+| tests/enquiry.test.ts | 3c87d011bd9670b23a2952ac7983dce6840a8c847d419ee828b15c43b83062ff |
+| tests/fixtures.ts | 38b300da036e584db0bde03dfa8735416eb5863c4be7d2965ff41a6e8c3949ed |
+| scripts/smoke-security.mjs | f4cd9d971e5affd93e77eddbecb68cd06fe9d63f93e2a83c01502a00cf51d32d |
+| evidence/mutation-enquiry-2026-10-29.txt | da1c543cfbadd4968445032a95d6e73ab41f9cc2105ed126c9383eb43a970602 |
+| evidence/ci-enquiry-2026-10-29.txt | 85ba89c17cd6a5f8c3062f433b4c1b2ba07271a1398447fc63e133fd13efb423 |
