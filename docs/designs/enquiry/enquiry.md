@@ -1,7 +1,7 @@
 # Enquiry to admission (Stage 3, sixth piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-4 and accepted DD-5…DD-14 on 2026-10-29 (DD-15 at step 6); build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-15); step 7: [`critic_report.md`](critic_report.md) (no new decisions); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (no new decisions).
+*   **Status:** Approved for build on 2026-10-29 after the EGM review (steps 5–9). The approval was taken under the owner's standing instruction of 2026-10-29 to take the recommended option and continue (step 9 R1 likewise). The design owner decided DD-1…DD-4, accepted DD-5…DD-14 and decided DD-15 at step 6. Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO. Every seeded list value is PMC. Input: [`input-brief.md`](input-brief.md).
@@ -443,13 +443,32 @@ addFollowUp(session, centreId: number, id: string,
 
 ## Detailed Implementation Plan
 
-Outline; the file-by-file plan is written against the code during EGM step 9:
+The file-by-file plan (Q1–Q4, each ending green) and the 59 mutation checks are in [`implementation_readiness_report.md`](implementation_readiness_report.md). These contract notes from step 9 are binding.
 
-| Phase | Items |
-|---|---|
-| Q1 Documents | T-ENQ-001…006 in audit 09; matrix links on R-081, R-085, R-084 |
-| Q2 Data and server | Migration 0018 (tables, guard, definer functions, seeds); master registry with per-kind permission; `enquiry.ts`; `admit()` enquiry link; T-RLS-002/005 lists; audit catalogue; tests |
-| Q3 Pages | Enquiry list, form, record, calendar; status page and master slugs; admission pre-fill; home link; tests |
-| Q4 Evidence | Smoke additions; mutation checks; E-entry |
+*   **Reset (R1, recommended option taken):** `scripts/etl/reset.sql` truncates `app.enquiry_followup` and `app.enquiry` with the admissions. Around the truncate it disables and re-enables `enquiry_followup_no_truncate`.
+*   **No database function defaults (R2):**
+    *   the insert guards set `created_by` / `created_at` and `by_user` / `at`, with `coalesce(app.session_user_id(), new.x)`;
+    *   `enquired_on` is not null with no default; the app writes it.
+*   **Fail closed (R3):** the follow-up guard uses `not exists (… e.admission_id is null)`, and the enquiry guard compares kinds with `is distinct from`.
+*   **Deactivation race (R4):** `setEnquiryStatusActive` locks every row of the kind (`order by id for update`) before deciding.
+*   **Form layer (R5):** a plain module `src/server/enquiry-form.ts` (submit functions, states, `ENQUIRY_MESSAGES`, `enrolPrefill`) plus thin Server Actions in `app/enquiries/actions.ts` and `app/enquiries/[id]/actions.ts`.
+*   **T-ADM-006 (R6):** the action-export list grows to the sorted union.
+*   **Prisma (R7):** the model text in the report. The composite admission relation is required in Prisma; the column stays nullable (MATCH SIMPLE).
+*   **Columns and checks (R8–R10):**
+    *   `gender` uses `app."Gender"`;
+    *   the named checks are listed in the report;
+    *   `remark` and the follow-up `note` allow tab, LF and CR.
+*   **Bulk and audit (R11, R12):**
+    *   bulk ids are deduped first;
+    *   audit detail shapes: OK `{ fields }`, bulk `{ ids, fields }`, duplicate FAILED `{ reason, enquiries, persons }`;
+    *   `person.admit` adds `enquiryId` only when given.
+*   **Status master (R13):** a duplicate code is `catalogue.duplicate`; every signed-in user reads; `sortOrder` is parsed with `^\d{1,4}$`.
+*   **Unchanged references (R14):** a preference code already among the stored three counts as unchanged.
+*   **No scope (R15):** no `enquiry.view` scope gives Forbidden (404) on the calendar, the statuses page and `getEnquiry`.
+*   **Other centre (R16):** "other centre" is reachable only with `enquiry.manage` at both centres; T-ENQ-004 expects "not found" otherwise.
+*   **Smoke (R17):** the smoke inserts `created_by` explicitly, and an Origin-less post to `/enquiries/new` is 404.
+*   **Generated documents (R18):** Q1 commits the regenerated CSV and FRD.
+*   **Admission page (R19):** `AdmitFormState.enquiryId` is optional; the page takes `searchParams.enquiry`, and an array gives 404.
+*   **Bulk no-op (R20):** a bulk status change to the current status is counted; a given note is still stored.
 
 *Drafted with EGM (draft step followed manually)*
