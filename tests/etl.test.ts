@@ -127,6 +127,11 @@ describe("P8 dry run on synthetic data (T-MIG)", () => {
     expect(await reg("r.status = 'Completed'")).toEqual([{ disposition: "REJECTED", reason: "status: not in the status map" }]);
     // catalogue skeleton: an unknown course; a well-formed year that is not in the academic year master
     expect(await reg("r.course_code = 'XYZ'")).toEqual([{ disposition: "REJECTED", reason: "course_code: no such course" }]);
+    // admission screens DD-16: the second admission of one person at one centre in one year
+    expect((await a("r.first_name = 'Vani'", [], "person")).map((x) => x.disposition)).toEqual(["IMPORTED", "REJECTED"]);
+    expect((await a("r.first_name = 'Vani'", [])).map((x) => x.reason)).toEqual([null, "academic_year: already admitted at this centre this year"]);
+    expect((await reg("r.admission_key = (select max(source_key collate \"C\") from raw.legacy_admission where first_name = 'Vani')")).map((x) => x.reason))
+      .toEqual(["admission_key: admission not imported"]);
     expect(await a("r.academic_year = '2030-31'", [])).toEqual([{ disposition: "REJECTED", reason: "academic_year: not in the academic year master" }]);
     expect(await reg("r.admission_key = (select source_key from raw.legacy_admission where academic_year = '2030-31')"))
       .toEqual([{ disposition: "REJECTED", reason: "admission_key: admission not imported" }]);
@@ -194,7 +199,7 @@ describe("refusals and confinement (G5, G6)", () => {
     await asAdmin(async (db) => { await db.query(RESET_SQL); await db.query(`update migration.rule set code_hash = 'x' where rule_id = 'centre'`); });
     const e = await run({ mode: "dry", asOf: AS_OF, artifactDir: tmp() }).catch((x) => x);
     expect(e).toBeInstanceOf(RunRefused);
-    expect((e as RunRefused).reasons).toEqual(["rule centre v2: code changed; give it a new version"]);
+    expect((e as RunRefused).reasons).toEqual(["rule centre v3: code changed; give it a new version"]);
   });
 
   test("an existing counter and a non-empty database are refused", async () => {

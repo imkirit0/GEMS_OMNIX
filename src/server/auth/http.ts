@@ -14,6 +14,15 @@ export function sameOrigin(req: Request): boolean {
   return origin !== null && origin === new URL(req.url).origin;
 }
 
+/**
+ * For Server Actions (admission-screens design): Next has already matched the Origin host and refuses a mismatch, but it
+ * lets a request with no Origin through; this closes that gap. Route handlers use sameOrigin(req).
+ */
+export const hasOrigin = (h: Headers): boolean => {
+  const o = h.get("origin");
+  return o !== null && o !== "null";
+};
+
 /** Client IP for rate limiting. Only trust the proxy header where the platform sets it (Vercel: TRUST_PROXY_HEADERS=1). */
 export function clientIp(req: Request): string {
   const forwarded = process.env["TRUST_PROXY_HEADERS"] === "1" ? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() : undefined;

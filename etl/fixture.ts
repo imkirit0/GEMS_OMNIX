@@ -66,10 +66,11 @@ export function buildFixture(seed = FIXTURE_SEED): Fixture {
   addAdmission({ academic_year: "2026-27", centre_code: "GDEMO", admission_no: `${PERSON_POLICY.admissionPrefix("2026-27")}43887` }, 1,
     { register_no: "2064112" }); // the highest numbers sit on excluded rows (G7)
   addAdmission({ academic_year: "2026-27", centre_code: "XX9-99" }, 1);
-  addAdmission({ academic_year: "2026-27", first_name: "Meera", last_name: "Nair", dob: "2001-01-11", mobile: "9811100001" }, 1);
-  addAdmission({ academic_year: "2026-27", first_name: "Nair", last_name: "Meera", dob: "2001-01-11", mobile: "9811100001" }, 1);
-  addAdmission({ academic_year: "2026-27", first_name: "Rahul", last_name: "Menon", dob: "2002-02-02", mobile: "+91 98470 12345" }, 1);
-  addAdmission({ academic_year: "2026-27", first_name: "Rahul", last_name: "Menon", dob: "2002-02-02", mobile: "09847012345" }, 1);
+  // merge pairs at different centres (the spread overrides pick(), so the random stream is unchanged): DD-16 rejects a pair at one centre
+  addAdmission({ academic_year: "2026-27", first_name: "Meera", last_name: "Nair", dob: "2001-01-11", mobile: "9811100001", centre_code: "KL2-25" }, 1);
+  addAdmission({ academic_year: "2026-27", first_name: "Nair", last_name: "Meera", dob: "2001-01-11", mobile: "9811100001", centre_code: "KL3-07" }, 1);
+  addAdmission({ academic_year: "2026-27", first_name: "Rahul", last_name: "Menon", dob: "2002-02-02", mobile: "+91 98470 12345", centre_code: "KL2-25" }, 1);
+  addAdmission({ academic_year: "2026-27", first_name: "Rahul", last_name: "Menon", dob: "2002-02-02", mobile: "09847012345", centre_code: "KL3-07" }, 1);
   addAdmission({ academic_year: "2026-27", first_name: "Sona", dob: "" }, 1);
   addAdmission({ academic_year: "2026-27", first_name: "Tara", admitted_on: "45231" }, 1);
   addAdmission({ academic_year: "2026-2027", first_name: "Uma", admission_no: "LEGACY-UMA" }, 1);
@@ -86,5 +87,9 @@ export function buildFixture(seed = FIXTURE_SEED): Fixture {
   legacy_course_row.push({ source_key: key(legacy_course_row.length + 1), admission_key: twin.source_key, course_code: "XYZ",
     register_no: String(++reg), join_date: twin["admitted_on"]!, status: "Active" });
   addAdmission({ academic_year: "2030-31", admission_no: `${PERSON_POLICY.admissionPrefix("2030-31")}1`, admitted_on: "2026-10-01" }, 1);
+  // admission screens DD-16: one person admitted twice at one centre in one year; the second is rejected
+  const vani = { academic_year: "2026-27", centre_code: "TN1-03", first_name: "Vani", last_name: "Das", dob: "2003-03-03", mobile: "9811100002" };
+  addAdmission(vani, 1);
+  addAdmission(vani, 1);
   return { legacy_centre, legacy_admission, legacy_course_row };
 }

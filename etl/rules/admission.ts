@@ -1,6 +1,6 @@
 // Admission and person mapping rule, one pass (design: "Admission and Person, One Pass"):
 // a person is written only together with an importable admission.
-import { ACADEMIC_YEAR_RULE, academicYearOk, isoDate, normCode, PersonError, type StoredIdentity } from "../../src/server/people";
+import { ACADEMIC_YEAR_RULE, academicYearOk, ADMITTED_THIS_YEAR, isoDate, normCode, PersonError, type StoredIdentity } from "../../src/server/people";
 import { targetName } from "../ids";
 import { SOURCE_SYSTEM, type Ctx, type RawRow, type Result, type RuleError, type Rule } from "../types";
 
@@ -20,7 +20,7 @@ function dateError(column: string, v: string | null, e: unknown): RuleError {
 }
 
 export const admission = {
-  id: "admission", version: 2, owner: "Admissions, PRO", sourceTable: TABLE, entities: ["person", "admission"],
+  id: "admission", version: 3, owner: "Admissions, PRO", sourceTable: TABLE, entities: ["person", "admission"],
   description: "Legacy admissions to person + admission in one pass; duplicates merged by app.person_match_key (synthetic stand-in for D-MIG-4 maps)",
   dispositions: { person: ["IMPORTED", "MERGED", "REJECTED"], admission: ["IMPORTED", "REJECTED"] },
   parent: { person: centreParent, admission: centreParent },
@@ -63,9 +63,16 @@ export const admission = {
     const personId = (k: string) => ctx.id(targetName(SOURCE_SYSTEM, TABLE, k, "app.person"));
     const byKey = new Map(rows.map((r) => [r.source_key, r]));
     const out = new Map<string, Record<string, Result>>();
+    const admittedAt = new Set<string>(); // survivor|centre|year: one admission per person, centre and year (admission-screens DD-16)
     for (const row of rows) {
       const k = row.source_key;
       const errors = errorsOf.get(k)!;
+      if (!errors.length) {
+        // in source-key order after grouping, so the survivor (first in its group) is never the rejected row
+        const once = `${survivorOf.get(k)}|${centreOf.get(k)}|${row["academic_year"]!.trim()}`;
+        if (admittedAt.has(once)) errors.push({ field: "academic_year", message: ADMITTED_THIS_YEAR, value: row["academic_year"] ?? null });
+        else admittedAt.add(once);
+      }
       if (errors.length) {
         out.set(k, { person: { disposition: "REJECTED", errors }, admission: { disposition: "REJECTED", errors } });
         continue;

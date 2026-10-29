@@ -7,6 +7,7 @@ import { SESSION_COOKIE } from "./auth/http";
 import { ScopeError } from "./db";
 import { Forbidden } from "./action";
 import { TicketNotFound } from "./tickets/handlers";
+import { PersonError } from "./people";
 import { withRequestContext } from "./request-context";
 
 export async function pageRead<T>(fn: (session: string) => Promise<T>): Promise<T> {
@@ -18,7 +19,7 @@ export async function pageRead<T>(fn: (session: string) => Promise<T>): Promise<
     return await withRequestContext({ requestId: h.get("x-request-id") || randomUUID(), ip }, () => fn(session));
   } catch (e) {
     if (e instanceof ScopeError) redirect("/login?error=expired");
-    if (e instanceof Forbidden || e instanceof TicketNotFound) notFound(); // 404 parity (T-SEC-001)
+    if (e instanceof Forbidden || e instanceof TicketNotFound || (e instanceof PersonError && e.reason === "notfound")) notFound(); // 404 parity (T-SEC-001)
     throw e;
   }
 }

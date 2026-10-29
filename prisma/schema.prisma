@@ -579,6 +579,7 @@ model Admission {
   registrations Registration[]
 
   @@unique([id, centreId])
+  @@unique([personId, centreId, academicYear], map: "admission_person_centre_year_key") // admission-screens DD-16
   @@index([personId])
   @@map("admission")
   @@schema("app")

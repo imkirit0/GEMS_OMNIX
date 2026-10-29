@@ -5,7 +5,7 @@ import type { Result, Rule } from "../types";
 export const TEST_CENTRES = ["GDEMO", "KL-01-TEST3", "KL-01-TEST6"]; // X14; approval pending (cutover approval of this rule)
 
 export const centre: Rule = {
-  id: "centre", version: 2, owner: "Operations", sourceTable: "legacy_centre", entities: ["centre"],
+  id: "centre", version: 3, owner: "Operations", sourceTable: "legacy_centre", entities: ["centre"],
   description: "Legacy centres to existing GEMS centres by normalised code (normCode); X14 test centres excluded",
   dispositions: { centre: ["IMPORTED", "EXCLUDED", "REJECTED"] },
   map(rows, ctx) {

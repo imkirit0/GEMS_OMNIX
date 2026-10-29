@@ -28,7 +28,8 @@ beforeEach(() => reset());
 describe("person core (T-PER)", () => {
   test("T-PER-001 one person, several admissions and registrations; moves by HO and regional users only", async () => {
     const first = await admit(sa, input({ courses: [course("DCA"), course("TALLY")] }));
-    await admit(sa, input({ person: { existingId: first.personId }, courses: [course("PYTHON")] }));
+    // another academic year: one admission per person, centre and year (admission-screens DD-16)
+    await admit(sa, input({ person: { existingId: first.personId }, academicYear: "2027-28", courses: [course("PYTHON")] }));
     expect([await count("person"), await count("admission"), await count("registration")]).toEqual([1, 2, 3]);
     // before any move, centre B can neither see nor pass the person
     expect(await thrown(getPerson(sb, first.personId))).toBeInstanceOf(PersonError);
@@ -49,12 +50,15 @@ describe("person core (T-PER)", () => {
     const dup = await thrown(admit(sa, input({ person: { ...RAJ, givenName: "kumar", familyName: "RAJ", mobile: "09847012345" } })));
     expect(dup).toBeInstanceOf(PossibleDuplicate);
     expect((dup as PossibleDuplicate).candidates.map((c) => c.id)).toEqual([p.personId]);
-    expect([await count("person"), (await rows("person.admit")).length]).toEqual([1, 1]); // rolled back, no audit row
+    // rolled back; the refusal is audited without names or dates (admission-screens DD-15)
+    expect(await count("person")).toBe(1);
+    expect((await rows("person.admit")).map((r) => [r.outcome, r.reason, r.detail.candidates ?? null]))
+      .toEqual([["OK", null, null], ["FAILED", "duplicate", [p.personId]]]);
     // never across centres: B sees no match and gets a new person
     await admit(sb, input({ centreId: C.B }));
     expect(await count("person")).toBe(2);
     // confirmNew records what was dismissed
-    const confirmed = await admit(sa, input({ confirmNew: true }));
+    const confirmed = await admit(sa, input({ confirmNew: [p.personId] }));
     const audit = (await rows("person.admit")).find((r) => r.target_id === confirmed.personId)!;
     expect(audit.detail.dismissedCandidates).toEqual([p.personId]);
     expect(audit).toMatchObject({ outcome: "OK", target_type: "person", target_centre_id: C.A });
@@ -95,14 +99,14 @@ describe("person core (T-PER)", () => {
     const b = await admit(sb, input({ centreId: C.B, person: { givenName: "Other", mobile: "9000000010", dateOfBirth: "2000-01-01" } }));
     expect([b.admissionNo, b.registrations[0]!.registerNo]).toEqual(["GTEC262743889", "2064114"]);
     // years chain (DD-7): order matters
-    const year = (academicYear: string) => admit(sa, input({ academicYear, confirmNew: true }));
+    const year = (academicYear: string) => admit(sa, input({ academicYear, person: { existingId: a.personId } }));
     expect(await thrown(year("2028-29"))).toMatchObject({ series: "ADMISSION", period: "2028-29" });
     expect(await thrown(year("2025-26"))).toBeInstanceOf(SeriesMissing);
     expect((await year("2027-28")).admissionNo).toBe("GTEC27281");
     expect((await year("2028-29")).admissionNo).toBe("GTEC28291");
     // a missing REGISTER row fails loudly instead of starting at 1
     await asAdmin((db) => db.query(`delete from app.global_number_series where series = 'REGISTER'`));
-    expect(await thrown(admit(sa, input({ confirmNew: true })))).toMatchObject({ series: "REGISTER", period: "ALL" });
+    expect(await thrown(admit(sa, input({ confirmNew: [a.personId] })))).toMatchObject({ series: "REGISTER", period: "ALL" });
     expect(await current("REGISTER", "ALL")).toBeUndefined();
   });
 

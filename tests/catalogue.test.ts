@@ -12,7 +12,7 @@ const thrown = async (p: Promise<unknown>) => { try { await p; } catch (e) { ret
 let n = 0; // a fresh learner per admission, so duplicate detection never interferes
 const input = (o: Partial<AdmitInput> = {}): AdmitInput => ({
   person: { givenName: `Learner${++n}`, mobile: `98000${String(n).padStart(5, "0")}` }, centreId: C.A, academicYear: "2026-27",
-  admittedOn: "2026-10-28", courses: [{ courseCode: "DCA", joinDate: "2026-11-01" }], confirmNew: true, ...o });
+  admittedOn: "2026-10-28", courses: [{ courseCode: "DCA", joinDate: "2026-11-01" }], ...o }); // no DOB: no match key, no duplicates
 /** One statement as the admin inside a rolled-back transaction; returns the error or null. */
 const tryAdmin = (sql: string, params: unknown[] = []) => asAdmin(async (db) => {
   await db.query("begin");

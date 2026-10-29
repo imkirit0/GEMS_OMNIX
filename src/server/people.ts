@@ -2,9 +2,11 @@
 // A network-wide person is visible to a centre only through an admission it holds (RLS, 0011). Admitting is one
 // scopedAction(): authorise, write person/admission/registrations with their numbers, audit person.admit.
 import { randomUUID } from "node:crypto";
+import { Prisma } from "../../generated/prisma/client";
 import { Forbidden, scopedAction } from "./action";
 import { withScope, type Tx } from "./db";
 import { allocateGlobal } from "./numbering";
+import { limitSearch } from "./rate-limit";
 
 // PMC (NP-2, NP-5, NP-7, NP-8): format pieces are parameters until the numbering owners sign.
 export const PERSON_POLICY = {
@@ -22,7 +24,14 @@ export type Course = { courseCode: string; joinDate: string; endDate?: string };
 
 export class PersonError extends Error {
   override name = "PersonError";
-  constructor(readonly reason: "invalid" | "notfound", message: string = reason) { super(message); }
+  /** field and rule are set by invalid(): the admission form routes the error to its input by them */
+  constructor(readonly reason: "invalid" | "notfound", message: string = reason, readonly field?: string, readonly rule?: string) {
+    super(message);
+  }
+}
+/** The form's admissionId was already used (admission-screens DD-10): nothing new was admitted. */
+export class AdmissionExists extends Error {
+  override name = "AdmissionExists";
 }
 export type Candidate = { id: string; givenName: string; familyName: string | null; dateOfBirth: string | null };
 export class PossibleDuplicate extends Error {
@@ -31,11 +40,11 @@ export class PossibleDuplicate extends Error {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const invalid = (field: string, rule: string) => new PersonError("invalid", `${field}: ${rule}`);
+const invalid = (field: string, rule: string) => new PersonError("invalid", `${field}: ${rule}`, field, rule);
 
 // ---------- Validation (design item 7) ----------
 
-const istToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10); // Asia/Kolkata, no DST
+export const istToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10); // Asia/Kolkata, no DST
 
 export function isoDate(field: string, v: unknown): string {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw invalid(field, "YYYY-MM-DD");
@@ -89,6 +98,7 @@ function identity(p: Identity): StoredIdentity {
 }
 
 export const ACADEMIC_YEAR_RULE = "YYYY-YY, consecutive years";
+export const ADMITTED_THIS_YEAR = "already admitted at this centre this year"; // admission-screens DD-16, shared with the ETL rule
 export function academicYearOk(y: string): boolean {
   return /^\d{4}-\d{2}$/.test(y) && Number(y.slice(5)) === (Number(y.slice(0, 4)) + 1) % 100;
 }
@@ -129,6 +139,9 @@ async function personDb<T>(run: () => Promise<T>): Promise<T> {
     if (code === "23514" && constraint === "admission_academic_year_check") throw invalid("academicYear", ACADEMIC_YEAR_RULE);
     if (code === "23505" && (constraint === "admission_admission_no_key" || constraint === "registration_register_no_key"))
       throw new PersonError("invalid", "number already issued");
+    // an admissionId used where this caller's RLS cannot see it, or a concurrent submit of one form (DD-10)
+    if (code === "23505" && constraint === "admission_pkey") throw new AdmissionExists();
+    if (code === "23505" && constraint === "admission_person_centre_year_key") throw invalid("admission", ADMITTED_THIS_YEAR); // DD-16
     if (code === "23503") throw new PersonError("invalid", "inconsistent reference");
     if (code === "22P02") throw new PersonError("invalid", "malformed value");
     if (code === "42501") throw new Forbidden(cause?.originalMessage ?? "forbidden"); // audited as DENIED by scopedAction
@@ -159,20 +172,21 @@ export async function assertAdmittedAt(tx: Tx, centreId: number, personId: strin
 
 export type PersonView = {
   person: { id: string; givenName: string; familyName: string | null; gender: Gender | null; dateOfBirth: string | null; mobile: string | null; email: string | null };
-  admissions: { id: string; centreId: number; academicYear: string; admissionNo: string; admittedOn: string;
-    registrations: { id: string; courseCode: string; registerNo: string; status: string; joinDate: string; endDate: string | null }[] }[];
+  admissions: { id: string; centreId: number; centreCode: string; academicYear: string; admissionNo: string; admittedOn: string;
+    registrations: { id: string; courseCode: string; courseName: string; registerNo: string; status: string; joinDate: string; endDate: string | null }[] }[];
 };
 
 export async function getPerson(session: string | undefined, id: string): Promise<PersonView> {
   if (!UUID.test(id)) throw new PersonError("notfound");
   return withScope(session, async (tx) => {
     const admissions = await tx.$queryRaw<(PersonView["admissions"][number] & { registrations: PersonView["admissions"][number]["registrations"] | null })[]>`
-      select a.id::text, a.centre_id as "centreId", a.academic_year as "academicYear", a.admission_no as "admissionNo",
-             a.admitted_on::text as "admittedOn",
-             (select json_agg(json_build_object('id', r.id, 'courseCode', r.course_code, 'registerNo', r.register_no,
-                'status', r.status, 'joinDate', r.join_date::text, 'endDate', r.end_date::text) order by r.created_at)
-              from app.registration r where r.admission_id = a.id) as registrations
-      from app.admission a
+      select a.id::text, a.centre_id as "centreId", c.code as "centreCode", a.academic_year as "academicYear",
+             a.admission_no as "admissionNo", a.admitted_on::text as "admittedOn",
+             (select json_agg(json_build_object('id', r.id, 'courseCode', r.course_code, 'courseName', co.name,
+                'registerNo', r.register_no, 'status', r.status, 'joinDate', r.join_date::text, 'endDate', r.end_date::text)
+                order by r.created_at)
+              from app.registration r join app.course co on co.code = r.course_code where r.admission_id = a.id) as registrations
+      from app.admission a join app.centre c on c.id = a.centre_id
       where a.person_id = ${id}::uuid and a.centre_id = any (app.scoped_centre_ids('student.view'))
       order by a.created_at`;
     if (admissions.length === 0) throw new PersonError("notfound");
@@ -185,11 +199,62 @@ export async function getPerson(session: string | undefined, id: string): Promis
   });
 }
 
+/** What the admission form offers (admission-screens design). No centre with student.admit: Forbidden (the page 404s). */
+export async function admitOptions(session: string | undefined) {
+  return withScope(session, async (tx) => {
+    const centres = await tx.$queryRaw<{ id: number; code: string; name: string }[]>`
+      select id, code, name from app.centre where id = any (app.scoped_centre_ids('student.admit')) order by code`;
+    if (centres.length === 0) throw new Forbidden("student.admit denied");
+    const years = await tx.$queryRaw<{ code: string }[]>`select code from app.academic_year where open order by code`;
+    const courses = await tx.$queryRaw<{ code: string; name: string }[]>`select code, name from app.course where active order by code`;
+    return { centres, years, courses, today: istToday() };
+  });
+}
+
+export type AdmissionRow = { admissionId: string; personId: string; givenName: string; familyName: string | null;
+  centreId: number; centreCode: string; academicYear: string; admissionNo: string; admittedOn: string };
+
+/**
+ * Admissions at centres in the caller's student.view scope, newest first, at most 100 (DD-6). q matches the
+ * Admission No or a Register No exactly (any case), the start of either name, or a 10-digit mobile.
+ * q comes only from a POST body (DD-13); no mobile in the result.
+ */
+export async function listAdmissions(session: string | undefined, f: { q?: string; centreId?: number } = {}): Promise<AdmissionRow[]> {
+  const q = (f.q ?? "").trim();
+  return withScope(session, async (tx) => {
+    const [scope] = await tx.$queryRaw<{ n: number }[]>`select cardinality(app.scoped_centre_ids('student.view'))::int as n`;
+    if (!scope?.n) throw new Forbidden("student.view denied");
+    if (f.centreId !== undefined && !Number.isSafeInteger(f.centreId)) return [];
+    let mobile: string | null = null;
+    if (q) {
+      await limitSearch(tx);
+      try { mobile = identityField("mobile", q); } catch { /* not a mobile number */ }
+    }
+    const like = q.replace(/[\\%_]/g, "\\$&") + "%";
+    // ponytail: scans the caller's admissions; add lower(name) text_pattern_ops and mobile indexes when a search exceeds 1 s
+    return tx.$queryRaw<AdmissionRow[]>`
+      select a.id::text as "admissionId", p.id::text as "personId", p.given_name as "givenName", p.family_name as "familyName",
+             a.centre_id as "centreId", c.code as "centreCode", a.academic_year as "academicYear", a.admission_no as "admissionNo", a.admitted_on::text as "admittedOn"
+      from app.admission a join app.person p on p.id = a.person_id join app.centre c on c.id = a.centre_id
+      where a.centre_id = any (app.scoped_centre_ids('student.view'))
+        ${f.centreId !== undefined ? Prisma.sql`and a.centre_id = ${f.centreId}` : Prisma.empty}
+        ${q ? Prisma.sql`and (lower(a.admission_no) = lower(${q})
+          or exists (select 1 from app.registration r where r.admission_id = a.id and lower(r.register_no) = lower(${q}))
+          or p.given_name ilike ${like} or p.family_name ilike ${like}
+          ${mobile ? Prisma.sql`or p.mobile = ${mobile}` : Prisma.empty})` : Prisma.empty}
+      order by a.created_at desc, a.id desc limit 100`;
+  });
+}
+
 // ---------- Writes ----------
 
 export type AdmitInput = {
   person: { existingId: string } | Identity;
-  centreId: number; academicYear: string; admittedOn: string; courses: Course[]; confirmNew?: boolean;
+  centreId: number; academicYear: string; admittedOn: string; courses: Course[];
+  /** the ids of the likely duplicates the user saw and dismissed (admission-screens I4) */
+  confirmNew?: string[];
+  /** the form's id, used as the admission's primary key so a resubmitted form never admits twice (DD-10) */
+  admissionId?: string;
 };
 export type Admitted = { personId: string; admissionId: string; admissionNo: string; registrations: { id: string; courseCode: string; registerNo: string }[] };
 
@@ -202,14 +267,25 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
   const existingId = "existingId" in input.person ? input.person.existingId : undefined;
   if (existingId !== undefined && (typeof existingId !== "string" || !UUID.test(existingId))) throw new PersonError("notfound");
   const fresh = existingId === undefined ? identity(input.person as Identity) : undefined;
+  const confirmNew = input.confirmNew ?? [];
+  if (!Array.isArray(confirmNew) || confirmNew.some((c) => typeof c !== "string")) throw invalid("confirmNew", "invalid");
+  if (input.admissionId !== undefined && (typeof input.admissionId !== "string" || !UUID.test(input.admissionId))) {
+    throw invalid("admissionId", "invalid");
+  }
   const personId = existingId ?? randomUUID();
-  const admissionId = randomUUID();
+  // the FAILED audit rows below carry this person id even when, for a fresh identity, it was never created
+  const admissionId = input.admissionId?.toLowerCase() ?? randomUUID();
   const registrationIds = list.map(() => randomUUID());
   let dismissed: string[] = [];
 
   return scopedAction(session, { action: "person.admit", permission: "student.admit", centreId: input.centreId,
     targetType: "person", targetId: personId }, (tx) => personDb(async () => {
     dismissed = []; // withScope may retry this callback
+    // the form lock and existence check first (DD-10): two submits of one form queue here, so the second sees the first
+    // ponytail: shares the one-argument key space with the match-key lock; a collision only makes two admits wait
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`admit-form:${admissionId}`}))`;
+    const [used] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from app.admission where id = ${admissionId}::uuid`;
+    if (used) throw new AdmissionExists();
     // the catalogue: the year must be open and every course active; plain reads, no lock (catalogue DD-13)
     const [year] = await tx.$queryRaw<{ open: boolean }[]>`select open from app.academic_year where code = ${input.academicYear}`;
     if (!year?.open) throw invalid("academicYear", "not open");
@@ -224,7 +300,7 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
         // same-key admits run one after the other, so the second sees the first (critic D5)
         await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${key}))`;
         const matches = await findMatches(tx, fresh, "student.admit");
-        if (matches.length > 0 && input.confirmNew !== true) throw new PossibleDuplicate(matches);
+        if (matches.some((m) => !confirmNew.includes(m.id))) throw new PossibleDuplicate(matches); // only shown ones are dismissed
         dismissed = matches.map((m) => m.id);
       }
       // no returning: reading the row back would need the select policy before the admission exists
@@ -255,7 +331,11 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     admissionId: r.admissionId, admissionNo: r.admissionNo,
     registrations: r.registrations.map(({ id, registerNo }) => ({ id, registerNo })),
     ...(dismissed.length > 0 ? { dismissedCandidates: dismissed } : {}),
-  }));
+  }), (e) => { // DD-15: the refusals that show or probe another record; no names or dates in the row
+    if (e instanceof PossibleDuplicate) return { action: "person.admit", extra: { reason: "duplicate", candidates: e.candidates.map((c) => c.id) } };
+    if (e instanceof AdmissionExists) return { action: "person.admit", extra: { reason: "already_submitted", admissionId } };
+    return null;
+  });
 }
 
 export type IdentityChanges = Partial<Omit<Identity, "givenName"> & { givenName: string }>;
