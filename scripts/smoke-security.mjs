@@ -195,6 +195,33 @@ try {
   check("T-ADM-004 list shows the own learner only, and has no GET search form", listHtml.includes("Learner") && !listHtml.includes("SMK-HIDDEN")
     && !/<form\b[^>]*method="get"/i.test(listHtml));
 
+  // ---------- learner details (T-LD-002 pages, DD-12 default, 404 parity, origin) ----------
+  const newForm = await (await get("/students/new", stu)).text();
+  check("T-LD-001 the admit form defaults nationality to India", /<option value="IN" selected="">/.test(newForm));
+  const editPath = `/students/${own}/details`;
+  const editPage = await get(editPath, stu);
+  const editHtml = await editPage.text();
+  check("T-LD-002 own learner's edit page 200 with a version", editPage.status === 200 && /name="version" value="\d+"/.test(editHtml), String(editPage.status));
+  const [eHidden, eMissing] = [await get(`/students/${bPerson}/details`, stu), await get(`/students/${randomUUID()}/details`, stu)];
+  const [eh, em] = [normalT(await eHidden.text()), normalT(await eMissing.text())];
+  check("T-LD-002 other centre's edit page 404 and identical to a missing one", eHidden.status === 404 && eMissing.status === 404 && eh === em,
+    eh === em ? "" : "pages differ");
+  const editHidden = [...editHtml.matchAll(/<input\b[^>]*type="hidden"[^>]*>/g)]
+    .map((m) => [m[0].match(/name="([^"]*)"/)?.[1], m[0].match(/value="([^"]*)"/)?.[1] ?? ""]).filter(([k]) => k).map(([k, v]) => [decode(k), decode(v)]);
+  const detailsPost = (origin) => {
+    const body = new FormData();
+    for (const [k, v] of editHidden) body.append(k, v);
+    for (const [k, v] of Object.entries({ currentPincode: "682001", employmentStatus: "STUDENT", qualification: "SSLC", currentPlace: "Smoke town" })) body.append(k, v);
+    return fetch(`${BASE}${editPath}`, { method: "POST", redirect: "manual", body, headers: { cookie: `__Host-gems_session=${stu}`, ...(origin ? { origin } : {}) } });
+  };
+  const detailAudits = async () => (await db.query(`select outcome from app.audit_log where action = 'person.details.update' order by id`)).rows.map((r) => r.outcome);
+  const dNo = await detailsPost(null);
+  check("T-LD-002 Origin-less details post refused (404), nothing written", dNo.status === 404 && (await detailAudits()).length === 0, String(dNo.status));
+  const dOk = await detailsPost(BASE);
+  check("T-LD-002 same-origin details post saves and answers 303 to the learner", dOk.status === 303
+    && (dOk.headers.get("location") ?? "").endsWith(`/students/${own}`) && JSON.stringify(await detailAudits()) === '["OK"]', String(dOk.status));
+  check("T-LD-002 the learner's page shows the saved detail", (await (await get(`/students/${own}`, stu)).text()).includes("Smoke town"));
+
   // unauthenticated access to scoped pages
   const anon = await get(`/centres/${ids.A}`);
   check("no session: scoped page redirects to /login", [303, 307, 308].includes(anon.status) && (anon.headers.get("location") ?? "").includes("/login"), String(anon.status));

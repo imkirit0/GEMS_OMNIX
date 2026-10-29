@@ -68,6 +68,10 @@ describe("learner details (T-LD)", () => {
     const [audit] = (await rows("person.details.update")).filter((r) => r.outcome === "OK");
     expect([audit.detail, audit.before, audit.after, audit.target_centre_id]).toEqual([{ fields: ["currentPlace"] }, null, null, C.A]);
     expect(await thrown(updateDetails(sa, p, C.A, 1, { currentPlace: "X" }))).toMatchObject({ field: "details", rule: "changed since you opened them; reload the page" });
+    // a learner without details opened with a stale version (someone saved first): refused, not inserted
+    const { personId: none } = await admit(sa, learner());
+    expect(await thrown(updateDetails(sa, none, C.A, 1, { currentPlace: "X" }))).toMatchObject({ field: "details" });
+    expect(await detailRow(none)).toBeUndefined();
     expect(await updateDetails(sa, p, C.A, 2, { currentPlace: null })).toEqual({ version: 3, changed: ["currentPlace"] });
     expect((await getPerson(sa, p)).details?.currentPlace).toBeNull();
     expect((await updateDetails(sa, p, C.A, 3, { employmentStatus: "NOT_KNOWN" })).version).toBe(4);
