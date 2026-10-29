@@ -123,6 +123,77 @@ try {
   const auditRow = (await db.query(`select request_id from app.audit_log where action = 'export.centres' and outcome = 'OK' order by id desc limit 1`)).rows[0];
   check("T-AUD-001 response X-Request-Id equals the audit row's request_id", !!rid && /^[0-9a-f-]{36}$/.test(rid) && auditRow?.request_id === rid, `${rid} vs ${auditRow?.request_id}`);
 
+  // ---------- admission screens (T-ADM-005, 404 parity, resubmit, button order, no personal data in URLs) ----------
+  // catalogue, numbering and a student role at SMK-A; a learner at SMK-B by SQL
+  await db.query(`insert into app.course_category (code, name) values ('SMK', 'Smoke') on conflict do nothing`);
+  await db.query(`insert into app.course_division (code, name) values ('SMK', 'Smoke') on conflict do nothing`);
+  await db.query(`insert into app.course (code, name, category_id, division_id) select 'SMKC', 'Smoke course', c.id, d.id
+    from app.course_category c, app.course_division d where c.code = 'SMK' and d.code = 'SMK' on conflict do nothing`);
+  await db.query(`insert into app.academic_year (code, starts_on, ends_on) values ('2026-27', '2026-06-01', '2027-05-31') on conflict do nothing`);
+  await db.query(`insert into app.global_number_series (series, period, current) values ('REGISTER', 'ALL', 1), ('ADMISSION', '2026-27', 0) on conflict do nothing`);
+  const studentRole = (await db.query(`insert into app.role (key, name) values ('smoke_student', 'Smoke student admin') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'student.view'), ($1, 'student.admit')`, [studentRole]);
+  const stuId = (await db.query(`insert into app.app_user (id, login, display_name) values (gen_random_uuid(), 'smoke.student', 'Smoke Student') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', $3)`, [stuId, studentRole, ids.A]);
+  const stu = randomBytes(32).toString("base64url");
+  await db.query(`insert into app.app_session (token_hash, user_id, expires_at, step_up_at) values ($1, $2, now() + interval '1 hour', now())`, [sha(stu), stuId]);
+  const bPerson = randomUUID();
+  await db.query(`insert into app.person (id, given_name) values ($1, 'Hidden')`, [bPerson]);
+  await db.query(`insert into app.admission (id, person_id, centre_id, academic_year, admission_no, admitted_on)
+    values (gen_random_uuid(), $1, $2, '2026-27', 'SMK-HIDDEN-1', '2026-10-01')`, [bPerson, ids.B]);
+
+  // a real multipart action post: the hidden $ACTION_* fields and admissionId copied from a freshly rendered form
+  const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const learner = { centreId: String(ids.A), academicYear: "2026-27", admittedOn: "2026-10-28", givenName: "Smoke", familyName: "Learner",
+    dateOfBirth: "2000-01-01", mobile: "9000012345", "course.1.courseCode": "SMKC", "course.1.joinDate": "2026-11-01" };
+  const renderedForm = async () => {
+    const page = await (await get("/students/new", stu)).text();
+    const hidden = [...page.matchAll(/<input\b[^>]*type="hidden"[^>]*>/g)].map((m) => [m[0].match(/name="([^"]*)"/)?.[1], m[0].match(/value="([^"]*)"/)?.[1] ?? ""]);
+    return hidden.filter(([name]) => name).map(([name, value]) => [decode(name), decode(value)]);
+  };
+  const actionPost = (hidden, origin, extra = {}) => {
+    const body = new FormData();
+    for (const [k, v] of hidden) body.append(k, v);
+    for (const [k, v] of Object.entries({ ...learner, ...extra })) body.append(k, v);
+    return fetch(`${BASE}/students/new`, { method: "POST", redirect: "manual", body,
+      headers: { cookie: `__Host-gems_session=${stu}`, ...(origin ? { origin } : {}) } });
+  };
+  const admissions = async () => (await db.query(`select count(*)::int n from app.admission where centre_id = $1`, [ids.A])).rows[0].n;
+  const admitAudits = async () => (await db.query(`select outcome from app.audit_log where action = 'person.admit' order by id`)).rows.map((r) => r.outcome);
+  const formFields = await renderedForm();
+  check("T-ADM-005 the rendered form carries the action fields and a form id",
+    formFields.some(([k]) => k.startsWith("$ACTION_")) && formFields.some(([k]) => k === "admissionId"), formFields.map(([k]) => k).join(","));
+  const foreign = await actionPost(formFields, "https://evil.example");
+  const noOrigin = await actionPost(formFields, null);
+  check("T-ADM-005 foreign-Origin action post refused by Next, Origin-less refused by the app (404); nothing written",
+    foreign.status >= 400 && noOrigin.status === 404 && await admissions() === 0 && (await admitAudits()).length === 0, `${foreign.status} ${noOrigin.status}`);
+  const ok = await actionPost(formFields, BASE);
+  const location = ok.headers.get("location") ?? "";
+  check("T-ADM-005 same-origin post admits and answers 303 to the learner", ok.status === 303 && /\/students\/[0-9a-f-]{36}$/.test(location)
+    && await admissions() === 1 && JSON.stringify(await admitAudits()) === '["OK"]', `${ok.status} ${location}`);
+  check("no personal data in the redirect", !/Smoke|Learner|9000012345|2000-01-01/.test(location));
+  const again = await actionPost(formFields, BASE);
+  const againHtml = await again.text();
+  check("T-ADM-006 the same form posted again (before hydration) admits nothing and says so", again.status === 200
+    && againHtml.includes("This form was already saved") && await admissions() === 1, String(again.status));
+  const dup = await actionPost(await renderedForm(), BASE);
+  const dupHtml = await dup.text();
+  const [admitAt, candAt] = [dupHtml.indexOf(">Admit</button>"), dupHtml.indexOf('name="existingId"')];
+  check("T-ADM-002 duplicate list shown; the main Admit button comes before every candidate button", dup.status === 200
+    && candAt > 0 && admitAt > 0 && admitAt < candAt, `${admitAt} ${candAt}`);
+
+  // 404 parity for learners
+  const own = location.replace(/^.*\/students\//, "");
+  const sOwn = await get(`/students/${own}`, stu);
+  const [sHidden, sMissing, sBad] = [await get(`/students/${bPerson}`, stu), await get(`/students/${randomUUID()}`, stu), await get(`/students/not-a-uuid`, stu)];
+  const [sh, sm] = [normalT(await sHidden.text()), normalT(await sMissing.text())];
+  check("T-ADM-004 own learner 200", sOwn.status === 200 && (await sOwn.text()).includes("SMKC"), String(sOwn.status));
+  check("T-ADM-004 other centre's learner 404 and identical to a missing one; malformed id 404", sHidden.status === 404 && sMissing.status === 404
+    && sBad.status === 404 && sh === sm && !sh.includes("Hidden"), sh === sm ? `${sBad.status}` : "pages differ");
+  const listHtml = await (await get("/students", stu)).text();
+  check("T-ADM-004 list shows the own learner only, and has no GET search form", listHtml.includes("Learner") && !listHtml.includes("SMK-HIDDEN")
+    && !/<form\b[^>]*method="get"/i.test(listHtml));
+
   // unauthenticated access to scoped pages
   const anon = await get(`/centres/${ids.A}`);
   check("no session: scoped page redirects to /login", [303, 307, 308].includes(anon.status) && (anon.headers.get("location") ?? "").includes("/login"), String(anon.status));

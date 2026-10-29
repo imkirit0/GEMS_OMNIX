@@ -1,0 +1,36 @@
+Admission screens mutation checks (design "Mutation Checks"), 2026-10-29, local Docker database.
+Each mutation applied, the named test run, the file restored (vitest ones by scratchpad/mutate.py; git status clean afterwards).
+
+vitest (npx vitest run <file> -t <test>): every one CAUGHT
+  No form lock                                people.ts               T-ADM-006 a form admits once
+  No existence check                          people.ts               T-ADM-006
+  No admission_pkey mapping                   people.ts               T-ADM-006
+  No DD-16 mapping                            people.ts               T-ADM-006
+  confirmNew ignored when non-empty           people.ts               T-ADM-002
+  Failure hook returns nothing                people.ts               T-ADM-002 and T-PER-002
+  hasOrigin always true                       auth/http.ts            T-ADM-003 errors
+  student.view filter dropped                 people.ts listAdmissions T-ADM-004
+  LIKE not escaped                            people.ts listAdmissions T-ADM-004
+  centreId ignored                            people.ts listAdmissions T-ADM-004
+  No limitSearch                              people.ts listAdmissions T-ADM-004
+  Compacted row index                         admission-form.ts       T-ADM-003 errors
+  All form entries echoed                     admission-form.ts       T-ADM-003 errors
+  DOB required with existingId                admission-form.ts       T-ADM-003 errors
+  No lost-connection branch                   admission-form.ts       T-ADM-003 connection lost
+  Saved-person read by visible_centre_ids     admission-form.ts       T-ADM-006
+  ETL DD-16 check removed                     etl/rules/admission.ts  P8 (T-MIG-001…)
+  Extra export in an actions.ts               app/students/actions.ts exports test
+  courseName join dropped                     people.ts getPerson     T-ADM-001
+
+database:
+  admission_person_centre_year_key dropped    (DB)                    T-ADM-006: 1 failed (restored by a fresh database)
+
+real server (fresh database, next build, next start, scripts/smoke-security.mjs): every one CAUGHT
+  No PersonError 404 mapping                  page-read.ts            T-ADM-004 404 parity: FAIL (500)
+  Candidates before the Admit button          form.tsx                T-ADM-002 button order: FAIL (5428 > 5212)
+  hasOrigin always true                       auth/http.ts            T-ADM-005: FAIL (Origin-less post 303)
+  control, unmutated                                                  all security smoke checks passed
+
+Note: a first smoke round reported the two smoke mutations as not caught. Cause: a `next start` from an earlier run was
+still listening on port 3101 (pkill in Git Bash did not stop the Windows process), so the mutated builds were never
+served. The server was stopped by port (PowerShell Stop-Process) and the round repeated; results above are from that round.
