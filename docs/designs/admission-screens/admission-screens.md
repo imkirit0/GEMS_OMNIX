@@ -1,7 +1,7 @@
 # Admission screens (Stage 3, first piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; DD-9 and DD-10 came from EGM step 5 ([`zoom_out_report.md`](zoom_out_report.md)), DD-11 from step 6 ([`comprehension_report.md`](comprehension_report.md)), DD-12…DD-15 from step 7 ([`critic_report.md`](critic_report.md)), DD-16 and the revisions of DD-11, DD-12 and DD-14 from step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md)). Build approval follows the EGM review (steps 5–9).
+*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; DD-9 and DD-10 came from EGM step 5 ([`zoom_out_report.md`](zoom_out_report.md)), DD-11 from step 6 ([`comprehension_report.md`](comprehension_report.md)), DD-12…DD-15 from step 7 ([`critic_report.md`](critic_report.md)), DD-16 and the revisions of DD-11, DD-12 and DD-14 from step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md)). Build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -129,7 +129,7 @@ export async function submitAdmission(session: string, h: Headers, formData: For
         *   `PersonError` `notfound` (only from a stale `existingId`) → `formError` "That person can no longer be linked; choose again";
         *   `SeriesMissing` (Admission or Register series) → `formError` "Numbering is not set up for this; contact the head office";
         *   `AdmissionExists` (no payload) → one fresh `withScope` read `select person_id from app.admission where id = $admissionId and centre_id = any (app.scoped_centre_ids('student.view'))`, the only place that scope rule lives; `formError` "This form was already saved; nothing new was admitted", plus `savedPersonId` in the state when the read found the person, which the form shows as a link to that learner (DD-11/DD-12); nothing is named when it did not;
-        *   `PersonError` field `admission` rule `already admitted here this year` (DD-16) → `formError` "Already admitted at this centre this year";
+        *   `PersonError` field `admission` rule `already admitted at this centre this year` (DD-16) → `formError` "Already admitted at this centre this year";
         *   a lost connection (`isConnectionLost(e)`, `src/server/db.ts`): only a loss during COMMIT reaches here, since `withScope` retries one before COMMIT → `formError` "The connection dropped. Submit again; this form cannot admit twice.", with the values and the same `admissionId` (DD-14; no recheck, I2);
         *   anything else is thrown and shown by `app/error.tsx` with its reference digest only (T-SEC-012).
 *   The values travel only in the POST body and the returned state, never in a URL (G2). An expired session during submit redirects to `/login?error=expired` and loses the typed values (accepted; the redirect cannot carry them).
@@ -142,19 +142,19 @@ export async function submitAdmission(session: string, h: Headers, formData: For
 
 ### Order of Checks in `admit()`
 
-1.  Validation before the transaction, as today, plus the `admissionId` format (`PersonError("invalid", "admissionId: invalid")`; a missing id keeps today's random one, for tests and the migration).
+1.  Validation before the transaction, as today, plus the `admissionId` format (`invalid("admissionId", "invalid")`; the id is lower-cased first; a missing id keeps today's random one, for tests and the migration).
 2.  `authorize(student.admit, centreId)` (inside `scopedAction`).
-3.  **The form lock and existence check (DD-10):** `pg_advisory_xact_lock(hashtext('admit-form:' || admissionId))`, then `select 1 from app.admission where id = $1` under plain RLS; a hit throws `AdmissionExists`. Two submits of one form queue on this lock, so the second sees the first's committed row instead of meeting its own learner as a `PossibleDuplicate` (`tests/people.test.ts` shows that path for two *different* forms). It runs before the catalogue checks, so a resubmit after the year closed still reports "already saved". (`ponytail:` the form lock shares the one-argument key space with the match-key lock; a hash collision only makes two unrelated admits wait.)
+3.  **The form lock and existence check (DD-10):** `pg_advisory_xact_lock(hashtext(${"admit-form:" + admissionId}))` (key built in TypeScript, as the match-key lock is), then `select 1 from app.admission where id = $1` under plain RLS; a hit throws `AdmissionExists`. Two submits of one form queue on this lock, so the second sees the first's committed row instead of meeting its own learner as a `PossibleDuplicate` (`tests/people.test.ts` shows that path for two *different* forms). It runs before the catalogue checks, so a resubmit after the year closed still reports "already saved". (`ponytail:` the form lock shares the one-argument key space with the match-key lock; a hash collision only makes two unrelated admits wait.)
 4.  Year open, then courses active (catalogue design).
 5.  Match key, the existing advisory lock, `findMatches()`: matches not all in `confirmNew` → `PossibleDuplicate`; or, with `existingId`, the link check.
 6.  Numbering and inserts, the admission with `id = admissionId`.
 
-Lock order is always form lock, match-key lock, then the series rows, so there is no inversion. `AdmissionExists` is `class AdmissionExists extends Error {}` in `people.ts`. `personDb()` maps two unique violations: 23505 on `admission_pkey` (an id used where the caller's RLS cannot see it, or a concurrent submit at the very end) to `AdmissionExists`, and 23505 on `admission_person_centre_year_key` (DD-16) to `PersonError("invalid", "admission: already admitted here this year")`.
+Lock order is always form lock, match-key lock, then the series rows, so there is no inversion. `AdmissionExists` is `class AdmissionExists extends Error {}` in `people.ts`. `personDb()` maps two unique violations: 23505 on `admission_pkey` (an id used where the caller's RLS cannot see it, or a concurrent submit at the very end) to `AdmissionExists`, and 23505 on `admission_person_centre_year_key` (DD-16) to `invalid("admission", "already admitted at this centre this year")`.
 
 ### One Admission per Person, Centre and Year (DD-16)
 
 *   Migration `0014_admission_unique` adds `unique (person_id, centre_id, academic_year)` on `app.admission` (`@@unique([personId, centreId, academicYear], map: "admission_person_centre_year_key")` in the schema). After a reload (new form id), "Admit this person" on the learner just saved now ends at this key instead of a second admission. A further course at the same centre and year belongs on the existing admission (a later piece).
-*   **Migration framework:** the admission rule rejects a row whose person (after MERGED resolution) already has an imported admission at the same centre and year (`admission: already admitted at this centre this year`); the P8 fixture gains one such row, and the rule moves to version 3. Real legacy data may hold such pairs; their treatment is a D-MIG-4 question, and the rejects are listed in the exceptions file.
+*   **Migration framework:** the admission rule rejects a row whose person (after MERGED resolution) already has an imported admission at the same centre and year (`admission: already admitted at this centre this year`); the P8 fixture gains such a pair, and all three rules move to version 3 (`people.ts` is hashed with every rule). Real legacy data may hold such pairs; their treatment is a D-MIG-4 question, and the rejects are listed in the exceptions file.
 
 ### Audit of Refusals (DD-15)
 
@@ -254,13 +254,82 @@ Lock order is always form lock, match-key lock, then the series rows, so there i
 
 ## Detailed Implementation Plan
 
-Outline; the full plan is written against the code during EGM step 9:
+Written against the code at EGM step 9 ([`implementation_readiness_report.md`](implementation_readiness_report.md)). Each phase ends with `bash scripts/ci.sh` exit 0.
 
-| Phase | Items |
-|---|---|
-| A1 Documents | T-ADM-001…006 in audit 09; matrix links on R-150, R-001, R-229 |
-| A2 Server | Migration 0014 (DD-16) and the ETL admission rule v3; `pageRead()` not-found mapping; `hasOrigin()`; `PersonError` `field`/`rule`; `admit()` `admissionId`, form lock, `AdmissionExists`, `confirmNew: string[]`, failure audit; `getPerson()` fields; `admitOptions()`, `listAdmissions()`, export `istToday()`; `src/server/admission-form.ts` (`submitAdmission`) |
-| A3 Pages | `/students` (list, search component and action), `/students/new` (form component and thin action), `/students/[personId]`, home link |
-| A4 Tests and evidence | vitest for `submitAdmission()`, the list and the guard; smoke-security additions (404 parity, multipart cross-origin and Origin-less action posts with a control, no personal data in URLs, error digest only); mutation checks; E-entry |
+### A1 Documents
+
+1.  `docs/audit/09-test-strategy-and-acceptance-criteria.md`: after T-CAT, `### T-ADM: admission screens (docs/designs/admission-screens/admission-screens.md)` with T-ADM-001…006 from the Tests table, condensed, in the T-PER format.
+2.  Matrix tests column: R-150 (`matrix-03-academics-general1.tsv`) gains `T-ADM-001,T-ADM-002,T-ADM-003,T-ADM-005,T-ADM-006`; R-001 and R-229 (`matrix-01-shell.tsv`) gain `T-ADM-004`.
+3.  Regenerate and commit `docs/audit/02-requirements-traceability-matrix.csv` and `docs/requirements/FRD-GEMS-OMNIX.md` (`build_matrix.py`, `build_frd.py`; `ci.sh` diff-checks both).
+
+### A2 Server (with the tests that cover it)
+
+4.  `prisma/migrations/0014_admission_unique/migration.sql`: `CREATE UNIQUE INDEX "admission_person_centre_year_key" ON "app"."admission"("person_id", "centre_id", "academic_year");` (the form `prisma migrate diff` generates); `prisma/schema.prisma` `Admission`: `@@unique([personId, centreId, academicYear], map: "admission_person_centre_year_key")`, `@@index([personId])` kept. Check with the drift gate locally.
+5.  `src/server/people.ts`:
+    *   `PersonError` gains `readonly field?: string, readonly rule?: string`; `invalid(field, rule)` passes them; every refusal named here is built with `invalid()` (`invalid("admissionId", "invalid")`, `invalid("admission", "already admitted at this centre this year")`), one rule text shared with the ETL.
+    *   `export const istToday`; `export class AdmissionExists extends Error { override name = "AdmissionExists"; }`.
+    *   `personDb`: 23505 on `admission_pkey` → `AdmissionExists`; 23505 on `admission_person_centre_year_key` → the DD-16 `invalid()`.
+    *   `AdmitInput` gains `admissionId?: string; confirmNew?: string[]`. `admit()` lower-cases and validates `admissionId`, validates `confirmNew` as an array of strings; first in the callback the form lock `pg_advisory_xact_lock(hashtext(${"admit-form:" + admissionId}))` and `select 1 as ok from app.admission where id = ${admissionId}::uuid` → `AdmissionExists`; the duplicate rule becomes `matches.some((m) => !confirmNew.includes(m.id))`.
+    *   The `onFailure` hook (fifth `scopedAction` argument): `PossibleDuplicate` → `{ reason: "duplicate", candidates: ids }`, `AdmissionExists` → `{ reason: "already_submitted", admissionId }`, anything else → no row. The row's `target_id` is the person id `admit()` would have used (never created for a fresh identity); documented in the comment.
+    *   `getPerson`: `c.code as "centreCode"` (join `app.centre`), `'courseName', co.name` (join `app.course`); `PersonView` updated.
+    *   `admitOptions()` and `listAdmissions()` as in [Read Functions](#read-functions-srcserverpeoplets): `Prisma.sql` fragments as in `tickets/engine.ts`; `admission_no`/`register_no` by `lower(x) = lower(q)`; mobile through `identityField("mobile", q)` in a try; LIKE escape `q.replace(/[\\%_]/g, "\\$&") + "%"`; a non-integer `centreId` → `[]`; `order by a.created_at desc, a.id desc limit 100`; `limitSearch(tx)` only for a non-empty `q`.
+6.  `src/server/page-read.ts`: `|| (e instanceof PersonError && e.reason === "notfound")` in the 404 mapping.
+7.  `src/server/auth/http.ts`: `export const hasOrigin = (h: Headers) => { const o = h.get("origin"); return o !== null && o !== "null"; };`.
+8.  `src/server/admission-form.ts` (new; imports nothing from `page-read.ts` or `next/*`, so vitest can load it): `AdmitFormState`, `FORM_NAMES` (the identity, year, centre and date names and `course.{1..3}.{courseCode,joinDate,endDate}`), `submitAdmission()` with the steps above. Mapping edge cases: any mapping field error returns without calling `admit()`; an error on a field with no input (`courses`, `confirmNew`) goes to `formError`. It catches `PossibleDuplicate`, `PersonError`, `SeriesMissing`, `AdmissionExists` and `isConnectionLost(e)`, and rethrows everything else (`ScopeError`, `Forbidden`).
+9.  Migration framework: `etl/rules/admission.ts` DD-16 check in the result loop (after survivor grouping, in source-key order): key `survivor|centre|year`; a repeat rejects person and admission with `{ field: "academic_year", message: "already admitted at this centre this year" }`; the survivor is always first in its group, so it is never the rejected row. All three rules move to `version: 3` (`people.ts` is hashed with every rule).
+10. `etl/fixture.ts`: pin the merge pairs to different centres (Meera and Rahul rows `KL2-25`, Nair and second-Rahul rows `KL3-07`, by spread after `pick()`, so the random stream is unchanged); append two "Vani Das" rows (same identity, `TN1-03`, 2026-27) at the end.
+11. `tests/etl.test.ts`: `rule centre v3: …`; Vani persons `["IMPORTED", "REJECTED"]`, admissions `[null, "academic_year: already admitted at this centre this year"]`, the second row's registration `admission_key: admission not imported`. Seeds unchanged.
+12. Existing tests: `tests/people.test.ts` T-PER-001 re-admits `first` in `2027-28` (DD-16); `confirmNew: true` at the duplicate tests becomes `[p.personId]` / `[a.personId]`, and the chained-years test admits by `existingId`; the "no audit row" assertion after `PossibleDuplicate` becomes the FAILED `duplicate` row with `candidates`. `tests/catalogue.test.ts` input helper drops `confirmNew` (its learners have no DOB, so no match key).
+13. `tests/admission-screens.test.ts` (new): `beforeEach(reset)`; `new Headers({ origin: "http://localhost", host: "localhost" })`; a `form(obj)` → `FormData` helper.
+    *   T-ADM-001: `sa`, rows 2–3 empty → redirect; `getPerson` numbers, `centreCode`, `courseName`; DD-9 rule (admit roles minus view roles empty, and at least one admit role); `admitOptions` contents; `Forbidden` for `T.uA`.
+    *   T-ADM-002: person Y seeded at A with the edited DOB; the A2 steps as `sr`; FAILED row exact.
+    *   T-ADM-003: closed year; rows 1 valid, 2 empty, 3 inactive → `course.3.courseCode`; bad date; empty DOB and mobile with and without `existingId`; an extra `$ACTION_X` field not echoed; the REGISTER series row deleted → `formError`; stale `existingId`; no Origin → `Forbidden`; lost connection: a deferred constraint trigger on `app.admission` for `admitted_on = 2001-01-01` that calls `pg_terminate_backend(pg_backend_pid())` at COMMIT (`withScope` does not retry that) → the "submit again" message, same `admissionId`, 0 admissions; trigger dropped in `finally`, the same state resubmitted → redirect.
+    *   T-ADM-004: role assignments inserted in the test: `sb` plus `tk_raiser` at A still sees only B (list and view); a learner "Anu…" in scope and `q = "a%"` does not return them; an in-scope `centreId` returns rows, an out-of-scope one `[]`; exact row keys (no `mobile`); a 31st search → `RateLimited`.
+    *   T-ADM-006: sequential and `Promise.all` resubmits (one admission, one `already_submitted` row, `savedPersonId`); `sa` reusing an id saved by `sb` (primary-key path) → message, no link; `sa` plus `tk_raiser` at B reusing it (existence-check path) → message, no link; same person, centre and year with a new form id → "already admitted at this centre this year".
+
+### A3 Pages
+
+14. `app/students/new/actions.ts` (`"use server"`, only `admitAction`); `page.tsx` (`pageRead(admitOptions)`, `randomUUID()`, initial state); `form.tsx` (`"use client"`, `useActionState`, `import type` for server types, hidden `admissionId` from the state, "Admit" first, then `formError`, the `savedPersonId` link and the candidates).
+15. `app/students/actions.ts` (`"use server"`, only `searchAction`; `RateLimited` → `{ rateLimited: true }`); `search.tsx` (client); `page.tsx` (`listAdmissions(s, {})`, columns Admission No, name, centre, year, date, each linking to the learner).
+16. `app/students/[personId]/page.tsx`: `pageRead((s) => getPerson(s, personId))`; identity, then admissions and registrations.
+17. `app/page.tsx`: a "Students" link before "Tickets".
+18. `tests/admission-screens.test.ts`: the exports test reads every `app/**/actions.ts` as text (importing would pull in `next/headers`) and asserts the exported names are exactly `admitAction` and `searchAction`.
+
+### A4 Smoke and evidence
+
+19. `scripts/smoke-security.mjs` seeds a category, division, course `SMKC`, academic year `2026-27`, the REGISTER and ADMISSION series and a role with `student.view` and `student.admit` at the smoke centre A; a learner at the smoke centre B by SQL. Then:
+    *   404 parity: `/students/<own>` 200; `/students/<B's>`, `/students/<random uuid>`, `/students/not-a-uuid` 404 and identical after normalisation;
+    *   T-ADM-005: one `post(origin)` builder: GET `/students/new`, copy every hidden `$ACTION_…` input and `admissionId` (HTML-decoded), the same fields; (1) foreign Origin → 500 (Next's refusal), (2) no Origin → 404, (3) same Origin → 303 to `/students/<uuid>`; then exactly one admission and no `person.admit` row but the OK one;
+    *   the same body re-posted → 200 with "already saved", still one admission;
+    *   a duplicate post → the candidate button exists and the "Admit" button comes first in the HTML;
+    *   no `Location` header carries a name or mobile; `/students` has no `method="get"` search form.
+20. Evidence: E-037 (CI output, one row per mutation check below); `docs/STATUS.md`; design status "built".
+
+### Mutation Checks
+
+| Mutation | File | Test that must fail |
+|---|---|---|
+| No form lock | `people.ts` | T-ADM-006 concurrent |
+| No existence check | `people.ts` | T-ADM-006 sequential |
+| No `admission_pkey` mapping | `people.ts` | T-ADM-006 primary-key path |
+| No DD-16 mapping | `people.ts` | T-ADM-006 same centre and year |
+| 0014 and `@@unique` removed | migration, schema | T-ADM-006 same centre and year (SQL alone: drift gate) |
+| `confirmNew` ignored when non-empty | `people.ts` | T-ADM-002 edited identity |
+| Failure hook returns nothing | `people.ts` | T-ADM-002, T-ADM-006, T-PER-002 |
+| `hasOrigin` always true | `auth/http.ts` | T-ADM-003 no Origin, smoke T-ADM-005 (2) |
+| No `PersonError` 404 mapping | `page-read.ts` | smoke 404 parity |
+| `student.view` filter dropped | `listAdmissions` | T-ADM-004 |
+| LIKE not escaped | `listAdmissions` | T-ADM-004 `a%` |
+| `centreId` ignored | `listAdmissions` | T-ADM-004 filter |
+| No `limitSearch` | `listAdmissions` | T-ADM-004 31st search |
+| Compacted row index | `admission-form.ts` | T-ADM-003 `course.3` |
+| All form entries echoed | `admission-form.ts` | T-ADM-003 known names |
+| DOB required with `existingId` | `admission-form.ts` | T-ADM-003 |
+| No lost-connection branch | `admission-form.ts` | T-ADM-003 lost connection |
+| Saved-person read by `visible_centre_ids` | `admission-form.ts` | T-ADM-006 existence-check path |
+| ETL DD-16 check removed | `etl/rules/admission.ts` | P8 |
+| Candidates before "Admit" | `form.tsx` | smoke button order |
+| Extra export in an `actions.ts` | `app/students/actions.ts` | exports test |
+| `courseName` join dropped | `getPerson` | T-ADM-001 |
 
 *Drafted with EGM (draft step followed manually)*
