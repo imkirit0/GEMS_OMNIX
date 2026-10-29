@@ -1,7 +1,7 @@
 # Admission screens (Stage 3, first piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed, EGM review complete (steps 5–9); awaiting the design owner's build approval. The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; DD-9 and DD-10 came from EGM step 5 ([`zoom_out_report.md`](zoom_out_report.md)), DD-11 from step 6 ([`comprehension_report.md`](comprehension_report.md)), DD-12…DD-15 from step 7 ([`critic_report.md`](critic_report.md)), DD-16 and the revisions of DD-11, DD-12 and DD-14 from step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md)). Build approval follows the EGM review (steps 5–9).
+*   **Status:** Approved for build by the design owner on 2026-10-29, after the EGM review (steps 5–9). The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; DD-9 and DD-10 came from EGM step 5 ([`zoom_out_report.md`](zoom_out_report.md)), DD-11 from step 6 ([`comprehension_report.md`](comprehension_report.md)), DD-12…DD-15 from step 7 ([`critic_report.md`](critic_report.md)), DD-16 and the revisions of DD-11, DD-12 and DD-14 from step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md)). Build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).

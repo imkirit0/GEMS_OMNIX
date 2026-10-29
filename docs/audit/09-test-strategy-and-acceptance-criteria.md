@@ -141,6 +141,16 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-CAT-003 | Controlled, audited writes | Only a holder of `catalogue.manage` with a fresh step-up changes the catalogue, in the app and in the database; every change is audited with before and after; deactivation needs a reason |
 | T-CAT-004 | Everyone signed in reads | A centre user without catalogue rights reads all five tables in full |
 
+### T-ADM: admission screens (`docs/designs/admission-screens/admission-screens.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-ADM-001 | Admit through the form | A `student.admit` holder admits a learner and is redirected to the learner's page showing Admission No, Register Nos, centre and course names; every role with `student.admit` also holds `student.view` |
+| T-ADM-002 | Duplicate choice | Likely duplicates in the caller's scope are shown before anything is written; "Admit this person" links, "None of these" creates a new person only when every match was shown; the refusal is audited; no URL carries the values |
+| T-ADM-003 | Errors keep the values | Field errors land on the right input and course row; other errors are form messages; DOB and mobile required for a new person; a lost connection at COMMIT says "submit again" and keeps the form id; an Origin-less post is refused |
+| T-ADM-004 | List and view scope | Only learners at centres in the caller's `student.view` scope; out-of-scope and malformed ids give 404; search terms travel only in POST bodies; LIKE characters literal; the search rate limit applies; no mobile in the list |
+| T-ADM-005 | Cross-site action posts | On the real server, a foreign-Origin and an Origin-less post write nothing; a same-origin post admits and answers 303 |
+| T-ADM-006 | Never admit twice | A resubmitted form (in turn, concurrently, before hydration) admits once and says "already saved", naming no one outside the caller's scope; one admission per person, centre and academic year; only the two action functions are exported |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|
