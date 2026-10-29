@@ -1,7 +1,7 @@
 # Learner details (Stage 3, second piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9). Step 5: [`zoom_out_report.md`](zoom_out_report.md); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-10…DD-12); step 7: [`critic_report.md`](critic_report.md) (DD-13…DD-15, DD-9 revised); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-11, DD-13, DD-14 revised).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; EGM review complete (steps 5–9); awaiting the design owner's build approval. Step 5: [`zoom_out_report.md`](zoom_out_report.md); step 9: [`implementation_readiness_report.md`](implementation_readiness_report.md) (no new decisions); step 6: [`comprehension_report.md`](comprehension_report.md) (DD-10…DD-12); step 7: [`critic_report.md`](critic_report.md) (DD-13…DD-15, DD-9 revised); step 8: [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md) (DD-11, DD-13, DD-14 revised).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list below is PMC (a parameter until its owner signs). Input: [`input-brief.md`](input-brief.md).
@@ -54,8 +54,8 @@ Z-, C- and D- ids refer to the findings in [`zoom_out_report.md`](zoom_out_repor
 
 | Column | Type | Named check `person_detail_<column>_check` |
 |---|---|---|
-| `current_address`, `permanent_address` | text, null | `col ~ '^\S(.*\S)?$'` (Postgres `\s` = the whitespace JS `trim()` removes for ASCII; addresses use the newline-sensitive flag so inner newlines are allowed) and `char_length(col) between 1 and 500` |
-| `current_place`, `permanent_place` | text, null | the same pattern, 1–100 |
+| `current_address`, `permanent_address` | text, null | no leading or trailing JS-trim whitespace, no control characters except tab, newline and carriage return, `char_length` 1–500 (exact SQL in the Implementation Plan; no regex flag, locale-independent) |
+| `current_place`, `permanent_place` | text, null | the same rule without inner controls, 1–100 |
 | `current_pincode`, `permanent_pincode` | text, null | `col ~ '^[1-9][0-9]{5}$'` (Indian PIN) |
 | `nationality` | text, null | `col ~ '^[A-Z]{2}$'` only: the database checks the format, the app checks the code against the list (Z2) |
 | `blood_group` | text, null | `col in ('A+','A-','B+','B-','AB+','AB-','O+','O-')` |
@@ -91,12 +91,12 @@ export type Details = Record<DetailKey, string | null>;
 export function detailField(k: DetailKey, v: unknown): string | null; // throws invalid(k, rule); k is also the input name
 ```
 
-*   Country names come from `new Intl.DisplayNames(["en"], { type: "region" })`; `Intl` cannot list regions, so the codes are written out once, and a test asserts each has a display name other than itself (C13).
+*   Country names come from `new Intl.DisplayNames(["en"], { type: "region" })`, computed on the server by `countryOptions()` and passed to the client as a prop, so server and browser render the same names (R7). `Intl` cannot list regions, so the codes are written out once, and a test asserts each has a display name other than itself (C13).
 *   A test asserts the three short lists equal the database checks (by inserting each value and one outsider); nationality is excluded (format only in the database).
 
 ### Validation (`detailField`)
 
-`v == null` → `null` (clears); a non-string → `invalid(k, "invalid")` (D2). Then: not well-formed Unicode (`!v.isWellFormed()`) or any C0 control or DEL character → `invalid(k, "invalid characters")`, except newline, carriage return and tab inside addresses (D8); trimmed; `""` → `null`; lengths counted in code points (`[...s].length`), as `char_length` counts (D9). Then:
+`v == null` → `null` (clears); a non-string → `invalid(k, "invalid")` (D2). Then: a lone surrogate (`/\p{Cs}/u`) or any C0 control or DEL character → `invalid(k, "invalid characters")`, except newline, carriage return and tab inside addresses (D8); trimmed; `""` → `null`; lengths counted in code points (`[...s].length`), as `char_length` counts (D9). Then:
 
 | Keys | Rule string (shown to the user) |
 |---|---|
@@ -113,7 +113,7 @@ export function detailField(k: DetailKey, v: unknown): string | null; // throws 
 *   **`AdmitInput.details?: Partial<Details>`.** `admit()` validates every given key with `detailField` before the transaction (field errors, nothing audited).
 *   **With `existingId` (DD-13, revised at step 8):** the required checks are skipped (as admission-screens DD-14 does for `dateOfBirth` and `mobile`). Inside the transaction, after the link check: `select 1 from app.person where id = $1 for no key update` (the lock `updateDetails` takes, so a concurrent first edit queues; I5), then the detail row is read; when the person has none and any typed detail is non-null, they are inserted; when the person has one, the typed details are ignored. The duplicate list shows one line: "Details you typed are saved only if this learner has none yet; otherwise edit them on the learner's page", so nothing is dropped silently, and the redirect lands on that page with its Edit link.
 *   **Insert:** after the admission insert, a plain `insert into app.person_detail (person_id, <given non-null columns>) values (…)` with no `returning` (version defaults to 1), skipped when every value is null (C7); it follows the admission so the insert policy (D1) and later reads pass. It runs inside `personDb()`, which maps 23514 on `person_detail_<column>_check` to `invalid(<key>, "invalid")` (D8), so a disagreement between app and database (T-LD-004 guards it) gives a field error, never a raw database error carrying the row. Creating details at admission is recorded in the `person.admit` audit as `detailFields: [keys written]` (asserted in T-LD-001), not as a `person.details.update` (D18, I10).
-*   **Shared form parts (Z4):** `DETAIL_NAMES = [...DETAIL_KEYS, "permanentSame"]`, spread into `FORM_NAMES`; `detailsFrom(fd): Partial<Details>` in `admission-form.ts` (imports `details.ts` only for the keys) reads a detail key **only when the form posted it** (`fd.has(k)`: a posted `""` clears, an absent input leaves the stored value; D3) and, when `permanentSame` is checked, overwrites the three permanent fields with the current ones; `<DetailsFields values errors>` in `app/students/details-fields.tsx` renders the "Contact" and "Family" sections for both forms. The checkbox is unchecked on load (C16). Every detail `<select>` has an empty first option, so a stored `null` is posted back as `""`, not as the first list value (D4); the nationality select defaults to `IN` on the admit form only (DD-12). Once a state exists the form renders only from it, and an absent value is empty (the existing `values` echo stays as it is); stored values fill only the initial state (D16, I8). `app/students/details-fields.tsx` is a client component that imports only `src/server/details.ts` (no Prisma or `db` in the client bundle, I4). `submitAdmission` maps `field === "details"` to `formError = rule`, as `submitDetails` does (I7).
+*   **Shared form parts (Z4):** `DETAIL_NAMES = [...DETAIL_KEYS, "permanentSame"]`, spread into `FORM_NAMES`; `detailsFrom(fd): Partial<Details>` in `admission-form.ts` (imports `details.ts` only for the keys) reads a detail key **only when the form posted it** (`fd.has(k)`: a posted `""` clears, an absent input leaves the stored value; D3) and, when `permanentSame` is checked, overwrites the three permanent fields with the current ones; `<DetailsFields values errors>` in `app/students/details-fields.tsx` renders the "Contact" and "Family" sections for both forms. The checkbox is unchecked on load (C16). Every detail `<select>` has an empty first option, so a stored `null` is posted back as `""`, not as the first list value (D4); the nationality select defaults to `IN` on the admit form only, through the page's initial state (`values.nationality`), never as a render fallback, so an emptied choice stays empty after an error (DD-12, R8). Once a state exists the form renders only from it, and an absent value is empty (the existing `values` echo stays as it is); stored values fill only the initial state (D16, I8). `app/students/details-fields.tsx` is a client component that imports only `src/server/details.ts` (no Prisma or `db` in the client bundle, I4). `submitAdmission` maps `field === "details"` to `formError = rule`, as `submitDetails` does (I7).
 *   **Required (DD-6, DD-11):** `currentPincode`, `employmentStatus`, `qualification` → `fieldErrors[k] = "required"` when empty, on the admit form for a new person and on the edit form always.
 *   Field errors reach their inputs through the existing mapping (`PersonError.field` equals the input name).
 
@@ -146,7 +146,7 @@ export async function submitDetails(session: string, h: Headers, fd: FormData): 
 
 *   `src/server/person-rules.ts` (new) holds **exactly what the rules import** (I3): `PersonError`, `invalid` (now exported), `optText`, `istToday`, `isoDate`, `identityField`, `IDENTITY_KEYS`, `StoredIdentity`, `Identity`, `Gender`, `ACADEMIC_YEAR_RULE`, `academicYearOk`, `ADMITTED_THIS_YEAR`, `normCode`. It imports nothing from `./db`, `./action` or Prisma. `PERSON_POLICY` and `CODE_RULE` stay in `people.ts` (no rule imports them), and so does the detail code (`src/server/details.ts`, unhashed): PMC list edits must not bump the rules; a future rule that maps legacy details adds `details.ts` to the hash when it is written. `people.ts` re-exports everything, so app callers do not change.
 *   The three rule files change their imports to `../../src/server/person-rules`; `etl/run.ts`, `etl/types.ts` and `etl/checks.ts` may keep importing from `people.ts` (they are not hashed). `HASHED_WITH_EVERY_RULE` (`etl/canonical.ts`) becomes `["src/server/person-rules.ts", "etl/ids.ts"]`, and the comment in `etl/run.ts` says so. All three rules move to version 4; `tests/etl.test.ts` expects `rule centre v4: …`. No rule maps details yet.
-*   **Reset and preflight (D6):** `scripts/etl/reset.sql` truncates `app.person_detail` with `app.person` (Postgres refuses to truncate a referenced table alone), and the runner's empty-database preflight counts it. `tests/fixtures.ts` lists it in its truncate. A later legacy-details rule will need `gems_etl` grants and the table in the digest.
+*   **Reset and preflight (D6):** `scripts/etl/reset.sql` truncates `app.person_detail` with `app.person` (Postgres refuses to truncate a referenced table alone), and the runner's preflight needs no change: `gems_etl` has no grant on the table, and the foreign key means an empty `person` implies an empty `person_detail` (R1). `tests/fixtures.ts` lists it in its truncate. A later legacy-details rule will need `gems_etl` grants and the table in the digest.
 
 ### Tests
 
@@ -215,13 +215,94 @@ export async function submitDetails(session: string, h: Headers, fd: FormData): 
 
 ## Detailed Implementation Plan
 
-Outline; the file-by-file plan is written against the code during EGM step 9:
+Written against the code at EGM step 9 ([`implementation_readiness_report.md`](implementation_readiness_report.md)); each phase ends with `bash scripts/ci.sh` exit 0 (in a fresh clone before push).
 
-| Phase | Items |
-|---|---|
-| D1 Documents | T-LD-001…004 in audit 09; matrix links on R-150.02 |
-| D2 Server | Migration 0015 and the `PersonDetail` model; `details.ts`; `person-rules.ts` and the ETL hash change, rules v4; reset and preflight; `detailField()`; `admit()` details (new and existing person); `updateDetails()`; `personDb` check mapping; `getPerson()` details and `editCentreId`; `person.details.update` in `AUDIT_CATALOGUE`; tests |
-| D3 Pages | `DetailsFields` component; admit form sections; view page details; `/students/[personId]/details` with its action |
-| D4 Evidence | Smoke additions (edit page 404 parity, origin), mutation checks, E-entry |
+### Exact SQL (R3, R4, R10, R19)
+
+`ws` below is the set JS `trim()` removes: `[\t\n\v\f\r    -     　﻿]`, written out because Postgres `\s` depends on the database locale. No regex flag is used (Postgres AREs already let `.` match a newline and anchor `^`/`$` at the string ends; the newline-sensitive flag would anchor at every line).
+
+```sql
+-- every text column, N = 500 (addresses), 100 (places, names, occupations), 50 (guardian_relation)
+alter table app.person_detail add constraint person_detail_father_name_check check (
+  father_name !~ '^<ws>' and father_name !~ '<ws>$'
+  and father_name !~ '[\u0001-\u001f\u007f]'                 -- addresses: '[\u0001-\u0008\u000b\u000c\u000e-\u001f\u007f]'
+  and char_length(father_name) between 1 and 100);
+-- pincodes '^[1-9][0-9]{5}$', phones '^[0-9]{10}$', nationality '^[A-Z]{2}$', the three in (...) lists
+alter table app.person_detail enable row level security;
+alter table app.person_detail force row level security;
+create policy scope_select on app.person_detail for select
+  using (exists (select 1 from app.admission a where a.person_id = person_detail.person_id));
+create policy scope_insert on app.person_detail for insert
+  with check (exists (select 1 from app.admission a where a.person_id = person_detail.person_id
+    and a.centre_id = any ((select app.scoped_centre_ids('student.admit'))::int[])));
+create policy scope_update on app.person_detail for update using (<the same exists>) with check (<the same exists>);
+grant select, insert on app.person_detail to gems_app;
+grant update (<the 20 detail columns>, version) on app.person_detail to gems_app;
+```
+
+The JS mirrors in `detailField`: controls `/[\u0000-\u001f\u007f]/` (addresses `/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/`), lone surrogates `/\p{Cs}/u` (`isWellFormed` is ES2024; the project targets ES2023), `s.trim()`, `[...s].length`; list membership by `Object.hasOwn`; nationality `/^[a-z]{2}$/i` before upper-casing (so `ß` never becomes `SS`).
+
+### D1 Documents
+
+1.  `docs/audit/09-test-strategy-and-acceptance-criteria.md`: `### T-LD: learner details` after T-ADM with T-LD-001…004 (Tests table, as amended); T-ADM-006 "only the three action functions".
+2.  `docs/audit/data/matrix-03-academics-general1.tsv` R-150.02 tests: `T-AUD-005,T-LD-001,T-LD-002,T-LD-003,T-LD-004`; regenerate and commit the matrix CSV and the FRD.
+
+### D2 Server (domain only, no form layer)
+
+1.  `src/server/person-rules.ts` (new, no imports): `PersonError`, `invalid` and `optText` (now exported), `istToday`, `isoDate`, `identityField`, `IDENTITY_KEYS`, `StoredIdentity`, `Identity`, `Gender`, `ACADEMIC_YEAR_RULE`, `academicYearOk`, `ADMITTED_THIS_YEAR`, `ASCII_SPACE` (private), `normCode`. `people.ts` deletes them, adds `export * from "./person-rules"` and imports what it uses; `UUID`, `previousYear`, `courses`, `identity`, `personDb`, `CODE_RULE`, `PERSON_POLICY` stay.
+2.  Rules: the three rule files import `../../src/server/person-rules`, `version: 4`; `etl/canonical.ts` `HASHED_WITH_EVERY_RULE = ["src/server/person-rules.ts", "etl/ids.ts"]`; the `etl/run.ts` comment. **No preflight change (R1):** `gems_etl` has no grant on `person_detail`, and the foreign key means an empty `person` implies an empty `person_detail`. `tests/etl.test.ts`: `rule centre v4: …`, plus an import guard (`person-rules.ts` has no `import`; each rule imports only `person-rules`, `../ids`, `../types`).
+3.  `prisma/schema.prisma`: `PersonDetail` (20 `String?` columns mapped to snake case, `version Int @default(1)`, relation to `Person` with `onDelete: Restrict, onUpdate: Restrict`), `detail PersonDetail?` on `Person`. `prisma/migrations/0015_person_detail/migration.sql`: the generated table, key and foreign key, then the hand-written checks, RLS and grants above.
+4.  `scripts/etl/reset.sql`: `app.person_detail` before `app.person`; `tests/fixtures.ts` truncate lists it.
+5.  `src/server/details.ts` (new; imports only `./person-rules`): the lists, `COUNTRY_CODES` (249, unique), `DEFAULT_NATIONALITY`, `DETAIL_KEYS`, `DetailKey`, `Details`, `REQUIRED_DETAILS`, `DETAIL_COLUMN` (key → column), `detailField`, `countryOptions(): [code, name][]` (names from `Intl.DisplayNames` on the server, sorted by name; R7).
+6.  `src/server/people.ts`: `AdmitInput.details`, validated before `scopedAction`; the fresh-person insert after the admission (all 20 columns in one static statement; skipped when all null); the existing-person branch (lock, read, insert if none); closure `written` reset per attempt like `dismissed` (R16), audited as `detailFields`; `personDb` maps 23514 on `^person_detail_(\w+)_check$` through `DETAIL_COLUMN` to `invalid(key, "invalid")`; `PersonView.details`, `detailsVersion`, `editCentreId`; `updateDetails` with `{ action: "person.details.update", permission: "student.admit", …` on one line (the T-AUD-009 scan reads `action:` up to `permission:`, R11) and static SQL `col = case when ${set(k)} then ${v} else col end` for all 20 columns, as `changeIdentity` does (R17).
+7.  `tests/audit-catalogue.ts`: `"person.details.update"`. `tests/foundation.test.ts` T-RLS-002: `person_detail` expects `INSERT, SELECT, UPDATE` policies.
+8.  `tests/learner-details.test.ts` (new): `beforeEach` adds role 19 `student_viewer` (`student.view` only) with a user at centre A and session `tok-stuV` (R9). Domain cases of T-LD-001…004: vitest expects `Forbidden` or `PersonError("notfound")` where the page shows 404, and a DENIED row for a view-only post (R18); the R10 samples (`" x"`, `"x\u0085"`, `" x\ny"` address, `"a\tb"` name, 500 and 501 × 😀, `"constructor"`, `"ß"`; NUL: app `invalid characters`, database 22021; lone surrogate: app only); the `personDb` mapping by temporarily replacing `person_detail_father_name_check` with `char_length <= 5` (restored in `finally`, R13); `Promise.all` of an existing-person admit with details and a first edit (R21).
+
+### D3 Pages and form layer (with the existing tests that need the new required fields, R5)
+
+1.  `src/server/admission-form.ts`: `DETAIL_NAMES` in `FORM_NAMES`; `detailsFrom(fd)` (`fd.has`; `permanentSame` = `fd.has("permanentSame")` copies the posted current text); the required check by posted text, an absent required key counting as empty (R12); `input.details`; `e.field === "details"` → `formError: e.rule`; `ADMIT_MESSAGES.detailsNote`; `DetailsFormState` and `submitDetails` (R14).
+2.  `app/students/details-fields.tsx` (client; imports only `@/server/details`): props `{ values, errors, countries }`; every select with an empty first option; `values[k] ?? ""`; checkbox unchecked.
+3.  `app/students/new/form.tsx` (renders `DetailsFields`; the note in the candidates panel) and `page.tsx` (`initial.values = { nationality: DEFAULT_NATIONALITY }`, `countries = countryOptions()`; R8).
+4.  `app/students/[personId]/page.tsx` (details section; "Edit details" iff `editCentreId !== null`; comment DD-10); `app/students/[personId]/details/page.tsx` (`notFound()` without `editCentreId`), `form.tsx` (client, `useActionState(saveDetailsAction)`, hidden `personId`, `centreId`, `version`), `actions.ts` (`"use server"`, only `saveDetailsAction`).
+5.  Existing tests: `tests/admission-screens.test.ts` `fields()` gains `currentPincode: "682001", employmentStatus: "STUDENT", qualification: "SSLC"`, and its exports list becomes `["admitAction", "saveDetailsAction", "searchAction"]`; `scripts/smoke-security.mjs` `learner` gains the same three. `tests/learner-details.test.ts` gains the form-level cases (same as current, `required`, untouched select → null, a missing optional input (`bloodGroup`) kept, clearing a required field, stale `formError`).
+
+### D4 Smoke and evidence
+
+1.  `scripts/smoke-security.mjs`: `/students/new` renders `IN` selected; `/students/<own>/details` 200; `/students/<other centre's>/details` and `/students/<random>/details` 404 and identical; an Origin-less details post 404 with no `person.details.update` row; a same-origin post 303.
+2.  Mutation checks below; E-038; STATUS; design status built.
+
+### Mutation Checks
+
+| Mutation | File | Must fail |
+|---|---|---|
+| `person_detail` dropped from the truncate | `reset.sql` | etl.test, T-LD-004 reset |
+| A rule imports `people.ts` again | `etl/rules/centre.ts` | etl import guard |
+| `text(k)` instead of `fd.has` | `admission-form.ts` | T-LD-002 missing input kept |
+| No `for no key update` | `people.ts` | T-LD-003 concurrent first edits |
+| Update policy without the `student.admit` scope | 0015 | T-LD-003 view-only direct update |
+| `update (person_id)` granted | 0015 | T-LD-003 42501 |
+| `NOT_KNOWN` dropped from a database list | 0015 | T-LD-004 list equality |
+| `\s` instead of the explicit class | 0015 | T-LD-004 NBSP / U+0085 |
+| `(?n)` on the address check | 0015 | T-LD-004 `" x\ny"` |
+| No database control clause | 0015 | T-LD-004 `"a\tb"` |
+| Values in the audit detail | `people.ts` | T-LD-002 exact detail |
+| `person.details.update` not catalogued | `audit-catalogue.ts` | T-AUD-009 |
+| No required check on edit | `admission-form.ts` | T-LD-002 |
+| No version comparison | `people.ts` | T-LD-002 stale |
+| No `/^\d+$/` | `people.ts` | T-LD-002 `"1e0"` |
+| No 23514 mapping | `people.ts` | T-LD-004 mapping case |
+| Existing-person path always writes | `people.ts` | T-LD-001 stored unchanged |
+| Details inserted before the admission | `people.ts` | T-LD-001 |
+| No `detailFields` | `people.ts` | T-LD-001 |
+| `editCentreId` by `student.view` | `people.ts` | T-LD-002 view-only |
+| `in` instead of `Object.hasOwn` | `details.ts` | T-LD-004 `"constructor"` |
+| No ASCII check on nationality | `details.ts` | T-LD-004 `"ß"` |
+| No `\p{Cs}` check | `details.ts` | T-LD-004 lone surrogate |
+| No `notFound()` on the edit page | details `page.tsx` | smoke edit-page 404 |
+| No `hasOrigin` in `submitDetails` | `admission-form.ts` | T-LD-002 no Origin, smoke |
+| A second export in the details `actions.ts` | details `actions.ts` | T-ADM-006 exports |
+| No `person_detail` select policy | 0015 | T-RLS-002 |
+
+The rule-version bump to v4 is checked in review only (the tests clear `migration.rule`).
 
 *Drafted with EGM (draft step followed manually)*
