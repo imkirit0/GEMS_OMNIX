@@ -273,6 +273,48 @@ try {
     && (dOk.headers.get("location") ?? "").endsWith(`/students/${own}`) && JSON.stringify(await detailAudits()) === '["OK"]', String(dOk.status));
   check("T-LD-002 the learner's page shows the saved detail", (await (await get(`/students/${own}`, stu)).text()).includes("Smoke town"));
 
+  // ---------- enquiry (T-ENQ: 404 parity, Origin-less action post, a real create, the Enroll link) ----------
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view'), ($1, 'enquiry.manage')`, [studentRole]);
+  const hiddenEnq = (await db.query(`insert into app.enquiry (centre_id, given_name, date_of_birth, gender, mobile, path_id, type_id, status_id,
+      course_code_1, enquired_on, created_by)
+    select $1, 'HiddenEnquirer', '2005-01-01', 'FEMALE', '9000099999', p.id, t.id, s.id, 'SMKC', '2026-10-01', $2
+    from app.enquiry_path p, app.enquiry_type t, app.enquiry_status s where p.code = 'WALK_IN' and t.code = 'WALK_IN' and s.code = 'NEW'
+    returning id::text`, [ids.B, stuId])).rows[0].id;
+  const [eqHidden, eqMissing, eqBad] = [await get(`/enquiries/${hiddenEnq}`, stu), await get("/enquiries/999999999", stu), await get("/enquiries/abc", stu)];
+  const normE = (b) => normal(b).replace(/\/enquiries\/[0-9a-z]+/g, "/enquiries/ID").replace(/(\\"id\\":\\")[0-9a-z]+/g, "$1ID").replace(/("id":")[0-9a-z]+/g, "$1ID")
+    .replace(/(\\"id\\",\\")[0-9a-z]+/g, "$1ID").replace(/("id",")[0-9a-z]+/g, "$1ID")
+    .replace(/(\\"enquiries\\",\\")[0-9a-z]+/g, "$1ID").replace(/("enquiries",")[0-9a-z]+/g, "$1ID")
+    .replace(/(\\"k\\":\\")[0-9a-z]+/g, "$1ID").replace(/("k":")[0-9a-z]+/g, "$1ID"); // the echoed request path and segment key
+  const [eh2, em2] = [normE(await eqHidden.text()), normE(await eqMissing.text())];
+  // a malformed id is refused before any read (only its 404 is checked); hidden and missing must be identical
+  check("T-ENQ-005 another centre's enquiry is 404 and identical to a missing one; a malformed id is 404", eqHidden.status === 404 && eqMissing.status === 404
+    && eqBad.status === 404 && eh2 === em2 && !eh2.includes("HiddenEnquirer"), eh2 === em2 ? "" : (() => { const o = em2; let i = 0; while (i < eh2.length && eh2[i] === o[i]) i++; return `differs at ${i}: ${JSON.stringify(eh2.slice(i - 40, i + 40))} vs ${JSON.stringify(o.slice(i - 40, i + 40))}`; })());
+  const [enHidden, enMissing] = [await get(`/students/new?enquiry=${hiddenEnq}`, stu), await get("/students/new?enquiry=999999999", stu)];
+  const [enh, enm] = [normE(await enHidden.text()).replace(/enquiry=[0-9]+/g, "enquiry=ID"), normE(await enMissing.text()).replace(/enquiry=[0-9]+/g, "enquiry=ID")];
+  check("T-ENQ-004 the enrol page for a hidden enquiry is 404 and identical to a missing one", enHidden.status === 404 && enMissing.status === 404
+    && enh === enm && !enh.includes("HiddenEnquirer"), `${enHidden.status} ${enMissing.status}`);
+  const enqPage = await (await get("/enquiries/new", stu)).text();
+  const enqHidden = [...enqPage.matchAll(/<input\b[^>]*type="hidden"[^>]*>/g)]
+    .map((m) => [m[0].match(/name="([^"]*)"/)?.[1], m[0].match(/value="([^"]*)"/)?.[1] ?? ""]).filter(([k]) => k).map(([k, v]) => [decode(k), decode(v)]);
+  const pathId = (await db.query(`select id from app.enquiry_path where code = 'WALK_IN'`)).rows[0].id;
+  const typeId = (await db.query(`select id from app.enquiry_type where code = 'WALK_IN'`)).rows[0].id;
+  const enquiryPost = (origin) => {
+    const body = new FormData();
+    for (const [k, v] of enqHidden) body.append(k, v);
+    for (const [k, v] of Object.entries({ centreId: String(ids.A), givenName: "Smoke", familyName: "Enquirer", dateOfBirth: "2004-04-04",
+      gender: "MALE", mobile: "9000077777", pathId: String(pathId), typeId: String(typeId), course1: "SMKC" })) body.append(k, v);
+    return fetch(`${BASE}/enquiries/new`, { method: "POST", redirect: "manual", body, headers: { cookie: `__Host-gems_session=${stu}`, ...(origin ? { origin } : {}) } });
+  };
+  const enqAudits = async () => (await db.query(`select outcome from app.audit_log where action = 'enquiry.create' order by id`)).rows.map((r) => r.outcome);
+  const eNo = await enquiryPost(null);
+  check("T-ENQ-001 Origin-less enquiry post refused (404), nothing written", eNo.status === 404 && (await enqAudits()).length === 0, String(eNo.status));
+  const eOk = await enquiryPost(BASE);
+  const eLoc = eOk.headers.get("location") ?? "";
+  check("T-ENQ-001 same-origin enquiry post saves and answers 303 to the record", eOk.status === 303 && /\/enquiries\/\d+\?saved=1$/.test(eLoc)
+    && JSON.stringify(await enqAudits()) === '["OK"]', `${eOk.status} ${eLoc}`);
+  const recordHtml = await (await get(eLoc.replace(/^https?:\/\/[^/]+/, ""), stu)).text();
+  check("T-ENQ-004 the record shows the enquirer and an Enroll link for a user who may admit", recordHtml.includes("Smoke") && recordHtml.includes("/students/new?enquiry="));
+
   // ---------- correction tickets (T-COR-001 raise page, DD-12 message, T-COR-004 review, T-COR-006 hidden) ----------
   // types inserted active by SQL (the go-live gates guard switching on through the app, not raising)
   const corCat = (await db.query(`insert into app.ticket_category (name) values ('Smoke corrections') returning id`)).rows[0].id;

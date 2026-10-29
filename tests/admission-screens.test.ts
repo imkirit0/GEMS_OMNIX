@@ -198,6 +198,6 @@ describe("admission screens (T-ADM)", () => {
       expect(src, f).not.toMatch(/export\s*\{|export\s+default/);
       for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|var|class)\s+(\w+)/gm)) found.push(m[1]!);
     }
-    expect(found.sort()).toEqual(["admitAction", "saveDetailsAction", "searchAction"]);
+    expect(found.sort()).toEqual(["admitAction", "bulkEnquiriesAction", "counsellorAction", "createEnquiryAction", "enquiryStatusAction", "followUpAction", "saveDetailsAction", "saveEnquiryAction", "searchAction", "searchEnquiriesAction"]);
   });
 });

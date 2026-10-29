@@ -29,6 +29,7 @@ export default function AdmitForm({ options, initial, countries }: { options: Op
     // remounted per state, so every input shows the returned values
     <form action={action} key={JSON.stringify(state)}>
       <input type="hidden" name="admissionId" value={state.admissionId} />
+      {state.enquiryId && <input type="hidden" name="enquiryId" value={state.enquiryId} />}
       <label style={row}>Centre <select name="centreId" defaultValue={centreId} onChange={(e) => setCentreId(e.target.value)}>
         <option value="">Choose…</option>
         {options.centres.map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}

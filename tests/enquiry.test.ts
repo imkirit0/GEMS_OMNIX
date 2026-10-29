@@ -1,8 +1,13 @@
 // Enquiry to admission acceptance tests: T-ENQ-001…006 (audit 09; docs/designs/enquiry/enquiry.md).
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import fs from "node:fs";
 import pg from "pg";
+import { POST as statusRoute } from "../app/enquiries/statuses/save/route";
+import { POST as mastersRoute } from "../app/admin/catalogue/masters/[slug]/save/route";
 import { Forbidden } from "../src/server/action";
-import { auth } from "../src/server/auth/http";
+import { submitAdmission } from "../src/server/admission-form";
+import { enrolPrefill, submitBulk, submitEnquiry, submitFollowUp } from "../src/server/enquiry-form";
+import { auth, SESSION_COOKIE } from "../src/server/auth/http";
 import * as cat from "../src/server/catalogue";
 import * as enq from "../src/server/enquiry";
 import { RateLimited } from "../src/server/exports";
@@ -329,8 +334,70 @@ describe("T-ENQ enquiry to admission", () => {
     expect(await thrown(as(SETUP, `update app.enquiry_status set kind = 'LOST' where id = 1`))).toMatchObject({ code: "42501" });
     expect(await thrown(as(SETUP, `update app.enquiry_status set code = 'X' where id = 1`))).toMatchObject({ code: "42501" });
     expect((await sql(`select sensitive from app.permission where key = 'enquiry.setup'`))[0].sensitive).toBe(true);
+    // the migration seeds it sensitive (TOTP for its holders); reset() re-creates permissions, so check the source too
+    expect(fs.readFileSync("prisma/migrations/0018_enquiry/migration.sql", "utf8")).toMatch(/\('enquiry\.setup', 'Maintain enquiry paths, types and statuses', true\)/);
     // readers: enquiry.view holders read the list without managing it; others are refused
     expect((await enq.listEnquiryStatuses(VA)).canManage).toBe(false);
     expect(await thrown(enq.listEnquiryStatuses(T.uA))).toBeInstanceOf(Forbidden);
+  });
+  test("T-ENQ-004 and T-ENQ-006 forms and routes: warnings then confirm, Origin, pre-fill, enrol through the form, setup routes", async () => {
+    const H = new Headers({ origin: "https://gems.test" });
+    const form = (o: Record<string, string>) => { const fd = new FormData(); for (const [k, v] of Object.entries(o)) fd.append(k, v); return fd; };
+    const fields = { centreId: "1", givenName: "Nisha", dateOfBirth: "2004-02-02", gender: "FEMALE", mobile: "9444400001", pathId: "1", typeId: "2",
+      course1: "DCA", course2: "TALLY", currentPincode: "682002", guardianName: "Mohan" };
+    await expect(submitEnquiry(WA, new Headers(), form(fields))).rejects.toBeInstanceOf(Forbidden); // no Origin
+    const first = await submitEnquiry(WA, H, form(fields));
+    expect(first).toEqual({ redirect: expect.stringMatching(/^\/enquiries\/\d+\?saved=1$/) });
+    const id = (first as { redirect: string }).redirect.split("/")[2]!.split("?")[0]!;
+    const warned = await submitEnquiry(WA, H, form({ ...fields, givenName: "Nisha2" }));
+    expect(warned).toMatchObject({ confirm: id, warnings: [{ kind: "enquiry", id }], formError: expect.stringContaining("already known") });
+    expect(await submitEnquiry(WA, H, form({ ...fields, givenName: "Nisha2", confirm: id }))).toHaveProperty("redirect");
+    expect(await submitEnquiry(WA, H, form({ ...fields, mobile: "12" }))).toMatchObject({ fieldErrors: { mobile: "10 digits" } });
+    expect(await submitEnquiry(WA, H, form({ ...fields, mobile: "9444400009", course2: "DCA" }))).toMatchObject({ fieldErrors: { course1: "distinct" } });
+    expect(await submitEnquiry(WA, H, form({ ...fields, pathId: "" }))).toMatchObject({ fieldErrors: { pathId: "required" } });
+    // follow-up and bulk through their forms
+    expect(await submitFollowUp(WA, H, form({ id, centreId: "1", kind: "CALL_OUT", note: "Asked about fees", nextOn: "2099-05-01" }))).toHaveProperty("redirect");
+    expect(await submitFollowUp(WA, H, form({ id, centreId: "1", kind: "NOTE", note: "x", durationMin: "abc" }))).toMatchObject({ fieldErrors: { durationMin: "0-600" } });
+    expect(await submitBulk(WA, H, form({ id, op: "status", statusId: "2" }))).toMatchObject({ fieldErrors: { centreId: expect.any(String) } });
+    expect(await submitBulk(WA, H, form({ id, centreId: "1", op: "status", statusId: "2" }))).toEqual({ redirect: "/enquiries?centre=1&done=1" });
+    // pre-fill: preference 1 only, details by key, the others listed; 404 cases
+    const pre = await enrolPrefill(WA, id);
+    expect(pre.values).toMatchObject({ centreId: "1", givenName: "Nisha", dateOfBirth: "2004-02-02", gender: "FEMALE", mobile: "9444400001",
+      currentPincode: "682002", guardianName: "Mohan", nationality: "IN", "course.1.courseCode": "DCA" });
+    expect(pre.values["course.2.courseCode"]).toBeUndefined();
+    expect(pre.also).toEqual([{ code: "TALLY", name: "Tally", offered: true }]);
+    await expect(enrolPrefill(MA, id)).rejects.toMatchObject({ reason: "notfound" }); // no student.admit
+    await expect(enrolPrefill(VA, id)).rejects.toMatchObject({ reason: "notfound" }); // view only
+    // enrol through the admission form: the hidden enquiryId links it
+    const fd = form({ ...pre.values, admissionId: crypto.randomUUID(), enquiryId: id, academicYear: "2026-27", admittedOn: "2026-10-28",
+      "course.1.joinDate": "2026-11-01", employmentStatus: "STUDENT", qualification: "PLUS_TWO" });
+    const done = await submitAdmission(WA, H, fd);
+    expect(done).toHaveProperty("redirect");
+    expect(await enquiry(id)).toMatchObject({ kind: "ENROLLED", admission_id: expect.any(String) });
+    await expect(enrolPrefill(WA, id)).rejects.toMatchObject({ reason: "notfound" }); // enrolled: 404
+    const again = form({ ...pre.values, mobile: "9444400002", admissionId: crypto.randomUUID(), enquiryId: id, academicYear: "2026-27",
+      admittedOn: "2026-10-28", "course.1.joinDate": "2026-11-01", employmentStatus: "STUDENT", qualification: "PLUS_TWO", givenName: "Other" });
+    expect(await submitAdmission(WA, H, again)).toMatchObject({ formError: "This enquiry is already enrolled." });
+
+    // setup routes: step-up, the keep key, a duplicate, paths through the shared slug route
+    const post = (path: string, body: Record<string, string>, tok: string = SETUP) => new Request(`https://gems.test${path}`, { method: "POST",
+      body: new URLSearchParams(body), headers: { "content-type": "application/x-www-form-urlencoded", cookie: `${SESSION_COOKIE}=${tok}`, origin: "https://gems.test" } });
+    const where = (r: Response) => { const u = new URL(r.headers.get("location") ?? "/", "https://gems.test"); return u.pathname + u.search; };
+    expect(where(await statusRoute(post("/enquiries/statuses/save", { op: "active", id: String(S.ENROLLED), active: "0", reason: "r" }))))
+      .toBe("/enquiries/statuses?error=enquiry.setup.keep&detail=active");
+    expect(where(await statusRoute(post("/enquiries/statuses/save", { op: "create", code: "warm", name: "Warm", kind: "OPEN", colour: "#00ff00", sortOrder: "15" }))))
+      .toBe("/enquiries/statuses?saved=1");
+    expect(where(await statusRoute(post("/enquiries/statuses/save", { op: "create", code: "warm", name: "W", kind: "OPEN", colour: "#00ff00", sortOrder: "1" }))))
+      .toBe("/enquiries/statuses?error=catalogue.duplicate");
+    expect(where(await statusRoute(post("/enquiries/statuses/save", { op: "create", code: "x", name: "X", kind: "OPEN", colour: "#00ff00", sortOrder: "" }))))
+      .toBe("/enquiries/statuses?error=invalid&detail=sortOrder");
+    expect(where(await statusRoute(post("/enquiries/statuses/save", { op: "nope" })))).toBe("/enquiries/statuses?error=invalid");
+    expect(where(await mastersRoute(post("/admin/catalogue/masters/enquiry-types/save", { op: "create", code: "fair", name: "Education fair" }),
+      { params: Promise.resolve({ slug: "enquiry-types" }) }))).toBe("/admin/catalogue/masters/enquiry-types?saved=1");
+    expect(where(await mastersRoute(post("/admin/catalogue/masters/enquiry-types/save", { op: "create", code: "fair2", name: "x" }, "tok-catA"),
+      { params: Promise.resolve({ slug: "enquiry-types" }) }))).toBe("/admin/catalogue/masters/enquiry-types?error=forbidden");
+    await setStepUp(SETUP, 3600);
+    expect(where(await statusRoute(post("/enquiries/statuses/save", { op: "create", code: "y", name: "Y", kind: "OPEN", colour: "#00ff00", sortOrder: "1" }))))
+      .toBe(`/stepup?next=${encodeURIComponent("/enquiries/statuses")}`);
   });
 });

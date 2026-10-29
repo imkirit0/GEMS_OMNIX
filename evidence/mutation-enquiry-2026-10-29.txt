@@ -1,0 +1,76 @@
+Enquiry to admission mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-29, local Docker database.
+Code mutations: each applied, the named test run (vitest -t), the file restored. Database mutations of 0018 (D-): applied
+to the local database as SQL (functions replaced from the migration's own text), the named test run, restored; then no
+drift and the suites green. 44: the drift gate. 56: next build, fresh database, next start on 3101, the security smoke.
+Numbering follows the report's table where it maps; D- numbers are the database set.
+
+CAUGHT 3 enrolled refusal removed from the lock
+CAUGHT 4 bulk cap 101
+CAUGHT 5 no dedupe
+CAUGHT 6 ENROLLED target allowed
+CAUGHT 7 LOST without a note
+CAUGHT 8 no version predicate
+CAUGHT 9 changed path not checked
+CAUGHT 10 create path not checked
+CAUGHT 11 inactive course accepted
+CAUGHT 12 confirm ignored
+CAUGHT 13 learners outside student.view
+CAUGHT 14 FAILED row copies names
+CAUGHT 15 audit carries values
+CAUGHT 16 no pre-flight search limit
+CAUGHT 18 list returns the mobile
+CAUGHT 19 calendar month rule removed
+CAUGHT 20 deactivation locks only the target
+CAUGHT 21 keep check removed
+CAUGHT 22 ENROLLED status creatable
+CAUGHT 23 counsellor check removed
+CAUGHT 24 a NOTE counts as contact
+CAUGHT 25 absent nextOn clears
+CAUGHT 26 closing keeps the next date
+CAUGHT 27 canEnrol without student.admit
+CAUGHT 27b create accepts a LOST status
+CAUGHT 29 admit without enquiry.manage
+CAUGHT 30 admit closed check removed
+CAUGHT 31 admit already-enrolled check removed
+CAUGHT 33 admit link without the ENROLLED status
+CAUGHT 34 admit other-centre check removed
+CAUGHT 35 DENIED row names the action permission
+CAUGHT 36 form drops enquiryId
+CAUGHT 37 enquiry paths on catalogue.manage
+CAUGHT 38 canManage per kind lost
+CAUGHT 39 pre-fill without canEnrol
+CAUGHT 40 pre-fill copies preference 2
+CAUGHT 41 no Origin check on create
+CAUGHT 42 status route keep key lost
+CAUGHT 43 action not catalogued
+CAUGHT D1 no force RLS on enquiry
+CAUGHT D2 select policy by visible centres
+CAUGHT D3 insert policy on enquiry.view
+CAUGHT D4 follow-up delete policy dropped
+CAUGHT D5 delete granted
+CAUGHT D6 centre_id in the update grant
+CAUGHT D7 kind in the status update grant
+CAUGHT D8 enrolled check dropped
+CAUGHT D9 courses check dropped
+CAUGHT D10 whatsapp check dropped
+CAUGHT D11 guard: insert open check removed
+CAUGHT D12 guard: enrolled rows updatable
+CAUGHT D13 guard: equivalence removed
+CAUGHT D13b guard: centre change allowed
+CAUGHT D13c guard: created_by not set
+CAUGHT D14 follow-up guard fails open
+CAUGHT D15 follow-ups mutable
+CAUGHT D16 follow-ups truncatable
+CAUGHT D17 may_receive without the caller check
+CAUGHT D18 people without the scope filter
+MISSED D19 enquiry.setup not sensitive
+MISSED D19 enquiry.setup not sensitive (database; reset() re-creates permissions from the fixtures) -> test added on the 0018 seed text
+CAUGHT D19 enquiry.setup seeded non-sensitive (file mutation of 0018, after the test was added)
+CAUGHT 44 calendar index removed from the schema (drift gate)
+CAUGHT 56 enrol page ignores the enquiry check  | FAIL  T-ENQ-004 the enrol page for a hidden enquiry is 404 and identical to a missing one  (200 200)
+
+Result: 61 mutations (39 code, 20 database, 1 drift, 1 real-server). One MISSED at first (D19: reset() re-creates
+permissions from the fixtures, so the database mutation was overwritten); a check on the 0018 seed text was added and
+the mutation, re-run against the migration file, is CAUGHT. Not run: the lock order (#38; a deadlock test is not a
+reliable kill), the lock's centre filter (#37; RLS hides other centres anyway, equivalent here), the status route's
+safeRoute wrapper (#58; covered for the other routes by T-MS-003).

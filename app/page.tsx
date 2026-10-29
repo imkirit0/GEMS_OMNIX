@@ -5,18 +5,21 @@ import { currentUser } from "@/server/auth/session";
 import { canAdminister } from "@/server/rbac";
 import { listCentres } from "@/server/centres";
 import { canManageCatalogue } from "@/server/catalogue";
+import { canViewEnquiries } from "@/server/enquiry";
 
 // Nothing is rendered without a valid session.
 export default async function Home() {
   const user = await currentUser();
   if (!user) redirect("/login");
   const session = (await cookies()).get(SESSION_COOKIE)?.value;
-  const [admin, centres, catalogue] = await Promise.all([canAdminister(session), listCentres(session), canManageCatalogue(session)]);
+  const [admin, centres, catalogue, enquiries] = await Promise.all([canAdminister(session), listCentres(session), canManageCatalogue(session),
+    canViewEnquiries(session)]);
   return (
     <main>
       <h1>GEMS OMNIX</h1>
       <p>Signed in as {user.displayName} ({user.login}).</p>
       {centres.length > 0 && <p><a href="/centres">Centres</a> ({centres.length})</p>}
+      {enquiries && <p><a href="/enquiries">Enquiries</a></p>}
       <p><a href="/students">Students</a> · <a href="/tickets">Tickets</a> · <a href="/tickets/approvals">My approvals</a></p>
       {admin && <p><a href="/admin/users">User and role administration</a></p>}
       {catalogue && <p><a href="/admin/catalogue">Catalogue</a></p>}
