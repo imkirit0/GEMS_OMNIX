@@ -1,7 +1,7 @@
 # Admission screens (Stage 3, first piece)
 
 *   **Author:** gtm
-*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; DD-9 and DD-10 came from EGM step 5 ([`zoom_out_report.md`](zoom_out_report.md)). Build approval follows the EGM review (steps 5–9).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-8 on 2026-10-29; DD-9 and DD-10 came from EGM step 5 ([`zoom_out_report.md`](zoom_out_report.md)), DD-11 from step 6 ([`comprehension_report.md`](comprehension_report.md)). Build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC (stated in a source), INF (inferred), PRO (proposed here), PMC (proposed default, waiting for its decision owner to sign). Statements in the Technical Plan without a class are PRO. Input: [`input-brief.md`](input-brief.md).
@@ -22,6 +22,10 @@ Stage 2 built the person core (`admit()`, `getPerson()`, duplicate detection, Ad
 | Server Action | A Next.js server function bound to a `<form action>`; before hydration the browser posts it as a normal multipart form (MPA) and a `redirect()` answers 303 | Next.js 16.4 (`node_modules/next/dist/docs`) |
 | 404 parity | A record outside the caller's scope gives the same response as a missing one | T-SEC-001 |
 | `pageRead()` | Runs a read with the session from cookies, inside the request context; `Forbidden` and not-found errors become 404 | `src/server/page-read.ts` |
+| Scope | The centres where the caller holds a permission: `app.scoped_centre_ids(permission)` | migration 0011 |
+| Match key | `app.person_match_key(given, family, dob, mobile)`, the duplicate-detection key | migration 0011 |
+| MPA post | A form post made before Next's client runtime has loaded (a plain multipart POST) | Next.js docs |
+| R-, T-, D-, NP- ids | Requirements, tests, open decisions, numbering policies | `docs/audit/` (02, 09, 04) |
 
 ## The Problem
 
@@ -35,7 +39,7 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`.
 
 *   **G1: A holder of `student.admit` at a centre admits a learner** with name, gender, date of birth, mobile, email, academic year, admission date and one to three courses, and then sees the Admission No and Register Nos on the learner's page [T-ADM-001].
 *   **G2: Likely duplicates are shown before anything is written,** and the user either admits the existing person or confirms a new one, without retyping and without personal data in any URL [T-ADM-002].
-*   **G3: Errors reach the user as field messages** (closed year, inactive course, invalid date, missing number series), on the right course row, with the typed values kept [T-ADM-003].
+*   **G3: Errors reach the user as field messages** (closed year, inactive course, invalid date) on the right input and course row, and as a form message for the rest (missing number series, a stale candidate), with the typed values kept [T-ADM-003].
 *   **G4: The list and the view show only learners admitted at centres in the caller's `student.view` scope;** another centre's learner gives 404, as a missing one does [T-ADM-004, T-SEC-001].
 *   **G5: The admit action refuses a cross-site or Origin-less POST, and a resubmitted form never admits twice** [T-ADM-005, T-ADM-006].
 
@@ -58,57 +62,104 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`.
 | `/students/new` | Admit a learner | `student.admit` at some centre | `admitOptions()` (new), the admit action |
 | `/students/[personId]` | View a learner: identity, admissions, registrations | `student.view` where the person is admitted | `getPerson()` (two fields added) |
 
-*   All three use `pageRead()`. **`pageRead()` gains one mapping:** `PersonError` with reason `notfound` becomes `notFound()`, as `TicketNotFound` already does. Today it would surface as a 500, so G4 needs this change (person-core assigned it to Stage 3).
-*   The home page gets an unconditional "Students" link, as "Tickets" is; `/students` answers 404 to a user without `student.view`.
+*   All three use `pageRead()`. **`pageRead()` gains one mapping:** `e instanceof PersonError && e.reason === "notfound"` becomes `notFound()`, as `TicketNotFound` already does (mapped directly; person-core's shared `NotFound` base class is deferred). Today it would surface as a 500, so G4 needs this change. Only reads let a `notfound` reach `pageRead()`; the admit action catches its own (below).
+*   The home page gets an unconditional "Students" link, as "Tickets" is.
+
+### Read Functions (`src/server/people.ts`)
+
+```ts
+export async function admitOptions(session: string | undefined): Promise<{
+  centres: { id: number; code: string; name: string }[]; years: { code: string }[];
+  courses: { code: string; name: string }[]; today: string }>;
+export async function listAdmissions(session: string | undefined, f: { q?: string; centreId?: number }): Promise<{
+  admissionId: string; personId: string; givenName: string; familyName: string | null;
+  centreCode: string; academicYear: string; admissionNo: string; admittedOn: string }[]>;
+export const istToday: () => string; // now exported (Asia/Kolkata, YYYY-MM-DD)
+```
+
+*   **`admitOptions`**, in the pattern of `raiseOptions()` (`src/server/tickets/engine.ts`): centres in `app.scoped_centre_ids('student.admit')`, open academic years, active courses ordered by code, `today = istToday()`. It throws `Forbidden` when that scope is empty, so `/students/new` answers 404.
+*   **`listAdmissions`**: throws `Forbidden` when `app.scoped_centre_ids('student.view')` is empty (`/students` answers 404). Otherwise it returns one row per admission at a centre in that scope, `order by a.created_at desc`, `limit 100`; a person with two admissions appears twice.
+    *   `q` is trimmed. If, after removing spaces, dashes and a leading `+91` or `0`, it is 10 digits, it matches `person.mobile`. It also matches `admission_no` or a `register_no` case-insensitively, and `given_name` or `family_name` by `ilike q || '%'`. `limitSearch(tx)` (`src/server/rate-limit.ts`; 30 per minute per user, PMC; T-SEC-015) runs only when `q` is non-empty, and the page catches `RateLimited` as the centre list does.
+    *   `centreId` can only narrow the scope (a crafted one outside it gives an empty list, T-SEC-005). The mobile number is not shown in the list.
+*   **`getPerson`** as built, with `admissions[].centreCode: string` and `registrations[].courseName: string` added to its existing query (joins to `app.centre` and `app.course`).
 
 ### Admit Form (`/students/new`)
 
-*   **Options** (`admitOptions(session)`, new in `people.ts`, in the pattern of `raiseOptions()` in `src/server/tickets/engine.ts`): centres where the caller holds `student.admit` (`app.scoped_centre_ids('student.admit')`), open academic years, active courses (code and name, ordered by code). A caller with no such centre gets 404.
-*   **Fields:** centre (select, preselected when there is one), academic year (select of open years), admission date (`<input type="date">`, default `istToday()`, exported from `people.ts`), given name (required), family name, gender (select), date of birth (date), mobile, email; **three course rows** (course select, join date, end date); a hidden `admissionId` (a fresh UUID per rendered form, DD-10).
-*   **Course picker** (DD-7): a plain `<select>` per row listing every active course as "CODE Name". About 1,200 options is acceptable for a native select, which supports typing to jump.
-*   **Client component:** the form is one small `"use client"` component (`useActionState`), like `app/tickets/new/upload.tsx`. Before hydration it still works: the browser posts it as a multipart form and the page re-renders with the returned state. No new CSP source: the existing nonce and `'strict-dynamic'` cover Next's runtime.
+*   **`page.tsx`** (server) calls `admitOptions()` and generates `admissionId = randomUUID()`, as `app/tickets/new/page.tsx` does for `ticketId`; it passes both to the form component.
+*   **`form.tsx`** (`"use client"`, `useActionState`), like `app/tickets/new/upload.tsx`. Inputs use `defaultValue={state.values[name]}`. Before hydration the browser posts it as a multipart form and the server re-renders the page with the returned state. No new CSP source: the existing nonce and `'strict-dynamic'` cover Next's runtime.
+*   **Inputs** (names in brackets): centre `centreId` (select, preselected when there is one), academic year `academicYear` (select of open years), admission date `admittedOn` (`<input type="date">`, default `today`), given name `givenName` (required), family name `familyName`, gender `gender` (select with an empty choice), date of birth `dateOfBirth`, mobile `mobile`, email `email`; three course rows `course.<n>.courseCode` (select of "CODE Name"), `course.<n>.joinDate`, `course.<n>.endDate` for n = 1…3 (DD-7); hidden `admissionId` (DD-10).
+*   **Duplicate list:** rendered inside the same `<form>` when `state.candidates` is set. Each candidate has `<button name="existingId" value={id}>Admit this person</button>`; one more `<button name="confirmNew" value="1">None of these: admit as a new person</button>`. The typed values are re-posted from the kept inputs. With `existingId`, `admit()` ignores the typed identity fields: the existing person's record is unchanged and the view shows its stored identity.
 
 ### The Admit Action
 
-*   **Thin action.** The `"use server"` function is three lines: `pageRead((s) => submitAdmission(s, formData))`. `pageRead()` already reads the session cookie, sets the request context (request id, client IP) and maps `Forbidden` and not-found to 404.
-*   **`submitAdmission(session, formData)`** (new, `src/server/admission-form.ts`) checks the origin, maps the form to `AdmitInput`, calls `admit()` and returns either a redirect path or the form state. It is a plain function, so vitest covers it without a running server.
-*   **Form mapping rules:**
-    *   an empty string means "absent" (HTML sends `""` for empty fields; `identityField()` and `courses()` would refuse `""`);
-    *   empty course rows are dropped, and a row-index map turns `admit()`'s `courses[i]` errors back into the form row's number;
-    *   `existingId` or `confirmNew` come from the button pressed in the duplicate list.
-*   **Outcomes:**
-    *   success: `redirect()` (303) to `/students/<personId>` (post-redirect-get, so a refresh never re-posts);
-    *   `PossibleDuplicate`: the state carries the typed values and the candidate list (given name, family name, date of birth, as `findMatches()` returns them), each with "Admit this person" (re-submits with `existingId`), plus "None of these: admit as a new person" (re-submits with `confirmNew`);
-    *   `PersonError`: the state carries the values and the field message, on its form row;
-    *   `SeriesMissing` (Admission or Register series): one neutral message, "Numbering is not set up for this; contact the head office";
-    *   `AdmissionExists` (DD-10): redirect to the person who already has that admission;
-    *   anything else is thrown and shown by `app/error.tsx` with its reference digest only (T-SEC-012).
-*   The values travel only in the POST body and the action's returned state, never in a URL (G2).
+```ts
+type AdmitFormState = {
+  values: Record<string, string>;      // every posted input, by name, echoed back
+  admissionId: string;                 // kept across round trips; new only when the page reloads
+  fieldErrors: Record<string, string>; // by input name, e.g. "course.2.courseCode"
+  formError?: string;
+  candidates?: Candidate[];            // from PossibleDuplicate
+};
+// app/students/new/actions.ts ("use server"), the thin action; prev is ignored:
+export async function admitAction(prev: AdmitFormState, formData: FormData): Promise<AdmitFormState> {
+  const r = await pageRead(async (s) => submitAdmission(s, await headers(), formData));
+  if ("redirect" in r) redirect(r.redirect);
+  return r;
+}
+// src/server/admission-form.ts, a plain function covered by vitest (tests pass new Headers({ origin, host })):
+export async function submitAdmission(session: string, h: Headers, formData: FormData): Promise<AdmitFormState | { redirect: string }>;
+```
+
+*   Initial state (from the page): `{ values: {}, admissionId: <the page's UUID>, fieldErrors: {} }`.
+*   **`submitAdmission` steps:**
+    1.  `sameOriginHeaders(h)` (below); false throws `Forbidden`, so a refused origin gets the 404 page.
+    2.  `admissionId` must be a non-empty UUID, else `formError` "Reload the form and try again" (the empty-means-absent rule does not apply to it).
+    3.  Map the form to `AdmitInput`:
+        *   an empty string means absent: `gender`, `dateOfBirth`, `mobile`, `email`, `familyName`, `course.<n>.endDate` → `null`/omitted;
+        *   `centreId` empty → `fieldErrors.centreId = "required"`, else `Number()`;
+        *   a course row is empty when its course, join date and end date are all empty, and is dropped; a partial row is kept (join date has no default) and its errors shown; all rows empty → `fieldErrors["course.1.courseCode"] = "required"`; a row-index map remembers which form row each `courses[i]` came from;
+        *   `confirmNew` is `true` only when its value is `"1"`; `existingId` is passed as given.
+    4.  Call `admit()` and map the outcome:
+        *   success → `{ redirect: "/students/<personId>" }` (post-redirect-get; a 303 before hydration, a client-side navigation after);
+        *   `PossibleDuplicate` → state with `candidates`;
+        *   `PersonError` `invalid` → the message is split at the first `": "`: the field part, through the row-index map (`courses[0].courseCode` → `course.<n>.courseCode`), picks the input, and the rule part is shown as is (e.g. "no such course", one message for inactive and missing courses); a message with no field part (`number already issued`, `inconsistent reference`, `malformed value`) goes to `formError`;
+        *   `PersonError` `notfound` (only from a stale `existingId`) → `formError` "That person can no longer be linked; choose again";
+        *   `SeriesMissing` (Admission or Register series) → `formError` "Numbering is not set up for this; contact the head office";
+        *   `AdmissionExists(personId)` → if `personId` is set, `{ redirect: "/students/<personId>" }`; if `null` (DD-11), one fresh `withScope` read `select person_id from app.admission where id = $admissionId`: visible → redirect there, not visible → `formError` "This form was already submitted" (no person named);
+        *   anything else is thrown and shown by `app/error.tsx` with its reference digest only (T-SEC-012).
+*   The values travel only in the POST body and the returned state, never in a URL (G2). An expired session during submit redirects to `/login?error=expired` and loses the typed values (accepted; the redirect cannot carry them).
 
 ### Origin Check
 
 *   Next 16.4 checks a Server Action's Origin host against `x-forwarded-host` or `host`, but **lets a request with no Origin header through** with a warning (`dist/server/app-render/action-handler.js`; `serverActions.md`). That is weaker than the app's rule.
-*   `src/server/auth/http.ts` gains `sameOriginHeaders(h: Headers)`: it rejects a missing Origin, and compares the Origin with the request's host (`x-forwarded-host` only when `TRUST_PROXY_HEADERS=1`, the rule `clientIp` follows). The existing `sameOrigin(req)` delegates to it, so routes and the action share one rule (T-AUTH-016). `submitAdmission()` calls it first and throws `Forbidden` on a mismatch.
+*   `src/server/auth/http.ts` gains `sameOriginHeaders(h: Headers, fallbackHost?: string): boolean`: false when `origin` is missing or `"null"`; otherwise `new URL(origin).host` must equal `x-forwarded-host` (only when `TRUST_PROXY_HEADERS=1`, the rule `clientIp` follows), else `host`, else `fallbackHost`. The scheme is not compared (behind TLS termination it is always https).
+*   `sameOrigin(req)` becomes `sameOriginHeaders(req.headers, new URL(req.url).host)`, so routes and the action share one rule (T-AUTH-016) and the existing route tests (`new Request("https://gems.test/…")` without a `host` header) stay green unchanged.
 
-### Resubmit Guard (DD-10)
+### Order of Checks in `admit()`
 
-*   `AdmitInput` gains an optional `admissionId` (a UUID; anything else gives `PersonError("invalid", "admissionId: invalid")`). `admit()` uses it as the admission's primary key instead of a random one.
-*   First thing inside the action's transaction, `admit()` reads `select person_id from app.admission where id = $admissionId`; a hit throws `AdmissionExists(personId)` before the duplicate check or any numbering. The primary key is the backstop for two concurrent submits: the loser's unique violation on `admission_pkey` also becomes `AdmissionExists`.
+1.  Validation before the transaction, as today, plus the `admissionId` format (`PersonError("invalid", "admissionId: invalid")`).
+2.  `authorize(student.admit, centreId)` (inside `scopedAction`).
+3.  **The `admissionId` lookup** `select person_id from app.admission where id = $1`; a hit throws `AdmissionExists(personId)` (DD-10). It runs before the catalogue checks, so a resubmit after the year closed still redirects.
+4.  Year open, then courses active (catalogue design).
+5.  Match key, advisory lock, `findMatches()` → `PossibleDuplicate`; or, with `existingId`, the link check.
+6.  Numbering and inserts, the admission with `id = admissionId`.
+
+`AdmissionExists` is defined in `people.ts` as `class AdmissionExists extends Error { constructor(readonly personId: string | null) }`. Two concurrent submits of one form: the loser's unique violation on `admission_pkey` aborts its transaction, so `personDb()` maps 23505 on `admission_pkey` to `AdmissionExists(null)` and `submitAdmission` resolves it as above. The lookup in step 3 runs under RLS: an id used at a centre outside the caller's scope is not found there and ends at the primary key, giving the neutral message (DD-11).
 
 ### Admit Implies View (DD-9)
 
-*   G1 redirects to the learner's page, which needs `student.view`. **Rule (PMC under D-SEC-1):** every role holding `student.admit` also holds `student.view`. The fixtures' `student_admin` role and the system administrator (E-035) already do; a test asserts the rule over all seeded roles. Enforcing it in `rbac_set_role_permissions` waits for D-SEC-1.
+*   G1 redirects to the learner's page, which needs `student.view`. **Rule (PMC under D-SEC-1):** every role holding `student.admit` also holds `student.view`. The fixtures' `student_admin` role and the `system_admin` role (granted every permission by migration 0013) already do. A test asserts the rule over every role in `app.role_permission` after migrations and `tests/fixtures.ts`. Enforcing it in `rbac_set_role_permissions` waits for D-SEC-1.
 
-### List (`/students`)
+### Tests
 
-*   `listAdmissions(session, { q?, centreId? })`, new in `people.ts`: admissions at centres in `scoped_centre_ids('student.view')`, newest first, at most 100 rows, joined to the person (given and family name) and the centre code.
-*   `q` matches the Admission No or a Register No exactly, or the start of the given or family name (case-insensitive), or the mobile's last ten digits. Each search calls the existing `limitSearch(tx)` (`src/server/rate-limit.ts`; 30 per minute per user, PMC; T-SEC-015), and the page catches `RateLimited` as the centre list does.
-*   `centreId` can only narrow the scope (a crafted one outside it gives an empty list, T-SEC-005). The mobile number is not shown in the list.
-
-### View (`/students/[personId]`)
-
-*   `getPerson()` as built, plus two fields in its existing query: the admission's centre code and each registration's course name.
-*   Shows the identity fields, then each admission in scope (centre code, year, Admission No, date) with its registrations (course code and name, Register No, status, dates).
+| ID | What it does | Expected |
+|---|---|---|
+| T-ADM-001 | `submitAdmission` with a valid form as `student.admit` at centre A (one empty course row); the DD-9 rule over all roles | Redirect to `/students/<personId>`; `getPerson` shows the Admission No, Register Nos, centre code and course names; rule holds |
+| T-ADM-002 | Admit a learner, then submit the same identity at centre A | State with the candidate (name, family name, DOB; no mobile); `existingId` adds an admission to that person, identity unchanged; `confirmNew` creates a second person; no URL carries the values |
+| T-ADM-003 | Closed year, inactive course on row 2, bad date, missing Register series, stale `existingId` | Field errors on the right inputs (`course.2.courseCode: no such course`), form errors for the rest, `values` echoed |
+| T-ADM-004 | List and view as centre B's user, crafted `centreId`, malformed person id; search by Admission No, Register No, name start, mobile | B's learners only; crafted filter gives an empty list; malformed and out-of-scope ids give 404; no mobile in the list |
+| T-ADM-005 | Real server: multipart action post with the action id from the rendered form and a valid session, with (1) a foreign Origin, (2) no Origin, (3) the same Origin | (1) and (2) 404 and no admission row; (3) 303 to `/students/<id>` |
+| T-ADM-006 | The same `admissionId` submitted twice (in turn and concurrently); an id used at another centre | Second submit redirects to the first learner, one admission only; the other centre's id gives "This form was already submitted" |
 
 ## Decisions
 
@@ -122,6 +173,7 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`.
 8.  **DD-8: The admission date defaults to today (Asia/Kolkata)** and is not checked against the academic year's dates (catalogue DD-6).
 9.  **DD-9: Admit implies view.** Every role with `student.admit` also holds `student.view` (PMC under D-SEC-1; design owner, 2026-10-29, Z3).
 10. **DD-10: Resubmit guard.** The form's hidden `admissionId` becomes the admission's primary key; a repeat redirects to the existing learner instead of admitting twice (design owner, 2026-10-29, Z12).
+11. **DD-11: A used `admissionId` the caller cannot see gives a neutral form message,** "This form was already submitted", naming no person (design owner, 2026-10-29, C4).
 
 ## Open Questions
 
@@ -171,6 +223,7 @@ Each goal is met when the tests named in brackets pass in `bash scripts/ci.sh`.
 | A centre user sees candidates' names and dates of birth | Personal data shown for a duplicate check | Only persons admitted in the caller's own `student.admit` scope (person-core DD-1); no mobile shown | T-ADM-002 |
 | A role with `student.admit` but not `student.view` | Admits, then cannot see the result | DD-9 rule, asserted on the seeded roles; enforcement waits for D-SEC-1 | T-ADM-001 |
 | No edits after save | A typo stays until R-095 exists | Accepted (DD-5) | none |
+| Session expires while the form is open | Typed values lost on submit | Accepted: the login redirect cannot carry them | none |
 
 ## Detailed Implementation Plan
 
