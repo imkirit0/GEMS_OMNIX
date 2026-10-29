@@ -1,6 +1,7 @@
 // Centre onboarding: T-CO-001…004 (audit 09; docs/designs/centre-onboarding/centre-onboarding.md). The /centres/new 404
 // for non-holders is a real-server smoke check (scripts/smoke-security.mjs).
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import fs from "node:fs";
 import pg from "pg";
 import { POST as createRoute } from "../app/centres/create/route";
 import { POST as saveRoute } from "../app/centres/[id]/save/route";
@@ -9,6 +10,8 @@ import { Forbidden } from "../src/server/action";
 import { auth, SESSION_COOKIE } from "../src/server/auth/http";
 import * as co from "../src/server/centres";
 import * as enq from "../src/server/enquiry";
+import { submitAdmission } from "../src/server/admission-form";
+import { submitEnquiry } from "../src/server/enquiry-form";
 import { AdmissionExists, admit, admitOptions, getPerson, type AdmitInput } from "../src/server/people";
 import { asAdmin, C, CO, EQ_ROLE, newSession, reset, rows, setStepUp, ST, ST_TOKEN, T } from "./fixtures";
 
@@ -114,6 +117,9 @@ describe("T-CO centre onboarding", () => {
       "agreement_from", "agreement_to", "area_id", "category", "code", "email", "gst_enabled", "gst_supply", "gstin", "id", "name",
       "opened_on", "ownership", "phone"]); // never status or the class
     expect(await sql(`select sensitive from app.permission where key = 'org.centre.manage'`)).toEqual([{ sensitive: true }]);
+    // reset() re-creates permissions from the fixtures, so check the migration's own seed too
+    expect(fs.readFileSync("prisma/migrations/0020_centre_onboarding/migration.sql", "utf8"))
+      .toMatch(/\('org\.centre\.manage', 'Create and edit centres, regions and areas; activate and deactivate centres', true\)/);
 
     // readers: managers see every centre; others their scope only (null alike for 404 parity)
     expect((await co.listCentres(M)).map((c) => c.code)).toEqual(["KL2-25", "KL3-07", "KL9-01", "TN1-03"]);
@@ -121,6 +127,8 @@ describe("T-CO centre onboarding", () => {
     expect(await co.getCentre(T.uA, 4)).toBeNull();
     expect(await co.getCentre(T.uA, C.A)).toMatchObject({ code: "KL2-25", canManage: false });
     expect(await co.getCentre(M, 999)).toBeNull();
+    expect(await co.getCentre(R1, C.A)).toBeNull(); // manage counts only at ALL scope
+    expect(await co.listCentres(R1)).toEqual([]);
 
     // every named check refuses the same values to the owner
     const checks: [string, string][] = [["code", "'kl9-x'"], ["email", "'a@b@c'"], ["phone", "'12345'"], ["category", "'X'"],
@@ -168,6 +176,11 @@ describe("T-CO centre onboarding", () => {
     expect((await as(R1, `update app.region set name = 'x'`)).rowCount).toBe(0);
     expect((await as(T.uA, `select count(*)::int n from app.area`)).rows).toEqual([{ n: 5 }]); // everyone reads
 
+    // the named checks refuse the same values to the owner
+    for (const [q, c] of [[`insert into app.region (code, name) values ('r9', 'x')`, "region_code_check"],
+      [`insert into app.region (code, name) values ('R9', ' x')`, "region_name_check"], [`insert into app.area (region_id, name) values (1, '')`, "area_name_check"]] as const) {
+      expect(await sqlErr(q), c).toMatchObject({ code: "23514", constraint: c });
+    }
     const geo = await co.listGeography(T.uA);
     expect(geo.regions.map((r) => r.code)).toEqual(["R1", "R2", "R3"]);
     expect(geo.areas.find((a) => a.id === 4)).toEqual({ id: 4, regionId: 3, name: "C one", regionCode: "R3" });
@@ -227,6 +240,16 @@ describe("T-CO centre onboarding", () => {
     const enquiry = { centreId: C.A, givenName: "Gate", dateOfBirth: "2005-01-01", gender: "FEMALE", mobile: "9300000003", pathId: 1, typeId: 1,
       courseCodes: ["DCA"] } as enq.EnquiryInput;
     expect(await msg(enq.createEnquiry(SH, enquiry))).toBe("centreId: centre is not active");
+    // the forms say so (R10)
+    const H = new Headers({ origin: "https://gems.test" });
+    const fd = (o: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(o)) f.append(k, v); return f; };
+    expect(await submitAdmission(SH, H, fd({ centreId: String(C.A), academicYear: "2026-27", admittedOn: "2026-10-28", givenName: "Gate3",
+      familyName: "Varma", gender: "FEMALE", dateOfBirth: "2001-05-05", mobile: "9300000004", "course.1.courseCode": "DCA",
+      "course.1.joinDate": "2026-11-01", "course.2.courseCode": "", "course.3.courseCode": "", currentPincode: "682001",
+      employmentStatus: "STUDENT", qualification: "SSLC", admissionId: "00000000-0000-4000-8000-000000000002" })))
+      .toMatchObject({ formError: "This centre is not active yet." });
+    expect(await submitEnquiry(SH, H, fd({ centreId: String(C.A), givenName: "Gate4", dateOfBirth: "2004-02-02", gender: "FEMALE",
+      mobile: "9300000005", pathId: "1", typeId: "2", course1: "DCA" }))).toMatchObject({ formError: "This centre is not active yet." });
     const a = (await enq.enquiryOptions(SH)).centres.find((c) => c.id === C.A)!;
     expect(a).toMatchObject({ manage: true, active: false }); // manage stays, so old enquiries keep their bulk actions
     expect(await enq.createEnquiry(SH, { ...enquiry, centreId: C.B })).toMatchObject({ id: expect.any(String) });
