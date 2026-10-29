@@ -1,7 +1,7 @@
 # Learner details (Stage 3, second piece)
 
 *   **Author:** gtm
-*   **Status:** Draft. DD-1…DD-3 were decided by the design owner on 2026-10-29; DD-4…DD-9 are proposed here and need the owner's acceptance before the EGM review (steps 5–9).
+*   **Status:** Proposed. The design owner decided DD-1…DD-3 and accepted DD-4…DD-9 on 2026-10-29; build approval follows the EGM review (steps 5–9).
 *   **Date:** 2026-10-29
 
 Evidence classes follow `docs/audit/00-README.md`: SRC, INF, PRO, PMC. Statements in the Technical Plan without a class are PRO; every fixed list below is PMC (a parameter until its owner signs). Input: [`input-brief.md`](input-brief.md).
@@ -109,12 +109,12 @@ One function per field, as `identityField()` does: trims, normalises phones (spa
 1.  **DD-1: Contact and family details only;** previous marks and the R-150.05 fields wait (design owner, 2026-10-29).
 2.  **DD-2: Fixed lists in code** (blood group, employment status, qualification, nationality codes), mirrored by database checks; masters later (design owner, 2026-10-29).
 3.  **DD-3: Details are editable after admission, audited;** identity stays ticket-only (design owner, 2026-10-29).
-4.  **DD-4 (proposed): A separate 1:1 table `person_detail`,** so identity columns keep their single update path and grants.
-5.  **DD-5 (proposed): Details belong to the person, not the admission;** a learner admitted at two centres has one address.
-6.  **DD-6 (proposed): Pincode, employment status and qualification are required on the form for a new person** (as in legacy; PMC under D-ADM-3); `admit()` keeps them optional for the migration.
-7.  **DD-7 (proposed): Editing needs `student.admit` at a centre where the learner is admitted;** viewing needs `student.view` as today.
-8.  **DD-8 (proposed): Optimistic lock by `version`;** a stale edit is refused, not merged.
-9.  **DD-9 (proposed): Audit rows carry the changed detail values unmasked** (PMC under D-SEC-4).
+4.  **DD-4: A separate 1:1 table `person_detail`,** so identity columns keep their single update path and grants.
+5.  **DD-5: Details belong to the person, not the admission;** a learner admitted at two centres has one address.
+6.  **DD-6: Pincode, employment status and qualification are required on the form for a new person** (as in legacy; PMC under D-ADM-3); `admit()` keeps them optional for the migration.
+7.  **DD-7: Editing needs `student.admit` at a centre where the learner is admitted;** viewing needs `student.view` as today.
+8.  **DD-8: Optimistic lock by `version`;** a stale edit is refused, not merged.
+9.  **DD-9: Audit rows carry the changed detail values unmasked** (PMC under D-SEC-4).
 
 ## Open Questions
 
