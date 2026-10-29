@@ -32,7 +32,7 @@ export default async function Courses({ searchParams }: { searchParams: Promise<
             <tr key={c.id}>
               <td><a href={`/admin/catalogue/courses/${c.id}`}>{c.code}</a></td><td>{c.name}</td><td>{c.displayName ?? ""}</td>
               <td>{code(l.categories, c.categoryId)}</td><td>{code(l.divisions, c.divisionId)}</td><td>{durationSummary(c)}</td>
-              <td>{c.classes.join(", ")}</td><td>{c.visible ? "Yes" : "No"}</td><td>{c.active ? "Active" : "Inactive"}</td>
+              <td>{c.specialCase ? "Named centres only" : c.classes.join(", ")}</td><td>{c.visible ? "Yes" : "No"}</td><td>{c.active ? "Active" : "Inactive"}</td>
             </tr>
           ))}
         </tbody>

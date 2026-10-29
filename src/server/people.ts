@@ -208,12 +208,18 @@ export async function admitOptions(session: string | undefined) {
       where c.id = any (app.scoped_centre_ids('student.admit')) order by c.code`;
     if (centres.length === 0) throw new Forbidden("student.admit denied");
     const years = await tx.$queryRaw<{ code: string }[]>`select code from app.academic_year where open order by code`;
-    // classCodes: the active classes a course may be sold at, the same joins as admit() (DD-15, DD-16)
+    // the same rule as admit() (DD-15, DD-16; certifications DD-3): classCodes, the active classes a course may be sold
+    // at; centreIds, its named centres within the caller's student.admit scope ([] = none here), or null for the class
+    // rule. Correlated subqueries, so no join fans out (D4); an empty named list stays [] and never becomes null (D3).
     const courses = await tx.$queryRaw<OfferCourse[]>`
-      select co.code, co.name, coalesce(array_agg(k.code order by k.code) filter (where k.id is not null), '{}') as "classCodes"
-      from app.course co left join app.course_centre_class cc on cc.course_id = co.id
-        left join app.centre_class k on k.id = cc.centre_class_id and k.active
-      where co.active and co.visible group by co.id order by co.code`;
+      select co.code, co.name,
+        array(select k.code from app.course_centre_class cc join app.centre_class k on k.id = cc.centre_class_id and k.active
+              where cc.course_id = co.id order by k.code) as "classCodes",
+        case when exists (select 1 from app.course_centre x where x.course_id = co.id)
+          then array(select x.centre_id from app.course_centre x where x.course_id = co.id
+                     and x.centre_id = any (app.scoped_centre_ids('student.admit')) order by x.centre_id)
+          else null end as "centreIds"
+      from app.course co where co.active and co.visible order by co.code`;
     return { centres, years, courses, today: istToday(), enforced: CATALOGUE_GATES.enforceAvailability };
   });
 }
@@ -324,13 +330,16 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     const missing = list.findIndex((c) => !live.has(c.courseCode));
     if (missing >= 0) throw invalid(`courses[${missing}].courseCode`, "no such course");
     if (CATALOGUE_GATES.enforceAvailability) {
-      // the courses this centre's active class may sell; a centre without a class sells none (DD-7, DD-15)
+      // a course with named centres is sold only there (certifications DD-3, amending DD-7); otherwise by this
+      // centre's active class, so a centre without a class sells only the courses that name it (DD-15)
       const offered = new Set((await tx.$queryRaw<{ code: string }[]>`
         select co.code from app.course co
-          join app.course_centre_class cc on cc.course_id = co.id
-          join app.centre_class k on k.id = cc.centre_class_id and k.active
-          join app.centre ce on ce.centre_class_id = k.id
-        where ce.id = ${input.centreId} and co.code = any (${list.map((c) => c.courseCode)}::text[])`).map((r) => r.code));
+        where co.code = any (${list.map((c) => c.courseCode)}::text[]) and case
+          when exists (select 1 from app.course_centre x where x.course_id = co.id)
+            then exists (select 1 from app.course_centre x where x.course_id = co.id and x.centre_id = ${input.centreId})
+          else exists (select 1 from app.course_centre_class cc join app.centre_class k on k.id = cc.centre_class_id and k.active
+                       join app.centre ce on ce.centre_class_id = k.id where cc.course_id = co.id and ce.id = ${input.centreId}) end`)
+        .map((r) => r.code));
       const refused = list.findIndex((c) => !offered.has(c.courseCode));
       if (refused >= 0) throw invalid(`courses[${refused}].courseCode`, "not offered at this centre");
     }

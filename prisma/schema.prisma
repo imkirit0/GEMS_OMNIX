@@ -67,6 +67,8 @@ model Centre {
 
   enquiries Enquiry[]
 
+  specialCourses CourseCentre[]
+
   @@map("centre")
   @@schema("app")
 }
@@ -685,40 +687,42 @@ model CentreClass {
 }
 
 model Course {
-  id                Int                 @id @default(autoincrement())
-  code              String              @unique
+  id                Int                   @id @default(autoincrement())
+  code              String                @unique
   name              String
-  categoryId        Int                 @map("category_id")
-  divisionId        Int                 @map("division_id")
-  active            Boolean             @default(true)
-  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
-  category          CourseCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  division          CourseDivision      @relation(fields: [divisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  categoryId        Int                   @map("category_id")
+  divisionId        Int                   @map("division_id")
+  active            Boolean               @default(true)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  category          CourseCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  division          CourseDivision        @relation(fields: [divisionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   registrations     Registration[]
   // course master (docs/designs/course-master/course-master.md); checks and grants in 0016
-  displayName       String?             @map("display_name")
+  displayName       String?               @map("display_name")
   department        String?
-  durationType      String?             @map("duration_type")
-  durationMonths    Int?                @map("duration_months")
-  durationWeeks     Int?                @map("duration_weeks")
-  durationDays      Int?                @map("duration_days")
-  durationHours     Int?                @map("duration_hours")
+  durationType      String?               @map("duration_type")
+  durationMonths    Int?                  @map("duration_months")
+  durationWeeks     Int?                  @map("duration_weeks")
+  durationDays      Int?                  @map("duration_days")
+  durationHours     Int?                  @map("duration_hours")
   capacity          Int?
-  examMinDays       Int?                @map("exam_min_days")
-  sortOrder         Int                 @default(0) @map("sort_order")
-  visible           Boolean             @default(true)
-  materialsRequired Boolean             @default(false) @map("materials_required")
-  marklistRequired  Boolean             @default(false) @map("marklist_required")
-  noRegFee          Boolean             @default(false) @map("no_reg_fee")
-  itMagic           Boolean             @default(false) @map("it_magic")
-  keltron           Boolean             @default(false)
-  internshipKeltron Boolean             @default(false) @map("internship_keltron")
-  selected          Boolean             @default(false)
-  keltronShare      Decimal?            @map("keltron_share") @db.Decimal(5, 2)
+  examMinDays       Int?                  @map("exam_min_days")
+  sortOrder         Int                   @default(0) @map("sort_order")
+  visible           Boolean               @default(true)
+  materialsRequired Boolean               @default(false) @map("materials_required")
+  marklistRequired  Boolean               @default(false) @map("marklist_required")
+  noRegFee          Boolean               @default(false) @map("no_reg_fee")
+  itMagic           Boolean               @default(false) @map("it_magic")
+  keltron           Boolean               @default(false)
+  internshipKeltron Boolean               @default(false) @map("internship_keltron")
+  selected          Boolean               @default(false)
+  keltronShare      Decimal?              @map("keltron_share") @db.Decimal(5, 2)
   classes           CourseCentreClass[]
-  enquiries1        Enquiry[]           @relation("enquiryCourse1")
-  enquiries2        Enquiry[]           @relation("enquiryCourse2")
-  enquiries3        Enquiry[]           @relation("enquiryCourse3")
+  enquiries1        Enquiry[]             @relation("enquiryCourse1")
+  enquiries2        Enquiry[]             @relation("enquiryCourse2")
+  enquiries3        Enquiry[]             @relation("enquiryCourse3")
+  certifications    CourseCertification[]
+  centres           CourseCentre[]
 
   @@map("course")
   @@schema("app")
@@ -856,5 +860,45 @@ model EnquiryFollowup {
 
   @@index([enquiryId])
   @@map("enquiry_followup")
+  @@schema("app")
+}
+
+// R-092 certification master (docs/designs/certifications); checks, RLS and grants in 0019
+model Certification {
+  id          Int                   @id @default(autoincrement())
+  code        String                @unique
+  name        String
+  type        String
+  description String?
+  active      Boolean               @default(true)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  courses     CourseCertification[]
+
+  @@map("certification")
+  @@schema("app")
+}
+
+// R-090: a course's mandatory and optional certifications (certifications DD-2)
+model CourseCertification {
+  courseId        Int           @map("course_id")
+  certificationId Int           @map("certification_id")
+  mandatory       Boolean
+  course          Course        @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  certification   Certification @relation(fields: [certificationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([courseId, certificationId])
+  @@map("course_certification")
+  @@schema("app")
+}
+
+// R-090.01: the named centres that alone may sell a course (certifications DD-3)
+model CourseCentre {
+  courseId Int    @map("course_id")
+  centreId Int    @map("centre_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centre   Centre @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([courseId, centreId])
+  @@map("course_centre")
   @@schema("app")
 }

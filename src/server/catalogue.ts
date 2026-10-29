@@ -5,6 +5,7 @@
 import { Prisma } from "../../generated/prisma/client";
 import { Forbidden } from "./action";
 import { withScope, type Tx } from "./db";
+import { ownText } from "./details";
 import { academicYearOk, ACADEMIC_YEAR_RULE, CODE_RULE, isoDate, normCode, PersonError } from "./people";
 import { adminWrite, RbacError } from "./rbac";
 
@@ -325,7 +326,7 @@ export async function setCourseClasses(session: string | undefined, courseId: nu
 
 type Entry = { id: number; code: string; name: string; active: boolean };
 export type CourseListRow = Pick<CourseRow, "id" | "code" | "name" | "displayName" | "categoryId" | "divisionId" | "active" | "visible"
-  | "sortOrder" | "durationType" | "durationMonths" | "durationWeeks" | "durationDays" | "durationHours"> & { classes: string[] };
+  | "sortOrder" | "durationType" | "durationMonths" | "durationWeeks" | "durationDays" | "durationHours"> & { classes: string[]; specialCase: boolean };
 
 // picklist entries: active ones, plus those the given course uses (shown "(inactive)")
 async function picklists(tx: Tx, courseId: number | null) {
@@ -352,7 +353,8 @@ export async function listCourses(session: string | undefined, f: { categoryId?:
     courses: await tx.$queryRaw<CourseListRow[]>`select co.id, co.code, co.name, co.display_name as "displayName",
         co.category_id as "categoryId", co.division_id as "divisionId", co.active, co.visible, co.sort_order as "sortOrder",
         co.duration_type as "durationType", co.duration_months as "durationMonths", co.duration_weeks as "durationWeeks",
-        co.duration_days as "durationDays", co.duration_hours as "durationHours", ${CLASS_CODES(Prisma.sql`co`)}
+        co.duration_days as "durationDays", co.duration_hours as "durationHours", ${CLASS_CODES(Prisma.sql`co`)},
+        exists (select 1 from app.course_centre x where x.course_id = co.id) as "specialCase"
       from app.course co where true
         ${Number.isSafeInteger(f.categoryId) ? Prisma.sql`and co.category_id = ${f.categoryId}` : Prisma.empty}
         ${Number.isSafeInteger(f.divisionId) ? Prisma.sql`and co.division_id = ${f.divisionId}` : Prisma.empty}
@@ -364,16 +366,37 @@ export async function listCourses(session: string | undefined, f: { categoryId?:
   }));
 }
 
-/** One course; the share only for catalogue managers (DD-13 revised). An unknown id is Forbidden (the page 404s). */
+export type CourseCertificationRow = { id: number; code: string; name: string; type: string; mandatory: boolean; active: boolean };
+type Named = { id: number; code: string; name: string };
+
+/**
+ * One course; the share only for catalogue managers (DD-13 revised). An unknown id is Forbidden (the page 404s).
+ * Special-case centres (certifications DD-3): the names visible under app.centre's RLS, plus a count of the others (Z1, D2).
+ */
 export async function getCourse(session: string | undefined, courseId: number) {
   return withScope(session, async (tx) => {
     if (!Number.isSafeInteger(courseId)) throw new Forbidden("course");
-    const [course] = await tx.$queryRaw<(CourseRow & { classes: string[] })[]>`select ${COURSE_BASE},
+    const [row] = await tx.$queryRaw<(CourseRow & { classes: string[]; specialCase: boolean; hiddenCentres: number })[]>`select ${COURSE_BASE},
         case when app.has_permission('catalogue.manage', null) then keltron_share::float8 end as "keltronShare",
-        ${CLASS_CODES(Prisma.sql`course`)}
+        ${CLASS_CODES(Prisma.sql`course`)},
+        exists (select 1 from app.course_centre x where x.course_id = course.id) as "specialCase",
+        ((select count(*) from app.course_centre x where x.course_id = course.id)
+          - (select count(*) from app.course_centre x join app.centre ce on ce.id = x.centre_id where x.course_id = course.id))::int as "hiddenCentres"
       from app.course where id = ${courseId}`;
-    if (!course) throw new Forbidden("course");
-    return { course, ...(await picklists(tx, courseId)), canManage: await canManage(tx) };
+    if (!row) throw new Forbidden("course");
+    const certifications = await tx.$queryRaw<CourseCertificationRow[]>`select c.id, c.code, c.name, c.type, cc.mandatory, c.active
+      from app.course_certification cc join app.certification c on c.id = cc.certification_id where cc.course_id = ${courseId} order by c.code`;
+    const centres = await tx.$queryRaw<Named[]>`select ce.id, ce.code, ce.name from app.course_centre x
+      join app.centre ce on ce.id = x.centre_id where x.course_id = ${courseId} order by ce.code`;
+    const manage = await canManage(tx);
+    return {
+      course: { ...row, certifications, centres }, ...(await picklists(tx, courseId)),
+      certificationPicklist: manage ? await tx.$queryRaw<(Named & { type: string; active: boolean })[]>`select id, code, name, type, active
+        from app.certification where active or id in (select certification_id from app.course_certification where course_id = ${courseId})
+        order by code` : [],
+      centrePicklist: manage ? await tx.$queryRaw<Named[]>`select id, code, name from app.centre order by code` : [],
+      canManage: manage,
+    };
   });
 }
 
@@ -471,4 +494,136 @@ export async function setCentreClass(session: string | undefined, centreId: numb
       await tx.$executeRaw`update app.centre set centre_class_id = ${k}::int where id = ${i}`;
       return { before: { classCode: row.classCode }, after: { classCode: code } };
     }, (x) => x).then(done);
+}
+
+// ---------- Certifications and special-case centres (docs/designs/certifications/certifications.md) ----------
+
+export const CERT_TYPES: readonly string[] = ["VOUCHER", "LICENCE"]; // DD-1 (SRC: Voucher, Licence)
+const MAX_CERTS = 100; // per course; 57 legacy certifications (D7, I8)
+const MAX_CENTRES = 500; // per course; 386 legacy centres (E-021)
+const CERT_COLS = Prisma.sql`id, code, name, type, description, active`;
+export type CertificationRow = { id: number; code: string; name: string; type: string; description: string | null; active: boolean };
+
+function certType(v: unknown): string {
+  if (typeof v !== "string" || !CERT_TYPES.includes(v)) throw bad("type: one of VOUCHER, LICENCE");
+  return v;
+}
+function description(v: unknown): string | null {
+  try { return ownText("description", v, 1000, true); } catch (e) {
+    if (e instanceof PersonError) throw bad(e.message);
+    throw e;
+  }
+}
+
+/** Every certification, inactive ones included, by code; readable by every signed-in user. */
+export async function listCertifications(session: string | undefined) {
+  return withScope(session, async (tx) => ({
+    rows: await tx.$queryRaw<CertificationRow[]>`select ${CERT_COLS} from app.certification order by code`,
+    canManage: await canManage(tx),
+  }));
+}
+
+export async function createCertification(session: string | undefined, c: { code: string; name: string; type: string; description?: string | null }) {
+  const k = code(c.code), n = name(c.name), t = certType(c.type), d = description(c.description);
+  return unique(() => adminWrite(session, { action: "catalogue.create", permission: MANAGE, targetType: "certification" },
+    async (tx) => (await tx.$queryRaw<CertificationRow[]>`insert into app.certification (code, name, type, description)
+      values (${k}, ${n}, ${t}, ${d}) returning ${CERT_COLS}`)[0]!,
+    (r) => ({ after: r }))).then((r) => ({ id: r.id, code: r.code }));
+}
+
+async function lockCertification(tx: Tx, rowId: number): Promise<CertificationRow> {
+  const [r] = await tx.$queryRaw<CertificationRow[]>`select ${CERT_COLS} from app.certification where id = ${rowId} for update`;
+  if (!r) throw new RbacError("notfound", "certification not found");
+  return r;
+}
+
+export async function updateCertification(session: string | undefined, rowId: number, u: { name?: string; type?: string; description?: string | null }) {
+  const i = id("id", rowId);
+  const n = u.name === undefined ? undefined : name(u.name);
+  const t = u.type === undefined ? undefined : certType(u.type);
+  const d = u.description === undefined ? undefined : description(u.description);
+  return adminWrite(session, { action: "catalogue.update", permission: MANAGE, targetType: "certification", targetId: String(i) },
+    async (tx) => {
+      const before = await lockCertification(tx, i);
+      const after = { ...before, name: n ?? before.name, type: t ?? before.type, description: d === undefined ? before.description : d };
+      if (after.name === before.name && after.type === before.type && after.description === before.description) throw bad("nothing to change");
+      await tx.$executeRaw`update app.certification set name = ${after.name}, type = ${after.type}, description = ${after.description} where id = ${i}`;
+      return { before, after };
+    }, (r) => r).then(done);
+}
+
+// Two calls with literal actions, so the audit catalogue gate can read both names (as setMasterActive).
+export async function setCertificationActive(session: string | undefined, rowId: number, active: boolean, reason: string) {
+  const i = id("id", rowId), a = bool("active", active), r = reasonOf(reason);
+  const run = async (tx: Tx) => {
+    const row = await lockCertification(tx, i);
+    if (row.active === a) throw already(a ? "active" : "inactive");
+    await tx.$executeRaw`update app.certification set active = ${a} where id = ${i}`;
+    return { before: { active: row.active }, after: { active: a } };
+  };
+  return (a
+    ? adminWrite(session, { action: "catalogue.activate", permission: MANAGE, targetType: "certification", targetId: String(i), reason: r }, run, (x) => x)
+    : adminWrite(session, { action: "catalogue.deactivate", permission: MANAGE, targetType: "certification", targetId: String(i), reason: r }, run, (x) => x)
+  ).then(done);
+}
+
+/** A course's mandatory and optional certifications (DD-2). An inactive one may stay, but is never newly added. */
+export async function setCourseCertifications(session: string | undefined, courseId: number, items: { certificationId: number; mandatory: boolean }[]) {
+  const i = id("id", courseId);
+  if (!Array.isArray(items) || items.length > MAX_CERTS || !items.every((x) => x !== null && typeof x === "object"
+    && Number.isSafeInteger(x.certificationId) && typeof x.mandatory === "boolean")) throw bad("certifications: invalid");
+  const want = new Map(items.map((x) => [x.certificationId, x.mandatory]));
+  if (want.size !== items.length) throw bad("certifications: duplicate");
+  return adminWrite(session, { action: "catalogue.course.certifications", permission: MANAGE, targetType: "course", targetId: String(i) },
+    async (tx) => {
+      await lockCourse(tx, i); // the three link writers of a course run one after the other
+      const current = await tx.$queryRaw<{ id: number; code: string; mandatory: boolean }[]>`select c.id, c.code, cc.mandatory
+        from app.course_certification cc join app.certification c on c.id = cc.certification_id where cc.course_id = ${i}`;
+      const codeOf = new Map(current.map((c) => [c.id, c.code]));
+      const added = [...want.keys()].filter((x) => !codeOf.has(x));
+      if (added.length > 0) {
+        const live = await tx.$queryRaw<{ id: number; code: string }[]>`select id, code from app.certification
+          where id = any (${added}::int[]) and active for share`;
+        if (live.length !== added.length) throw bad("certifications: inactive or unknown");
+        for (const c of live) codeOf.set(c.id, c.code);
+      }
+      if (added.length === 0 && current.length === want.size && current.every((c) => want.get(c.id) === c.mandatory)) throw bad("nothing to change");
+      await tx.$executeRaw`delete from app.course_certification where course_id = ${i}`;
+      if (want.size > 0) {
+        await tx.$executeRaw`insert into app.course_certification (course_id, certification_id, mandatory)
+          select ${i}, unnest(${[...want.keys()]}::int[]), unnest(${[...want.values()]}::boolean[])`;
+      }
+      const split = (pairs: [number, boolean][]) => ({
+        mandatory: pairs.filter(([, m]) => m).map(([x]) => codeOf.get(x)!).sort(),
+        optional: pairs.filter(([, m]) => !m).map(([x]) => codeOf.get(x)!).sort(),
+      });
+      return { before: split(current.map((c) => [c.id, c.mandatory])), after: split([...want]) };
+    }, (r) => r).then(done);
+}
+
+/** The named centres that alone may sell a course (DD-3); the empty set returns it to the class rule. */
+export async function setCourseCentres(session: string | undefined, courseId: number, centreIds: number[]) {
+  const i = id("id", courseId);
+  if (!Array.isArray(centreIds) || centreIds.length > MAX_CENTRES || !centreIds.every((x) => Number.isSafeInteger(x))) throw bad("centres: invalid");
+  const ids = [...centreIds];
+  if (new Set(ids).size !== ids.length) throw bad("centres: duplicate");
+  return adminWrite(session, { action: "catalogue.course.centres", permission: MANAGE, targetType: "course", targetId: String(i) },
+    async (tx) => {
+      await lockCourse(tx, i);
+      const current = await tx.$queryRaw<{ id: number; code: string }[]>`select ce.id, ce.code from app.course_centre x
+        join app.centre ce on ce.id = x.centre_id where x.course_id = ${i}`;
+      const codeOf = new Map(current.map((c) => [c.id, c.code]));
+      const added = ids.filter((x) => !codeOf.has(x));
+      if (added.length > 0) {
+        // no lock: centres are never deleted and the FK guards them (C11); a manager (ALL scope) sees every centre
+        const known = await tx.$queryRaw<{ id: number; code: string }[]>`select id, code from app.centre where id = any (${added}::int[])`;
+        if (known.length !== added.length) throw bad("centres: unknown");
+        for (const c of known) codeOf.set(c.id, c.code);
+      }
+      if (added.length === 0 && ids.length === current.length) throw bad("nothing to change");
+      await tx.$executeRaw`delete from app.course_centre where course_id = ${i}`;
+      if (ids.length > 0) await tx.$executeRaw`insert into app.course_centre (course_id, centre_id) select ${i}, unnest(${ids}::int[])`;
+      const sorted = (xs: number[]) => xs.map((x) => codeOf.get(x)!).sort();
+      return { before: { centres: sorted(current.map((c) => c.id)) }, after: { centres: sorted(ids) } };
+    }, (r) => r).then(done);
 }

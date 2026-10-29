@@ -76,6 +76,20 @@ export function detailField(k: DetailKey, v: unknown): string | null {
   return s;
 }
 
+/**
+ * Free text: null or blank gives null; control characters (tab, LF and CR allowed when multiline) and lone surrogates
+ * refused; at most max code points. Shared by the enquiry fields and the certification description.
+ */
+export function ownText(field: string, v: unknown, max: number, multiline = false): string | null {
+  if (v == null) return null;
+  if (typeof v !== "string") throw invalid(field, "invalid");
+  if (LONE_SURROGATE.test(v) || (multiline ? CONTROL_IN_ADDRESS : CONTROL).test(v)) throw invalid(field, "invalid characters");
+  const s = v.trim();
+  if (s === "") return null;
+  if ([...s].length > max) throw invalid(field, `1-${max} characters`);
+  return s;
+}
+
 /** [code, English name] sorted by name; computed on the server and passed to client components (design R7). */
 export function countryOptions(): [string, string][] {
   const names = new Intl.DisplayNames(["en"], { type: "region" });

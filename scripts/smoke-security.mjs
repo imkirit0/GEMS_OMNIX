@@ -156,6 +156,21 @@ try {
     body: new URLSearchParams({ code: "EVIL", name: "Evil", categoryId: "1", divisionId: "1", sortOrder: "0" }) });
   check("T-CM course create from a foreign origin is refused", foreignCreate.status === 403, String(foreignCreate.status));
 
+  // ---------- certifications and special-case centres (T-CC: everyone reads; managers only change; scoped names) ----------
+  await db.query(`insert into app.certification (code, name, type) values ('SMKCERT', 'Smoke certification', 'VOUCHER')`);
+  await db.query(`insert into app.course_centre (course_id, centre_id) values ($1, $2)`, [smkc, ids.A]);
+  const certPage = await get("/admin/catalogue/certifications", viewer);
+  const certBody = await certPage.text();
+  check("T-CC certifications readable by a non-manager, without forms", certPage.status === 200 && certBody.includes("SMKCERT")
+    && !certBody.includes('method="post"'), String(certPage.status));
+  const foreignCert = await fetch(`${BASE}/admin/catalogue/certifications/save`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${catTok}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ op: "create", code: "EVIL", name: "Evil", type: "VOUCHER" }) });
+  check("T-CC certification create from a foreign origin is refused", foreignCert.status === 403, String(foreignCert.status));
+  const specialPage = await (await get(`/admin/catalogue/courses/${smkc}`, viewer)).text();
+  check("T-CC a non-manager's course page names the special-case centre in scope", specialPage.includes("Only named centres may sell it")
+    && specialPage.includes("SMK-A"));
+
   // ---------- catalogue masters pages (T-MS: everyone reads, no forms for non-managers; slugs; origin) ----------
   for (const [path, marker] of [["/admin/catalogue/masters/categories", "SMK"], ["/admin/catalogue/years", "2026-27"], ["/admin/catalogue/centres", "SMK-A"]]) {
     const r = await get(path, viewer);

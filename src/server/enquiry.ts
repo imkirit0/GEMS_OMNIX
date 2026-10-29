@@ -5,7 +5,7 @@
 import { Prisma } from "../../generated/prisma/client";
 import { Forbidden, scopedAction } from "./action";
 import { withScope, type Tx } from "./db";
-import { detailField } from "./details";
+import { detailField, ownText } from "./details";
 import { unique } from "./catalogue";
 import { CODE_RULE } from "./people";
 import { identityField, invalid, isoDate, istToday, normCode, PersonError } from "./person-rules";
@@ -43,19 +43,6 @@ const ID = /^\d{1,18}$/;
 
 // ---------- Field validation (mirrored by the 0018 checks) ----------
 
-const CONTROL = /[\u0000-\u001f\u007f]/;
-const CONTROL_MULTILINE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/; // tab, newline, carriage return allowed
-const LONE_SURROGATE = /\p{Cs}/u;
-
-function ownText(field: string, v: unknown, max: number, multiline = false): string | null {
-  if (v == null) return null;
-  if (typeof v !== "string") throw invalid(field, "invalid");
-  if (LONE_SURROGATE.test(v) || (multiline ? CONTROL_MULTILINE : CONTROL).test(v)) throw invalid(field, "invalid characters");
-  const s = v.trim();
-  if (s === "") return null;
-  if ([...s].length > max) throw invalid(field, `1-${max} characters`);
-  return s;
-}
 function phone(field: string, v: unknown): string | null {
   if (v == null) return null;
   if (typeof v !== "string") throw invalid(field, "invalid");

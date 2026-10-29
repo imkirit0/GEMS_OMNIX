@@ -12,7 +12,7 @@ export const COURSE_FIELD_LABELS: Record<string, string> = {
   code: "Code", name: "Name", displayName: "Display name", categoryId: "Category", divisionId: "Division",
   department: "Department", durationType: "Duration type", durationMonths: "Months", durationWeeks: "Weeks",
   durationDays: "Days", durationHours: "Hours", capacity: "Capacity", examMinDays: "Exam minimum days",
-  sortOrder: "Sort order", keltronShare: "KELTRON share (%)", classIds: "Centre classes", reason: "Reason", ...FLAG_LABELS,
+  sortOrder: "Sort order", keltronShare: "KELTRON share (%)", classIds: "Centre classes", certifications: "Certifications", centres: "Special-case centres", reason: "Reason", ...FLAG_LABELS,
 };
 
 type Entry = { id: number; code: string; name: string; active: boolean };

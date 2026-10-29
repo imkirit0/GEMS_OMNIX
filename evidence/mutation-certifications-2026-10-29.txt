@@ -1,0 +1,56 @@
+Certifications and special-case availability mutation checks (implementation_readiness_report.md "Mutation checks"),
+2026-10-29, local Docker database. Code mutations: applied, the named test run (vitest -t), restored. Database mutations
+of 0019: applied as SQL, the named test run, restored; then no drift. 35: next build, fresh database, next start, smoke.
+
+First run:
+CAUGHT 10 admit: class branch only
+CAUGHT 11 admit: named branch ignores the centre
+CAUGHT 12 centreIds unscoped
+CAUGHT 13 centreIds else '{}'
+MISSED 14 offeredCourses: empty list means class rule
+CAUGHT 16 inactive certification newly added
+CAUGHT 17 already-linked inactive refused
+CAUGHT 18 certification duplicates allowed
+CAUGHT 19a cert cap 101
+CAUGHT 19b centre cap 501
+CAUGHT 20 non-boolean mandatory
+CAUGHT 21 nothing-to-change ignores flags
+MISSED 22 unsorted audit codes
+CAUGHT 23 unknown centre unchecked
+CAUGHT 18b centre duplicates allowed
+CAUGHT 24 centres without the app.centre join
+CAUGHT 25 hiddenCentres not int
+MISSED 26 picklists not gated
+CAUGHT 27 create outside unique()
+CAUGHT 28 type checked before name
+MISSED 29 description error not an RbacError
+CAUGHT 30 description single-line
+CAUGHT 32 mandatory read as truthy
+CAUGHT 33 unknown op falls through
+CAUGHT 31 action not catalogued
+CAUGHT 36 certification not reset
+CAUGHT 1 course_centre select using (false)
+CAUGHT 2 course_centre insert with check (true)
+CAUGHT 3 course_centre delete using (true)
+CAUGHT 4 course_centre no force RLS
+CAUGHT 6 course_certification insert with check (true)
+CAUGHT 7 certification update using (true)
+CAUGHT 8a drop code check
+CAUGHT 8b drop name check
+CAUGHT 8c drop type check
+CAUGHT 9 code in the update grant
+CAUGHT 8d drop description check
+CAUGHT 5 course_centre update policy dropped
+
+Tests tightened for the four MISSED (14: CCNA also class-linked, so [] must not fall back to the class rule;
+22: two mandatory certifications posted out of order; 26: a certification exists, so the picklist is not empty;
+29: a route case with a bad description). Re-run:
+CAUGHT 14 offeredCourses: empty list means class rule
+MISSED 22 unsorted audit codes
+CAUGHT 26 picklists not gated
+CAUGHT 29 description error not an RbacError
+CAUGHT 22 unsorted audit codes
+CAUGHT 35 certification forms shown to non-managers  | FAIL  T-CC certifications readable by a non-manager, without forms  (200)
+
+Result: 39 mutations (26 code, 12 database, 1 real-server); 4 were MISSED at first, all CAUGHT after the tests
+were tightened. Not run: 15 (dropping 'k !== null &&' is a type error), 19's drift variant (no schema mutation needed).

@@ -164,10 +164,18 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 |---|---|---|
 | T-CM-001 | Course fields | Create and update with every field; absent keeps, null clears; each field's message; Keltron and its share checked on the merged row; shares 1.1, 1.15, 4.35 and 100 accepted, 12.345 refused; direct inserts break each named check (23514 with the constraint name); whole-row audit with defaults; the duration summary |
 | T-CM-002 | Centre classes | A manager sets, changes and clears a course's classes, audited as codes; an inactive or unknown class newly added is refused, one deactivated after assignment is kept; duplicates and the same set refused; non-managers refused, also by direct SQL on a real row; RLS enabled and forced |
-| T-CM-003 | Availability | With the switch off every active, visible course is admitted; with it on only courses linked to the centre's active class, none for a centre without a class; `admit()` and the form's filter agree on every fixture centre and course; the committed switch is off |
+| T-CM-003 | Availability | With the switch off every active, visible course is admitted; with it on only courses linked to the centre's active class, none for a centre without a class (for courses without named centres; named centres: T-CC-003); `admit()` and the form's filter agree on every fixture centre and course; the committed switch is off |
 | T-CM-004 | Admin routes | Create, details, classes and active post through `adminPost` with step-up and same-origin; a field error carries `detail=<field>`, a prefix-less one none |
 | T-CM-005 | The share | A manager reads the KELTRON share; other users get none, from the course read and the list |
 | T-CM-006 | Invisible courses | Not offered and refused by `admit()` ("no such course"); an existing registration stays |
+
+### T-CC: certifications and special-case availability (`docs/designs/certifications/certifications.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-CC-001 | Certification master | A catalogue manager creates, edits and (de)activates certifications (code, name, Voucher or Licence, description), audited; every signed-in user reads them; app and database refuse the same values; the code never changes |
+| T-CC-002 | A course's certifications | Mandatory and optional certifications are set on a course, audited by codes; an inactive certification is never newly added but kept when already linked; nobody else can change them, also by SQL |
+| T-CC-003 | Special-case availability | Named centres are set per course; with availability enforced, a course with named centres is admitted only there (also at a centre without a class) and the form agrees; the form receives only the user's own named centres; non-managers see only centres in their scope plus a count of the others |
+| T-CC-004 | Admin routes | Certification and course routes with step-up, same origin, field details, unknown operations and ids |
 
 ### T-MS: catalogue masters pages (`docs/designs/catalogue-masters/catalogue-masters.md`)
 | ID | Test | Expected |

@@ -13,6 +13,7 @@ export default async function Catalogue() {
         <li><a href="/admin/catalogue/masters/categories">Course categories</a></li>
         <li><a href="/admin/catalogue/masters/divisions">Course divisions</a></li>
         <li><a href="/admin/catalogue/masters/classes">Centre classes</a></li>
+        <li><a href="/admin/catalogue/certifications">Certifications</a></li>
         <li><a href="/admin/catalogue/years">Academic years</a></li>
         <li><a href="/admin/catalogue/centres">Class per centre</a></li>
         <li><a href="/admin/catalogue/masters/enquiry-paths">Enquiry paths</a></li>

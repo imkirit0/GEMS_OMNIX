@@ -4,7 +4,7 @@ import { ADMIN_MESSAGES } from "@/server/admin-http";
 
 export const MASTER_FIELD_LABELS: Record<string, string> = {
   code: "Code", name: "Name", reason: "Reason", startsOn: "Start date", endsOn: "End date", classId: "Class",
-  centreId: "Centre", active: "Status", open: "Status",
+  centreId: "Centre", active: "Status", open: "Status", type: "Type", description: "Description",
 };
 
 export function AdminErrors({ error, detail, labels }: { error?: string | undefined; detail?: string | undefined; labels: Record<string, string> }) {
