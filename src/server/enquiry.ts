@@ -5,7 +5,7 @@
 import { Prisma } from "../../generated/prisma/client";
 import { Forbidden, scopedAction } from "./action";
 import { withScope, type Tx } from "./db";
-import { detailField, ownText } from "./details";
+import { detailField, ownText, phoneDigits } from "./details";
 import { unique } from "./catalogue";
 import { CODE_RULE } from "./people";
 import { identityField, invalid, isoDate, istToday, normCode, PersonError } from "./person-rules";
@@ -47,9 +47,7 @@ function phone(field: string, v: unknown): string | null {
   if (v == null) return null;
   if (typeof v !== "string") throw invalid(field, "invalid");
   if (v.trim() === "") return null;
-  const digits = v.replace(/[\s-]/g, "").replace(/^(\+91|0)/, "");
-  if (!/^\d{10}$/.test(digits)) throw invalid(field, "10 digits");
-  return digits;
+  return phoneDigits(field, v);
 }
 const required = (field: string, v: string | null) => { if (v == null) throw invalid(field, "required"); return v; };
 const intId = (field: string, v: unknown) => { if (!Number.isSafeInteger(v) || (v as number) < 1) throw invalid(field, "inactive or unknown"); return v as number; };
@@ -175,6 +173,8 @@ export async function createEnquiry(session: string | undefined, input: EnquiryI
   return scopedAction(session, { action: "enquiry.create", permission: "enquiry.manage", centreId, targetType: "enquiry", targetId: id },
     (tx) => enquiryDb(async () => {
       matches = [];
+      const [st] = await tx.$queryRaw<{ s: string }[]>`select status::text as s from app.centre where id = ${centreId}`;
+      if (st?.s !== "ACTIVE") throw invalid("centreId", "centre is not active"); // an inactive centre cannot trade (centre onboarding DD-3)
       await liveMaster(tx, "enquiry_path", "pathId", cols.get("path_id") as number);
       await liveMaster(tx, "enquiry_type", "typeId", cols.get("type_id") as number);
       await liveCourses(tx, COURSE_COLUMNS.map((c) => cols.get(c)).filter((c): c is string => typeof c === "string"));
@@ -207,8 +207,9 @@ export async function createEnquiry(session: string | undefined, input: EnquiryI
       persons: e.warnings.flatMap((w) => (w.kind === "learner" ? [w.personId] : [])) } } : null);
 }
 
-const SELECT_COLUMNS = Prisma.raw(COLUMNS.map((c) => (c.cast ? `${c.column}::text as ${c.column}` : c.column)).join(", ")
-  + ", course_code_1, course_code_2, course_code_3");
+// qualified: the detail read joins app.centre, which has its own email, phone and address (0020)
+const SELECT_COLUMNS = Prisma.raw(COLUMNS.map((c) => `e.${c.column}${c.cast ? "::text" : ""} as ${c.column}`).join(", ")
+  + ", e.course_code_1, e.course_code_2, e.course_code_3");
 
 export async function updateEnquiry(session: string | undefined, centreId: number, id: string, version: number, changes: EnquiryChanges)
   : Promise<{ version: number; changed: string[] }> {
@@ -220,7 +221,7 @@ export async function updateEnquiry(session: string | undefined, centreId: numbe
     (tx) => enquiryDb(async () => {
       const [row] = await lockEnquiries(tx, c, [i]);
       if (row!.version !== version) throw invalid("enquiry", "changed since you opened it; reload the page"); // DD-12
-      const [cur] = await tx.$queryRaw<Record<string, string | number | null>[]>`select ${SELECT_COLUMNS} from app.enquiry where id = ${i}::bigint`;
+      const [cur] = await tx.$queryRaw<Record<string, string | number | null>[]>`select ${SELECT_COLUMNS} from app.enquiry e where e.id = ${i}::bigint`;
       const diff = [...cols].filter(([col, v]) => String(cur![col] ?? "") !== String(v ?? ""));
       if (diff.length === 0) throw invalid("enquiry", "nothing to change");
       // a new or changed reference must be active; an unchanged one is kept (C18, I9, R14)
@@ -424,8 +425,10 @@ export async function enquiryOptions(session: string | undefined) {
   return withScope(session, async (tx) => {
     await requireView(tx);
     return {
-      centres: await tx.$queryRaw<{ id: number; code: string; name: string; manage: boolean }[]>`
-        select c.id, c.code, c.name, c.id = any (app.scoped_centre_ids('enquiry.manage')) as manage from app.centre c
+      // active: only active centres take new enquiries (centre onboarding R3); manage alone keeps bulk actions on old ones
+      centres: await tx.$queryRaw<{ id: number; code: string; name: string; manage: boolean; active: boolean }[]>`
+        select c.id, c.code, c.name, c.id = any (app.scoped_centre_ids('enquiry.manage')) as manage, c.status = 'ACTIVE' as active
+        from app.centre c
         where c.id = any (app.scoped_centre_ids('enquiry.view')) order by c.code`,
       paths: await tx.$queryRaw<{ id: number; name: string }[]>`select id, name from app.enquiry_path where active order by name`,
       types: await tx.$queryRaw<{ id: number; name: string }[]>`select id, name from app.enquiry_type where active order by name`,

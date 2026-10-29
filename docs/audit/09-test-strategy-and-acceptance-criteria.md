@@ -169,6 +169,14 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-CM-005 | The share | A manager reads the KELTRON share; other users get none, from the course read and the list |
 | T-CM-006 | Invisible courses | Not offered and refused by `admit()` ("no such course"); an existing registration stays |
 
+### T-CO: centre onboarding (`docs/designs/centre-onboarding/centre-onboarding.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-CO-001 | Creating and editing centres | A head-office holder of `org.centre.manage` (ALL scope) creates a centre (inactive) and edits it, audited with values; each field's message in order; the database refuses the same values; nobody else can, also by SQL; the catalogue manager and the centre manager each change only their own columns of a centre; managers see every centre, others only centres in scope |
+| T-CO-002 | Regions and areas | Holders add and rename regions and areas; duplicates refused; areas never move between regions; nobody else can, also by SQL; both tables have row security |
+| T-CO-003 | Activation and the trading gate | Activation needs a reason, a class and complete GST details; deactivation needs a reason; an inactive centre takes no new admissions or enquiries (forms say so; a resubmitted saved form still says saved) and is not offered on the forms, while its existing records stay; its centre-only staff cannot sign in until it is active |
+| T-CO-004 | Routes | Centre, status and geography routes with step-up, same origin, field details, unknown operations and ids; the new-centre page is 404 for others |
+
 ### T-CC: certifications and special-case availability (`docs/designs/certifications/certifications.md`)
 | ID | Test | Expected |
 |---|---|---|

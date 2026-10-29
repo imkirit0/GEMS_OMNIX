@@ -53,7 +53,8 @@ describe("database isolation (T-RLS)", () => {
       "ticket_event", "ticket_level", "ticket_upload"]); // not vacuous
     for (const r of rows) {
       expect(r.rls && r.force, r.relname).toBe(true);
-      const needed = r.relname === "centre" ? ["SELECT"] : ["SELECT", "INSERT", "UPDATE", "DELETE"]; // the app may only change a centre's class (0017)
+      // centre: no delete; writes need org.centre.manage or, for the class, catalogue.manage (0017, 0020)
+      const needed = r.relname === "centre" ? ["SELECT", "INSERT", "UPDATE"] : ["SELECT", "INSERT", "UPDATE", "DELETE"];
       for (const cmd of needed) expect(r.cmds, `${r.relname} ${cmd}`).toContain(cmd);
     }
   });

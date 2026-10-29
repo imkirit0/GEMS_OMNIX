@@ -205,7 +205,7 @@ export async function admitOptions(session: string | undefined) {
   return withScope(session, async (tx) => {
     const centres = await tx.$queryRaw<OfferCentre[]>`
       select c.id, c.code, c.name, k.code as "classCode" from app.centre c left join app.centre_class k on k.id = c.centre_class_id
-      where c.id = any (app.scoped_centre_ids('student.admit')) order by c.code`;
+      where c.id = any (app.scoped_centre_ids('student.admit')) and c.status = 'ACTIVE' order by c.code`;
     if (centres.length === 0) throw new Forbidden("student.admit denied");
     const years = await tx.$queryRaw<{ code: string }[]>`select code from app.academic_year where open order by code`;
     // the same rule as admit() (DD-15, DD-16; certifications DD-3): classCodes, the active classes a course may be sold
@@ -309,6 +309,8 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
     await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${`admit-form:${admissionId}`}))`;
     const [used] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from app.admission where id = ${admissionId}::uuid`;
     if (used) throw new AdmissionExists();
+    const [st] = await tx.$queryRaw<{ s: string }[]>`select status::text as s from app.centre where id = ${input.centreId}`;
+    if (st?.s !== "ACTIVE") throw invalid("centreId", "centre is not active"); // an inactive centre cannot trade (centre onboarding DD-3)
     if (enquiryId !== undefined) {
       // enrol from an enquiry (enquiry design C8): after the resubmit check, so a resubmit still reports "saved"
       await authorize(tx, "enquiry.manage", input.centreId); // the DENIED row names enquiry.manage (I7)

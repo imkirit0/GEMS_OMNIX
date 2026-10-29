@@ -6,7 +6,7 @@ import NewEnquiryForm from "./form";
 // Record an enquiry (R-081; enquiry design G1). Needs enquiry.manage at some centre; otherwise 404.
 export default async function NewEnquiry() {
   const options = await pageRead((s) => enquiryOptions(s));
-  if (!options.centres.some((c) => c.manage)) notFound();
+  if (!options.centres.some((c) => c.manage && c.active)) notFound();
   return (
     <main>
       <p><a href="/enquiries">All enquiries</a></p>

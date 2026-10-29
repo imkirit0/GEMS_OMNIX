@@ -268,7 +268,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Operations (21), Admissions (1), IT (1), Accounts (1)
 - **Workflows (05):** WF-X13 User/role/permission administration; WF3 Centre onboarding
 - **Open decisions (04):** D-CAT-1, D-COMM-1, D-CUR-1, D-GAP-2, D-MIG-4, D-MIG-7, D-ORG-1, D-ORG-2, D-ORG-3, D-ORG-4, D-ORG-5, D-ORG-6, D-PORTAL-1, D-SEC-2, D-SEC-4, D-YEAR-3, PR-01
-- **Distinct acceptance tests (09):** 16
+- **Distinct acceptance tests (09):** 20
 
 #### FR-020: GROUP: Masters dashboard (10 tiles, "Search features" box)
 
@@ -395,7 +395,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-023 |
 | Business owner | Operations |
 | Open decisions | D-ORG-1, D-ORG-6 |
-| Acceptance tests | T-SEC-001, T-AUTH-012 |
+| Acceptance tests | T-SEC-001, T-AUTH-012, T-CO-001, T-CO-004 |
 | Workflows | WF3 Centre onboarding |
 | Data migration | centres IMPORTED; test centres EXCLUDED (X14) |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -428,7 +428,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-022 |
 | Business owner | Operations |
 | Open decisions | - |
-| Acceptance tests | T-SEC-001 |
+| Acceptance tests | T-SEC-001, T-CO-001 |
 | Workflows | WF3 Centre onboarding |
 | Data migration | n/a |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |
@@ -444,7 +444,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-033 |
 | Business owner | Operations |
 | Open decisions | D-ORG-1, D-ORG-2, D-ORG-5, D-ORG-6, D-CUR-1 |
-| Acceptance tests | T-E2E-003 |
+| Acceptance tests | T-E2E-003, T-CO-001, T-CO-002, T-CO-003 |
 | Workflows | WF3 Centre onboarding |
 | Data migration | IMPORTED; codes normalised (6 malformed, DQR) |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

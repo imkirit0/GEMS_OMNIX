@@ -53,6 +53,7 @@ export const ADMIT_MESSAGES = {
   series: "Numbering is not set up for this; contact the head office.",
   saved: "This form was already saved; nothing new was admitted.",
   thisYear: "Already admitted at this centre this year.",
+  centreInactive: "This centre is not active yet.",
   dropped: "The connection dropped. Submit again; this form cannot admit twice.",
   enquiryNotFound: "This enquiry is no longer available.",
   enquiryOtherCentre: "This enquiry belongs to another centre.",
@@ -120,6 +121,7 @@ export async function submitAdmission(session: string, h: Headers, fd: FormData)
       if (e.field === "admissionId") return fail({ formError: ADMIT_MESSAGES.reload });
       if (e.field === "admission") return fail({ formError: ADMIT_MESSAGES.thisYear });
       if (e.field === "details") return fail({ formError: e.rule! }); // learner-details I7
+      if (e.field === "centreId" && e.rule === "centre is not active") return fail({ formError: ADMIT_MESSAGES.centreInactive });
       if (e.field === "enquiry") return fail({ formError: Object.hasOwn(ENQUIRY_RULES, e.rule!) ? ENQUIRY_RULES[e.rule!] : e.message });
       const row = /^courses\[(\d+)\]\.(\w+)$/.exec(e.field ?? "");
       const name = row ? `course.${rowOf[Number(row[1])]}.${row[2]}` : e.field;

@@ -27,7 +27,7 @@ const MASTER_PERMISSION: Record<MasterKind, string> = {
 type Master = { id: number; code: string; name: string; active: boolean };
 type YearRow = { code: string; startsOn: string; endsOn: string; open: boolean };
 
-const bad = (message: string) => new RbacError("invalid", message);
+export const bad = (message: string) => new RbacError("invalid", message);
 const MANAGE = "catalogue.manage";
 
 // ---------- Validation (before any database access) ----------
@@ -36,13 +36,13 @@ function table(kind: unknown): Prisma.Sql {
   if (typeof kind !== "string" || !Object.hasOwn(TABLES, kind)) throw bad("kind: unknown");
   return TABLES[kind as MasterKind];
 }
-function code(v: unknown): string {
+export function code(v: unknown): string {
   const c = normCode(v);
   if (c === "") throw bad("code: required");
   if (!CODE_RULE.test(c) || c.length > 30) throw bad("code: printable ASCII, single spaces, at most 30");
   return c;
 }
-function name(v: unknown): string {
+export function name(v: unknown): string {
   const n = typeof v === "string" ? v.trim() : "";
   if (n.length < 1 || n.length > 200) throw bad("name: 1-200 characters");
   return n;
@@ -55,12 +55,12 @@ function bool(field: string, v: unknown): boolean {
   if (typeof v !== "boolean") throw bad(`${field}: invalid`);
   return v;
 }
-function reasonOf(v: unknown): string {
+export function reasonOf(v: unknown): string {
   const r = typeof v === "string" ? v.trim() : "";
   if (!r) throw bad("reason: required"); // DD-9
   return r;
 }
-function date(field: string, v: unknown): string {
+export function date(field: string, v: unknown): string {
   try { return isoDate(field, v); } catch (e) {
     if (e instanceof PersonError) throw bad(e.message);
     throw e;

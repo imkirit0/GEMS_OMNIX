@@ -95,7 +95,9 @@ describe("T-MS catalogue masters", () => {
     expect((await as(T.uA, `update app.centre set centre_class_id = null where id = 1`)).rowCount).toBe(0);
     expect(await sql(`select centre_class_id id from app.centre where id = 1`)).toEqual([{ id: METRO }]);
     expect((await sql(`select column_name from information_schema.column_privileges where table_schema = 'app'
-      and table_name = 'centre' and grantee = 'gems_app' and privilege_type = 'UPDATE'`)).map((r) => r.column_name)).toEqual(["centre_class_id"]);
+      and table_name = 'centre' and grantee = 'gems_app' and privilege_type = 'UPDATE' order by column_name`)).map((r) => r.column_name))
+      .toEqual(["address", "agreement_from", "agreement_to", "area_id", "category", "centre_class_id", "email", "gst_enabled", "gst_supply",
+        "gstin", "name", "opened_on", "ownership", "phone", "status"]); // never code or id (0020)
 
     // the lock: a key-share holder (an admission insert) does not delay it; a concurrent class write is waited for
     await asAdmin(async (db) => {

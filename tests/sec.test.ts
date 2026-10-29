@@ -48,18 +48,21 @@ describe("T-SEC application-level isolation", () => {
     expect(codes(await listCentres(T.hoAll))).toEqual(["KL2-25", "KL3-07", "TN1-03"]);
   });
 
-  test("T-SEC-007 HO-global masters cannot be mutated by the app role at all (except a centre's class, 0017)", async () => {
+  test("T-SEC-007 HO-global masters: the app role writes them only with the owning permission (catalogue.manage 0017, org.centre.manage 0020)", async () => {
     const app = new pg.Client({ connectionString: process.env["APP_DATABASE_URL"] });
     await app.connect();
     try {
       await app.query("begin");
       await app.query("select set_config('app.session_id', $1, true)", [T.hoAll]);
-      for (const sql of ["insert into app.region (code, name) values ('R9', 'x')", "update app.area set name = 'x'",
-        "update app.centre set status = 'INACTIVE'", "insert into app.permission (key, description) values ('x', 'x')",
+      // hoAll holds org.centre.view only: row security refuses the insert and hides every row from the updates
+      for (const sql of ["insert into app.region (code, name) values ('R9', 'x')", "insert into app.permission (key, description) values ('x', 'x')",
         "update app.role set name = 'x'"]) {
         await app.query("savepoint s");
         await expect(app.query(sql), sql).rejects.toMatchObject({ code: "42501" });
         await app.query("rollback to savepoint s");
+      }
+      for (const sql of ["update app.area set name = 'x'", "update app.centre set status = 'INACTIVE'"]) {
+        expect((await app.query(sql)).rowCount, sql).toBe(0);
       }
       await app.query("rollback");
     } finally { await app.end(); }

@@ -42,6 +42,13 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
 const CONTROL_IN_ADDRESS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/; // tab, newline, carriage return allowed
 const LONE_SURROGATE = /\p{Cs}/u;
 
+/** A phone as stored: spaces, "-", "+91" and one leading 0 removed, then 10 digits (an STD landline fits too). */
+export function phoneDigits(field: string, s: string): string {
+  const digits = s.replace(/[\s-]/g, "").replace(/^(\+91|0)/, "");
+  if (!/^\d{10}$/.test(digits)) throw invalid(field, "10 digits");
+  return digits;
+}
+
 /** One detail: null or "" clears; returns the stored form or throws invalid(key, rule); the key is also the input name. */
 export function detailField(k: DetailKey, v: unknown): string | null {
   if (v == null) return null;
@@ -53,11 +60,7 @@ export function detailField(k: DetailKey, v: unknown): string | null {
     if (!/^[1-9][0-9]{5}$/.test(s)) throw invalid(k, "6 digits, not starting with 0");
     return s;
   }
-  if (PHONE.has(k)) {
-    const digits = s.replace(/[\s-]/g, "").replace(/^(\+91|0)/, "");
-    if (!/^\d{10}$/.test(digits)) throw invalid(k, "10 digits");
-    return digits;
-  }
+  if (PHONE.has(k)) return phoneDigits(k, s);
   if (k === "nationality") {
     // ASCII first, so "ß" can never upper-case into a valid "SS"
     if (!/^[a-z]{2}$/i.test(s) || !COUNTRY_CODES.includes(s.toUpperCase())) throw invalid(k, "a country code");

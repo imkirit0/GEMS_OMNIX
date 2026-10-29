@@ -2,7 +2,7 @@
 import { QUALIFICATIONS } from "@/server/details";
 
 export type EnquiryOptions = {
-  centres: { id: number; code: string; name: string; manage: boolean }[];
+  centres: { id: number; code: string; name: string; manage: boolean; active: boolean }[];
   paths: { id: number; name: string }[]; types: { id: number; name: string }[];
   statuses: { id: number; name: string; kind: string }[]; courses: { code: string; name: string }[];
 };
@@ -19,9 +19,9 @@ export default function EnquiryFields({ values, errors, options, edit }: {
   return (
     <>
       {!edit && (
-        <label style={row}>Centre <select name="centreId" defaultValue={v("centreId") || (options.centres.filter((c) => c.manage).length === 1 ? String(options.centres.find((c) => c.manage)!.id) : "")}>
+        <label style={row}>Centre <select name="centreId" defaultValue={v("centreId") || (options.centres.filter((c) => c.manage && c.active).length === 1 ? String(options.centres.find((c) => c.manage && c.active)!.id) : "")}>
           <option value="">Choose…</option>
-          {options.centres.filter((c) => c.manage).map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}
+          {options.centres.filter((c) => c.manage && c.active).map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}
         </select>{err("centreId")}</label>
       )}
       {text("givenName", "Given name", { required: true, maxLength: 100 })}

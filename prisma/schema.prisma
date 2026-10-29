@@ -53,6 +53,18 @@ model Centre {
   centreClassId   Int?             @map("centre_class_id") // FR-033.06; set by setCentreClass (catalogue-masters DD-2)
   // D-ORG-1 default (UNAPPROVED): centres are created inactive and activated through a checklist
   status          CentreStatus     @default(INACTIVE)
+  // centre onboarding (docs/designs/centre-onboarding); checks, RLS, trigger and grants in 0020
+  email           String?
+  phone           String?
+  address         String?
+  category        String?
+  gstEnabled      Boolean          @default(false) @map("gst_enabled")
+  gstSupply       String?          @map("gst_supply")
+  gstin           String?
+  ownership       String?
+  agreementFrom   DateTime?        @map("agreement_from") @db.Date
+  agreementTo     DateTime?        @map("agreement_to") @db.Date
+  openedOn        DateTime?        @map("opened_on") @db.Date
   area            Area             @relation(fields: [areaId], references: [id])
   centreClass     CentreClass?     @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   scopes          RoleAssignment[]

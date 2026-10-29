@@ -20,6 +20,9 @@ export const AUDIT_CATALOGUE = [
   "person.admit", "person.details.update",
   // catalogue (src/server/catalogue.ts)
   "catalogue.create", "catalogue.update", "catalogue.activate", "catalogue.deactivate", "catalogue.course.classes", "catalogue.centre.class", "catalogue.course.certifications", "catalogue.course.centres",
+  // centre onboarding (src/server/centres.ts)
+  "org.centre.create", "org.centre.update", "org.centre.activate", "org.centre.deactivate",
+  "org.region.create", "org.region.update", "org.area.create", "org.area.update",
   // enquiry (src/server/enquiry.ts)
   "enquiry.create", "enquiry.update", "enquiry.status", "enquiry.counsellor", "enquiry.followup",
   "enquiry.setup.status.create", "enquiry.setup.status.update", "enquiry.setup.status.activate", "enquiry.setup.status.deactivate",

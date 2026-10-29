@@ -16,6 +16,7 @@ export const ENQUIRY_MESSAGES = {
   enrolled: "This enquiry is enrolled and can no longer change.",
   stale: "This enquiry changed since you opened it. Reload the page.",
   nothing: "Nothing to change.",
+  centreInactive: "This centre is not active yet.",
 } as const;
 
 /** The enquiry form's inputs (create and edit); course rows are course1..course3. */
@@ -36,6 +37,7 @@ const num = (s: string) => (/^\d{1,9}$/.test(s) ? Number(s) : NaN);
 function routeError(e: PersonError, names: readonly string[]): { fieldErrors?: Record<string, string>; formError?: string } {
   const course = /^courseCodes(?:\[(\d)\])?$/.exec(e.field ?? "");
   const name = course ? `course${Number(course[1] ?? 0) + 1}` : e.field;
+  if (e.field === "centreId" && e.rule === "centre is not active") return { formError: ENQUIRY_MESSAGES.centreInactive };
   if (e.field === "enquiry") {
     const known: Record<string, string> = { enrolled: ENQUIRY_MESSAGES.enrolled, nothing: ENQUIRY_MESSAGES.nothing };
     const key = e.rule?.startsWith("changed") ? "stale" : e.rule === "nothing to change" ? "nothing" : e.rule === "enrolled" ? "enrolled" : "";
