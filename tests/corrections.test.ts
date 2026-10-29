@@ -1,6 +1,9 @@
 // Correction tickets acceptance tests: T-COR-001…006 (audit 09; docs/designs/correction-tickets). The engine parts use
 // small test handlers; the identity handlers' cases follow. Page text is checked by scripts/smoke-security.mjs.
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import pg from "pg";
+import { POST as createRoute } from "../app/tickets/create/route";
+import { SESSION_COOKIE } from "../src/server/auth/http";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { Forbidden } from "../src/server/action";
@@ -109,5 +112,161 @@ describe("correction tickets: engine (T-COR)", () => {
     await grant(TK.raiser, ST_ROLE, C.A);
     expect((await getTicket(tok("raiser"), id)).payload).toEqual({ key: "secret", failApply: false, failRevalidate: false });
     expect(TK_ROLE.member).toBe(16); // the viewer holds no permission at all
+  });
+});
+
+// ---------- the identity handlers ----------
+let adm = 0;
+/** A learner by SQL: person + admission at a centre (2026-27); returns the person id and Admission No. */
+async function learner(centreId: number, p: { given: string; family?: string; dob?: string | null; mobile?: string | null }) {
+  const no = `ADM-${++adm}`;
+  const [{ id }] = await admin(`insert into app.person (id, given_name, family_name, date_of_birth, mobile) values (gen_random_uuid(), $1, $2, $3, $4) returning id::text`,
+    [p.given, p.family ?? null, p.dob === undefined ? "2001-01-01" : p.dob, p.mobile === undefined ? `97100${String(adm).padStart(5, "0")}` : p.mobile]);
+  await admin(`insert into app.admission (id, person_id, centre_id, academic_year, admission_no, admitted_on) values (gen_random_uuid(), $1, $2, '2026-27', $3, '2026-10-01')`, [id, centreId, no]);
+  return { id: id as string, no };
+}
+const idType = (field: string, code = field.slice(0, 3).toUpperCase()) =>
+  makeType({ code, handler: `identity.${field}`, levels: [{ user: TK.l1 }], viewer: TK.viewer });
+const stored = async (id: string) => (await admin(`select payload from app.ticket where id = $1`, [id]))[0].payload;
+const approve = async (token: string, id: string) => act(token, { ticketId: id, action: "approve", seenVersion: await version(id) });
+const given = async (personId: string) => (await admin(`select given_name, match_key from app.person where id = $1`, [personId]))[0];
+/** An OPEN ticket inserted directly, in the order the guard triggers require (scripts/smoke-security.mjs). */
+async function openTicket(typeId: number, centreId: number, payload: object) {
+  const [{ id }] = await admin(`insert into app.ticket (id, number, type_id, centre_id, raised_by, level_count, payload)
+    values (gen_random_uuid(), $1, $2, $3, $4, 1, $5) returning id::text`, [`TK-26/X/${randomUUID().slice(0, 8)}`, typeId, centreId, TK.raiser, JSON.stringify(payload)]);
+  await admin(`insert into app.ticket_level (ticket_id, centre_id, level, approver_user_id) values ($1, $2, 1, $3)`, [id, centreId, TK.l1]);
+  await admin(`insert into app.ticket_event (ticket_id, centre_id, actor_id, action, level) values ($1, $2, $3, 'RAISE', 1)`, [id, centreId, TK.raiser]);
+  return id as string;
+}
+
+describe("correction tickets: identity handlers (T-COR)", () => {
+  test("T-COR-001 raising: the learner by Admission No at the centre, the old value from the record, specific refusals", async () => {
+    const type = await idType("givenName", "FNC");
+    const anu = await learner(C.A, { given: "Anu", family: "Raj" });
+    const other = await learner(C.B, { given: "Bina" });
+    const raiseFnc = (payload: Record<string, string>) => keyOf(raiseAt(tok("raiser"), type, payload));
+    // without student.view the answer is the same as for an unknown number (DD-13)
+    expect(await raiseFnc({ admissionNo: anu.no, newValue: "Anuja" })).toBe("invalid:admission.unknown");
+    await grant(TK.raiser, ST_ROLE, C.A);
+    const id = await raiseAt(tok("raiser"), type, { admissionNo: ` ${anu.no} `, newValue: " Anuja " });
+    expect(await stored(id)).toEqual({ admissionNo: anu.no, personId: anu.id, field: "givenName", oldValue: "Anu", newValue: "Anuja" });
+    expect(await raiseFnc({ admissionNo: "ADM-NOPE", newValue: "X" })).toBe("invalid:admission.unknown");
+    expect(await raiseFnc({ admissionNo: other.no, newValue: "X" })).toBe("invalid:admission.unknown"); // another centre's
+    expect(await raiseFnc({ admissionNo: "", newValue: "X" })).toBe("invalid:admissionNo.required");
+    expect(await raiseFnc({ admissionNo: anu.no, newValue: "" })).toBe("invalid:newValue.required");
+    expect(await raiseFnc({ admissionNo: anu.no, newValue: "Anu" })).toBe("invalid:newValue.same");
+    const dob = await idType("dateOfBirth", "DOB");
+    expect(await keyOf(raiseAt(tok("raiser"), dob, { admissionNo: anu.no, newValue: "2001-02-30" }))).toBe("invalid:newValue.format");
+    // clearable fields store null; values are stored normalised
+    const fam = await raiseAt(tok("raiser"), await idType("familyName", "LNC"), { admissionNo: anu.no, newValue: "" });
+    expect((await stored(fam)).newValue).toBeNull();
+    const mob = await raiseAt(tok("raiser"), await idType("mobile", "MOB"), { admissionNo: anu.no, newValue: "+91 98470 11111" });
+    expect((await stored(mob)).newValue).toBe("9847011111");
+    // every key a handler throws has a user text
+    expect(Object.keys(HANDLERS["identity.givenName"]!.invalidMessages!).sort()).toEqual(
+      ["admission.unknown", "admissionNo.required", "newValue.format", "newValue.required", "newValue.same", "reraise.person"]);
+    // the raise route passes the key as detail; the page shows its text from the handler's list
+    const body = new URLSearchParams({ ticketId: randomUUID(), typeId: String(type), centreId: String(C.A), "p.admissionNo": "ADM-NOPE", "p.newValue": "X" });
+    const res = await createRoute(new Request("https://gems.test/tickets/create", { method: "POST", body,
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://gems.test", cookie: `${SESSION_COOKIE}=${tok("raiser")}` } }));
+    expect(res.headers.get("location")).toContain("error=ticket.invalid&detail=admission.unknown");
+  });
+
+  test("T-COR-002 stale at the final approval, also concurrently; re-raise for the same learner only; a non-raiser learns nothing", async () => {
+    await grant(TK.raiser, ST_ROLE, C.A);
+    const type = await idType("givenName", "FNC");
+    const anu = await learner(C.A, { given: "Anu" });
+    const t1 = await raiseAt(tok("raiser"), type, { admissionNo: anu.no, newValue: "Anuja" });
+    const t2 = await raiseAt(tok("raiser"), type, { admissionNo: anu.no, newValue: "Anita" });
+    await approve(tok("l1"), t1);
+    expect((await given(anu.id)).given_name).toBe("Anuja");
+    expect(await keyOf(approve(tok("l1"), t2))).toBe("stale:changed");
+    // concurrently: both wait on the person lock (held here), then one applies and the other is stale
+    const q = await learner(C.A, { given: "Quinn" });
+    const t3 = await raiseAt(tok("raiser"), type, { admissionNo: q.no, newValue: "Quentin" });
+    const t4 = await raiseAt(tok("raiser"), type, { admissionNo: q.no, newValue: "Quincy" });
+    const hold = new pg.Client({ connectionString: process.env["ADMIN_DATABASE_URL"] });
+    await hold.connect();
+    try {
+      await hold.query("begin");
+      await hold.query(`select 1 from app.person where id = $1 for update`, [q.id]);
+      const both = Promise.allSettled([approve(tok("l1"), t3), approve(tok("l1"), t4)]);
+      await new Promise((r) => setTimeout(r, 500));
+      await hold.query("commit");
+      const done = await both;
+      expect(done.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(done.find((r) => r.status === "rejected")).toMatchObject({ reason: { reason: "stale", message: "changed" } });
+    } finally { await hold.end(); }
+    // the stale ticket is rejected; its re-raise names the same learner and reads the value afresh
+    await act(tok("l1"), { ticketId: t2, action: "reject", seenVersion: await version(t2), remarks: "stale" });
+    const again = randomUUID();
+    await raise(tok("raiser"), { ticketId: again, typeId: type, centreId: C.A, payload: { admissionNo: anu.no, newValue: "Anita" }, uploadIds: [], reraiseOf: t2 });
+    expect(await stored(again)).toMatchObject({ personId: anu.id, oldValue: "Anuja", newValue: "Anita" });
+    // another learner on a re-raise is refused; a non-raiser gets the engine's refusal before any domain answer
+    const ben = await learner(C.A, { given: "Ben" });
+    const t5 = await raiseAt(tok("raiser"), type, { admissionNo: anu.no, newValue: "Anna" });
+    await act(tok("l1"), { ticketId: t5, action: "reject", seenVersion: await version(t5), remarks: "no" });
+    const reraise = (token: string) => keyOf(raise(token, { ticketId: randomUUID(), typeId: type, centreId: C.A,
+      payload: { admissionNo: ben.no, newValue: "Benny" }, uploadIds: [], reraiseOf: t5 }));
+    await grant(TK.l2, TK_ROLE.raiser, C.A);
+    await grant(TK.l2, ST_ROLE, C.A);
+    expect(await reraise(tok("l2"))).toBe("invalid:only the raiser can re-raise a rejected ticket");
+    expect(await reraise(tok("raiser"))).toBe("invalid:reraise.person");
+    // a value the rules no longer accept is refused as stale at approval
+    const bad = await openTicket(type, C.A, { admissionNo: ben.no, personId: ben.id, field: "givenName", oldValue: "Ben", newValue: "x".repeat(101) });
+    expect(await keyOf(approve(tok("l1"), bad))).toBe("stale:format");
+  });
+
+  test("T-COR-003 applying: the field and match key change in the approval; the audit names the field; a failing apply is audited", async () => {
+    await grant(TK.raiser, ST_ROLE, C.A);
+    const type = await idType("givenName", "FNC");
+    const anu = await learner(C.A, { given: "Anu", family: "Raj" });
+    const before = await given(anu.id);
+    const id = await raiseAt(tok("raiser"), type, { admissionNo: anu.no, newValue: "Anuja" });
+    await approve(tok("l1"), id);
+    const after = await given(anu.id);
+    expect([after.given_name, after.match_key !== before.match_key]).toEqual(["Anuja", true]);
+    const [audit] = (await rows("ticket.approve")).filter((r) => r.target_id === id);
+    expect([audit.before, audit.after]).toEqual([{ fields: ["givenName"] }, { fields: ["givenName"] }]);
+    // a person admitted only at another centre: changeIdentity refuses, the approval fails and is audited
+    const away = await learner(C.B, { given: "Away" });
+    await grant(TK.l1, TK_ROLE.member, C.B); // the approver may read the person, so revalidate passes
+    const t = await openTicket(type, C.A, { admissionNo: away.no, personId: away.id, field: "givenName", oldValue: "Away", newValue: "Faraway" });
+    expect(await keyOf(approve(tok("l1"), t))).toBe("ApplyFailed");
+    expect((await rows("ticket.apply_failed")).map((r) => [r.outcome, r.detail.error])).toEqual([["FAILED", "PersonError"]]);
+    expect((await given(away.id)).given_name).toBe("Away");
+  });
+
+  test("T-COR-004 the duplicate review: approver scope, names only with student.view, none, impossible", async () => {
+    await grant(TK.raiser, ST_ROLE, C.A);
+    const type = await idType("givenName", "FNC");
+    const p = await learner(C.A, { given: "Anu", family: "Raj", dob: "2001-05-05", mobile: "9876500001" });
+    const dup = await learner(C.A2, { given: "Anuja", family: "Raj", dob: "2001-05-05", mobile: "9876500001" });
+    await learner(C.B, { given: "Anuja", family: "Raj", dob: "2001-05-05", mobile: "9876500001" }); // visible, not approvable
+    await grant(TK.l1, TK_ROLE.level1, C.A2);
+    await grant(TK.l1, TK_ROLE.member, C.B);
+    const id = await raiseAt(tok("raiser"), type, { admissionNo: p.no, newValue: "Anuja" });
+    expect(await ticketReview(tok("l1"), id)).toEqual([`Possible duplicate: ${dup.no} at KL3-07`]);
+    await grant(TK.l1, ST_ROLE, C.A2);
+    expect(await ticketReview(tok("l1"), id)).toEqual([`Possible duplicate: ${dup.no} at KL3-07, Anuja Raj, born 2001-05-05`]);
+    expect((await rows("ticket.review.duplicates")).map((r) => [r.outcome, r.detail.matches])).toEqual([["OK", [dup.id]], ["OK", [dup.id]]]);
+    const none = await raiseAt(tok("raiser"), type, { admissionNo: (await learner(C.A, { given: "Zed" })).no, newValue: "Zack" });
+    expect(await ticketReview(tok("l1"), none)).toEqual(["No likely duplicates at centres you approve for"]);
+    const nokey = await raiseAt(tok("raiser"), type, { admissionNo: (await learner(C.A, { given: "Nod", dob: null })).no, newValue: "Noddy" });
+    expect(await ticketReview(tok("l1"), nokey)).toEqual(["Duplicate check not possible: date of birth or mobile missing"]);
+    await approve(tok("l1"), id); // the warning never blocks (DD-3)
+    expect((await given(p.id)).given_name).toBe("Anuja");
+  });
+
+  test("T-COR-006 viewers without student.view who cannot act see no values", async () => {
+    await grant(TK.raiser, ST_ROLE, C.A);
+    const type = await idType("dateOfBirth", "DOB");
+    const p = await learner(C.A, { given: "Dee" });
+    const id = await raiseAt(tok("raiser"), type, { admissionNo: p.no, newValue: "2000-12-31" });
+    const viewer = await getTicket(tok("viewer"), id);
+    expect([viewer.payload, viewer.described]).toEqual([null, null]);
+    const approver = await getTicket(tok("l1"), id);
+    expect(approver.described).toEqual([["Admission No", p.no], ["Field", "Date of birth"], ["Old value", "2001-01-01"], ["New value", "2000-12-31"]]);
+    expect(approver.hasReview).toBe(true);
   });
 });

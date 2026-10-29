@@ -3,6 +3,7 @@
 // approval and applies it, all inside the engine's transaction. Handlers do database work only, through tx.
 import type { Tx } from "../db";
 // Handler modules import their errors from errors.ts (no imports), so there is no cycle with this registry.
+import { IDENTITY_HANDLERS } from "./identity-handlers";
 import { testCounter } from "./test-handler";
 
 export type TicketRow<P> = {
@@ -34,8 +35,10 @@ export type TicketHandler<P, R = P> = {
 
 export * from "./errors";
 
-// Empty in production: no ticket type can be activated until a domain module registers its handler.
+// The registered domain handlers, in every environment: the identity corrections (docs/designs/correction-tickets).
+// A type still cannot be switched on before the go-live gates open (policy.ts TICKET_GATES).
 export const HANDLERS: Record<string, TicketHandler<unknown>> = {};
+for (const h of IDENTITY_HANDLERS) HANDLERS[h.key] = h as unknown as TicketHandler<unknown>;
 
 // Manual Supabase run only (DD-7). Never on a Vercel deployment.
 if (process.env["TICKET_TEST_HANDLER"] === "1") {

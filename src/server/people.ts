@@ -131,6 +131,24 @@ export async function findMatches(tx: Tx, p: StoredIdentity, permission: string)
     order by p.created_at`;
 }
 
+export type ApproverMatch = { personId: string; admissionNo: string; centreCode: string; named: boolean;
+  givenName: string; familyName: string | null; dateOfBirth: string | null };
+/**
+ * Likely duplicates of a corrected identity for a correction ticket's approver (correction-tickets DD-17): one row per
+ * admission of another person with the same match key, at a centre where the caller holds ticket.approve; `named`
+ * says whether the caller also holds student.view there (only then are name and date of birth shown).
+ */
+export async function approverMatches(tx: Tx, key: string, personId: string): Promise<ApproverMatch[]> {
+  return tx.$queryRaw<ApproverMatch[]>`
+    select p.id::text as "personId", a.admission_no as "admissionNo", c.code as "centreCode",
+           app.has_permission('student.view', a.centre_id) as named,
+           p.given_name as "givenName", p.family_name as "familyName", p.date_of_birth::text as "dateOfBirth"
+    from app.person p join app.admission a on a.person_id = p.id join app.centre c on c.id = a.centre_id
+    where p.match_key = ${key} and p.id <> ${personId}::uuid
+      and a.centre_id = any (app.scoped_centre_ids('ticket.approve'))
+    order by a.admission_no`;
+}
+
 /** The centre binding of every identity change (critic D2): the person must have an admission at `centreId`. */
 export async function assertAdmittedAt(tx: Tx, centreId: number, personId: string): Promise<void> {
   if (!UUID.test(personId) || !Number.isSafeInteger(centreId)) throw new PersonError("notfound");
