@@ -1,183 +1,236 @@
 # Fee ledger, posted at receipt and at cancellation (Stage 4, F1; WF4; R-040, R-042 part, R-044.01)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-8 are recommended options under the owner's standing instruction (2026-10-30: "keep working … agree on the recommended option … finish everything").
+*   **Status:** Proposed. This version is revised after EGM steps 5–7, which ran in parallel ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md)), and resolves every finding below. DD-1…DD-10 are recommended options taken under the owner's standing instruction (2026-10-30: "keep working … agree on the recommended option … finish everything").
 *   **Date:** 2026-10-30
 
-Evidence classes follow `docs/audit/00-README.md`. Inputs: [`input-brief.md`](input-brief.md); audit 07 F1, F2 and F6; `docs/designs/fee-receipts/fee-receipts.md`; `docs/designs/receipt-cancel/receipt-cancel.md`; `docs/designs/adhoc-fees/adhoc-fees.md`.
+Evidence classes follow `docs/audit/00-README.md`. Inputs:
+*   [`input-brief.md`](input-brief.md);
+*   audit 07 F1, F2, F6 and F13;
+*   [`fee-receipts.md`](../fee-receipts/fee-receipts.md) (DD-5's fifth go-live condition is the ledger);
+*   [`receipt-cancel.md`](../receipt-cancel/receipt-cancel.md) (DD-6);
+*   [`adhoc-fees.md`](../adhoc-fees/adhoc-fees.md).
 
 --------------------------------------------------------------------------------
 
 ## Overview
 
-Every receipt gets one balanced journal, and every cancellation gets one reversing journal. The **database** writes both, inside the same transaction, through one security-definer posting function. The app cannot write, change or delete a journal. A head office or centre user with `ledger.view` reads the journals as a Day Book.
+Every receipt gets one balanced journal, and every cancellation gets one reversing journal. The **database** writes both, in the same transaction, through two security-definer **trigger functions**. Nothing else can call them, and the app has no write grant on journals. A user with `ledger.view` reads the journals as a Day Book.
 
 ## Goals
 
-*   **G1: one balanced journal per receipt (D-FIN-1 cash basis; D-FIN-2).** When the receipt's transaction commits, the database posts one journal, dated `received_on`, referenced by `receipt_no`:
-    *   Dr the mode's account: Cash in hand for CASH, otherwise Bank (clearing). The amount is `total`.
-    *   Cr each income account with Σ `taxable` of its lines. The account comes from the line's due's fee type.
-    *   Cr CGST, SGST and IGST with their sums, each only when above 0.
+*   **G1: one journal per receipt, at commit (D-FIN-1 cash basis; D-FIN-2).** It runs after the receipt's total check has passed. The journal is dated `received_on`, carries the receipt's currency, and is referenced by `receipt_no`. Its lines are:
+    *   **debit:** the mode's account (Cash in hand for CASH, Bank (clearing) for any other mode), for the receipt total;
+    *   **credit:** each mapped account (an INCOME or LIABILITY account, DD-7), with the sum of its lines' `taxable` amounts, but only if that sum is above 0;
+    *   **credit:** CGST, SGST and IGST, each with its sum if above 0.
 
-    Σ debit = Σ credit > 0. A receipt whose fee type has no account is refused [T-FL-001].
-*   **G2: one reversal per cancellation (F6; receipt-cancel DD-6).** When a receipt is cancelled, the database posts its mirror image in the same transaction. The reversal is dated on the IST date of `cancelled_at`, links to the original journal (`reversal_of`), and swaps every debit and credit [T-FL-001].
-*   **G3: the database proves the ledger** [T-FL-002]:
-    *   journals and lines exist only through the posting function, because gems_app has no insert grant;
-    *   every journal balances;
-    *   one RECEIPT journal per receipt, and at most one CANCEL journal per receipt;
+    The posting function asserts that Σ debit = total = Σ credit, and that there is at least one line. A receipt whose fee type has no account is refused. The app checks this before writing; the database checks again at commit [T-FL-001].
+*   **G2: one reversal per cancellation.** It mirrors the original entry's own lines, with debit and credit swapped, so a later re-mapping or bank split cannot change it (D3). It is dated on the IST date of `cancelled_at` and links to the original through `reversal_of`. A receipt cancelled in the same transaction that created it is refused by name: it has no posted entry yet [T-FL-001].
+*   **G3: the database proves the ledger [T-FL-002]:**
+    *   journals exist only through the trigger functions: gems_app has no insert grant, and the functions are triggers, not callable;
+    *   every entry balances;
+    *   there is one RECEIPT entry per receipt and at most one CANCEL entry;
     *   nothing changes or disappears;
-    *   RLS: lines are read with `ledger.view` at their centre.
-*   **G4: the Day Book (R-044.01).** A holder of `ledger.view` at a centre lists that centre's journal lines for a date range (at most 92 days). Each line shows date, reference, account, debit, credit and narration, with totals that match [T-FL-003, smoke].
+    *   RLS restricts reads to `ledger.view` at the journal's centre;
+    *   the definer owner bypasses RLS (asserted by T-RLS-005).
+*   **G4: the Day Book (R-044.01) [T-FL-003, smoke].** A holder of `ledger.view` at a centre lists that centre's lines for a date range of at most 92 days. Each line shows date, reference, source (Receipt or Reversal), account, debit, credit and narration. Totals are given per currency.
 
-## Non-Goals (DD-7)
+## Non-Goals (DD-9)
 
-*   An accounts master page (R-042); new accounts come by migration for now.
-*   Bank accounts and deposits (R-035), contra entries, and journal or voucher prefixes (R-041).
-*   Other A/c reports (R-044).
-*   Periods and close (F12), opening balances, and posting of migrated or imported receipts (D-FIN-7, paused).
-*   The hash-chained finance audit (D-FIN-8).
+*   **Ledger masters and reports:** an accounts master page (R-042), bank accounts and contra entries (R-035), journal and voucher prefixes (R-041), other A/c reports (R-044).
+*   **Periods and other entry kinds:** periods and their close (F12), opening balances, migrated or imported receipts (D-FIN-7).
+*   **The hash chain (D-FIN-8).** See Risks.
+*   **Receipts with no journal.** None exist in production: collection has been off since F3 and nothing is on Supabase. So the migration posts nothing back, and a receipt with no RECEIPT entry cannot be cancelled (`journal_reversal_guard`).
 
 ## Technical Plan
 
 ### Migration `0030_fee_ledger`
 
-**`app.account`**
+**`app.account`.** Every column is NOT NULL unless marked.
 
-| Column | Rule |
-|---|---|
-| `id` | serial |
-| `code` | text, unique, for example `3909` |
-| `name` | text |
-| `kind` | `ASSET`, `LIABILITY`, `INCOME` or `EXPENSE` (check) |
-| `system_key` | text, unique, nullable: `CASH`, `BANK`, `CGST`, `SGST`, `IGST` |
-| `active` | boolean |
+| Column | Type | Rule |
+|---|---|---|
+| `id` | serial | |
+| `code` | text | unique |
+| `name` | text | |
+| `kind` | text | `ASSET`, `LIABILITY`, `INCOME` or `EXPENSE` (check) |
+| `system_key` | text, nullable | unique |
+| `active` | boolean | default true |
 
-The migration seeds the SPEC p. 15 heads with their codes. Where a head has no SPEC code, it gets a code prefixed `G`, which is PMC. The migration also adds Cash in hand (`CASH`, ASSET) and Bank (clearing) (`BANK`, ASSET). CGST (3910), SGST (3911) and IGST (4385) carry their system keys.
+*   **RLS:** ENABLE and FORCE, with a select policy `using (true)`.
+*   **Grant:** `select` to gems_app. There is no write grant: the migration owns the chart.
 
-RLS: select `using (true)`. There is no write grant: the migration owns the chart.
+**Chart seed (C5).** SPEC p. 15 codes are kept. Heads without a code get a `G…` code (PMC). Down Payment's second code 3954 is recorded in the name as "(legacy 3954)".
 
-**`fee_type.account_id`** is an int, nullable, with an FK to `account` (restrict).
-*   A guard on `fee_type` insert and update rejects any account that is not an active INCOME account (`fee_type_account_guard`).
-*   `fee.ts` adds `accountId` to create and update. Changes are audited as fee type fields, and the column grant on `fee_type` gains `account_id`.
+| Code | Name | Kind | system_key |
+|---|---|---|---|
+| 3908 | Registration Fee | INCOME | |
+| 3909 | Course Fee | INCOME | |
+| 3919 | Voucher Fee | INCOME | |
+| 3920 | Academic Kit | INCOME | |
+| 3921 | Welcome Kit Cost | INCOME | |
+| 3922 | Down Payment (legacy 3954) | INCOME | |
+| 3923 | Exam Fee | INCOME | |
+| 3955 | Exam Processing Fee | INCOME | |
+| 6871 | Additional Registration Fee | INCOME | |
+| G101 | Mahotsavam Entry Fee | INCOME | |
+| G102 | Material Fee | INCOME | |
+| G103 | MSU Certification Fee | INCOME | |
+| G104 | Online Fee | INCOME | |
+| G105 | Re-exam Processing Fee | INCOME | |
+| G106 | Re-examination Fee | INCOME | |
+| G107 | Round Off | INCOME | (unused, DD-8) |
+| 3724 | Caution Deposit | LIABILITY | (D-FIN-6: a liability) |
+| 3910 | CGST | LIABILITY | CGST |
+| 3911 | SGST | LIABILITY | SGST |
+| 4385 | IGST | LIABILITY | IGST |
+| G201 | Excess Fee | LIABILITY | |
+| G202 | Excess Miscellaneous Fee | LIABILITY | |
+| G203 | Fee Transfer | LIABILITY | |
+| 3903 | Admission Fee Receivable | ASSET | |
+| G301 | Receivables | ASSET | |
+| G302 | CGST Receivable | ASSET | |
+| G303 | SGST Receivable | ASSET | |
+| G304 | IGST Receivable | ASSET | |
+| G001 | Cash in hand | ASSET | CASH |
+| G002 | Bank (clearing) | ASSET | BANK |
+| BNK | Bank Charges | EXPENSE | |
+| P001 | Purchase | EXPENSE | |
 
-**`app.journal_entry`**
+**`fee_type.account_id` (C6).**
+*   It is an int, nullable, with an FK to `account` (restrict).
+*   **Guard `fee_type_account_guard`** (invoker; fires on insert, and on update of `account_id`). A null value passes. A non-null value must be an active account of kind INCOME or LIABILITY.
+*   **Grants:** `insert (account_id)` and `update (account_id)` on `fee_type`.
+*   **`src/server/fees.ts`:**
+    *   `createFeeType` takes an optional `accountId`.
+    *   `updateFeeType` takes `accountId` (a number to map, `null` to unmap).
+    *   The app checks the value first: `"accountId: an active income or liability account"`.
+    *   `GUARD_KEY` gains `fee_type_account_guard` → key `fee.account`.
+    *   `listFeeTypes` returns `accountId` and `accountCode`.
+    *   Mapping changes are audited as fee-type fields.
 
-| Column | Rule |
-|---|---|
-| `id` | bigserial |
-| `centre_id` | int |
-| `entry_date` | date |
-| `period` | text; equals `app.financial_year(entry_date)`, checked |
-| `source` | `RECEIPT` or `RECEIPT_CANCEL`, checked |
-| `receipt_id` | bigint; FK `(receipt_id, centre_id)` → `receipt(id, centre_id)` |
-| `reversal_of` | bigint, nullable; FK to `journal_entry`; checked: `(source = 'RECEIPT_CANCEL') = (reversal_of is not null)` |
-| `reference` | text: the receipt number |
-| `narration` | text |
-| `created_at` | timestamptz |
+**`app.journal_entry`.** Every column is NOT NULL except `reversal_of`.
 
-Unique key `(receipt_id, source)`.
+| Column | Type | Rule |
+|---|---|---|
+| `id` | bigserial | |
+| `centre_id` | int | |
+| `entry_date` | date | |
+| `fy` | text | check `fy = app.financial_year(entry_date)`; not called "period", which F12 needs (D10) |
+| `currency` | char(3) | from the receipt (D6, C7) |
+| `source` | text | `RECEIPT` or `RECEIPT_CANCEL` |
+| `receipt_id` | bigint | FK `(receipt_id, centre_id)` → `receipt(id, centre_id)` |
+| `reversal_of` | bigint, nullable | FK to `journal_entry`; check `(source = 'RECEIPT_CANCEL') = (reversal_of is not null)` |
+| `reference` | text | |
+| `narration` | text | |
+| `created_at` | timestamptz | |
 
-**`app.journal_line`**
+Constraints and indexes: unique `(id, centre_id)` (C3, Z5); unique `(receipt_id, source)`; index `(centre_id, entry_date)` (D12).
 
-| Column | Rule |
-|---|---|
-| `id` | bigserial |
-| `entry_id` | bigint; FK `(entry_id, centre_id)` → `journal_entry(id, centre_id)` |
-| `centre_id` | int |
-| `account_id` | int; FK to `account` |
-| `debit`, `credit` | numeric(14,2), each ≥ 0; checked: exactly one of them is above 0 |
+**`app.journal_line`.** Every column is NOT NULL.
 
-Index on `(centre_id, entry_id)`.
+| Column | Type | Rule |
+|---|---|---|
+| `id` | bigserial | |
+| `entry_id` | bigint | FK `(entry_id, centre_id)` → `journal_entry(id, centre_id)` |
+| `centre_id` | int | |
+| `account_id` | int | FK to `account` |
+| `debit` | numeric(14,2) | ≥ 0 |
+| `credit` | numeric(14,2) | ≥ 0 |
 
-**Posting function `app.post_receipt_journal(p_receipt bigint, p_cancel boolean) returns void`.**
-*   It is `security definer`, with a pinned `search_path`, owned by the migration owner (T-RLS-005 adds it to the inventory).
-*   It reads the receipt and its lines, joined through the due to the fee type's `account_id`.
-*   If any line's fee type has no account, it raises `journal_account_guard` (23514).
-*   It inserts the entry and its lines as follows:
+A check requires exactly one of `debit` and `credit` to be above 0. Index on `entry_id`.
 
-    | Case | Lines | Date | Narration | Link |
-    |---|---|---|---|---|
-    | Receipt | Dr mode account / Cr income per account, Cr tax per kind | `received_on` | `Receipt {receipt_no} ({mode})` | — |
-    | Cancel | The receipt's lines with debit and credit swapped | `(cancelled_at at time zone 'Asia/Kolkata')::date` | `Cancellation of {receipt_no}: {cancel_reason}` | `reversal_of` = the receipt's RECEIPT entry |
+**Posting (D1, Z1, C2, D4, Z2).** There are two functions. Both are `security definer` with `set search_path = pg_catalog, app, pg_temp`, every name is schema-qualified, and both have `revoke all … from public`. Because they return `trigger`, they cannot be called directly. T-RLS-005 adds both to its inventory and asserts the search path (D8).
 
-*   It then checks `Σ debit = Σ credit > 0` for the new entry. If not, it raises `journal_balance_guard`.
+*   **`app.receipt_post_journal()`**
+    *   Trigger: constraint trigger **`receipt_zpost`**, `after insert on app.receipt`, `deferrable initially deferred`, for each row. The name sorts after `receipt_total_commit`, so the total check fires first at commit (Z2, C1).
+    *   It reads the receipt, then:
+        *   requires `status = 'ACTIVE'` and no existing RECEIPT entry;
+        *   reads the lines with each due's fee type's account (and the account's `active` flag and kind);
+        *   refuses with `journal_account_guard` (23514) if any account is null, inactive, or not INCOME/LIABILITY;
+        *   inserts the entry, then the debit line first, then the credit lines (D12).
+    *   It asserts Σ debit = `total` = Σ credit and at least 1 line. Otherwise it raises `journal_balance_guard`.
+*   **`app.receipt_post_reversal()`**
+    *   Trigger: `receipt_post_cancel`, `after update of status on app.receipt`, for each row, `when (old.status = 'ACTIVE' and new.status = 'CANCELLED')`.
+    *   It finds the RECEIPT entry. If none exists, it raises `journal_reversal_guard`. This also covers a cancel made in the same transaction as the receipt.
+    *   It inserts the reversal: date = IST date of `new.cancelled_at`, the same currency, `reversal_of` = the original entry, reference = `receipt_no`, narration `Reversal of {receipt_no}`. The cancel reason is not put in the narration (D12).
+    *   It copies the original lines with debit and credit swapped, then asserts the sums.
+    *   The entry date is chosen in this one place. F12 adds its open-period rule here, and a later-period reversal is a credit-note question for Accounts (D10).
+*   **Mode to account.** One branch decides it: CASH → `system_key = 'CASH'`, otherwise `BANK`. R-035 swaps in the receipt's bank account here (D14).
+*   **Owner.** Both functions are owned by the migration role, which T-RLS-005 asserts is superuser or BYPASSRLS. That is why the FORCE-RLS journal tables accept their inserts, and why their reads of receipts and dues do not depend on the caller (D2).
 
-**Triggers on `receipt`.**
-*   `receipt_post` is a constraint trigger: `after insert`, `deferrable initially deferred`. It calls `post_receipt_journal(new.id, false)`. It sorts before `receipt_total_commit` by name, and both run at commit. If the total check fails, the whole transaction rolls back, journal included.
-*   `receipt_post_cancel` runs `after update of status`, `when (old.status = 'ACTIVE' and new.status = 'CANCELLED')`. It calls `post_receipt_journal(new.id, true)`.
+**Immutability.** `journal_entry` and `journal_line` each get `_no_update_delete` and `_no_truncate` triggers that execute `app.ticket_immutable()`.
 
-**Immutability.** Both journal tables get `no_update_delete` and `no_truncate` triggers that call `app.ticket_immutable()`. The ETL reset clears them before receipts, with the triggers lifted (as dues).
+**RLS.** Both journal tables have ENABLE and FORCE, with these policies:
+*   select: `centre_id = any ((select app.scoped_centre_ids('ledger.view'))::int[])` (D12);
+*   insert, update, delete: `false`.
 
-**RLS on both tables.** ENABLE and FORCE. The policies:
-*   select: `centre_id = any (scoped_centre_ids('ledger.view'))`;
-*   insert, update and delete: `false`.
+gems_app gets `select` only.
 
-The definer function bypasses RLS as owner. gems_app gets `select` only. `journal_entry` has a `centre_id`, so T-RLS-002 lists both tables.
+**Permission.** `('ledger.view', 'View the ledger (day book) of a centre', false)`, granted to `system_admin`.
 
-**Permission.** `('ledger.view', 'View the ledger (day book) of a centre', false)`, plus the `system_admin` grant.
+**ETL reset (C11).** `scripts/etl/reset.sql` lifts `journal_line_no_truncate` and `journal_entry_no_truncate` (and re-enables them), and truncates `app.journal_line, app.journal_entry` in the same statement as the receipts.
 
 ### Server
 
-**`fees.ts`.** `createFeeType` and `updateFeeType` accept `accountId` (`"accountId: an active income account"`). `listFeeTypes` returns `accountId` and `accountCode`.
-
-**`src/server/ledger.ts`.**
-
-```ts
-export async function dayBook(session, centreId: number, from: string, to: string): Promise<{ rows: DayBookRow[]; totals: { debit: string; credit: string } }>
-export function listAccounts(session): Promise<AccountRow[]>   // for the fee type form
-```
-
-*   `dayBook` authorizes `ledger.view` at the centre; otherwise it raises Forbidden (a 404 on the page).
-*   Dates must be ISO, `from ≤ to`, and at most 92 days apart (PMC).
-*   Rows are ordered by `entry_date, entry id, line id`. Totals are computed in SQL.
-
-**`receipts.ts`.** `receiptDb` maps `journal_account_guard` to `fee.receipt.noaccount`: "A fee type on this receipt has no ledger account; ask head office."
-
-**F3 DD-5.** The ledger condition is met. The other conditions still apply.
+*   **`receipts.ts`**
+    *   **Early account check (D5).** After the open dues and the extras are read, and before the number is allocated, `collectFee` checks two sets of fee types: those of the PLAN dues the amount will touch, and those of the extras. Each must have an active INCOME or LIABILITY account. Otherwise it throws `fee.receipt.noaccount`: "A fee type on this receipt has no ledger account; ask head office."
+    *   **`receiptDb`** maps `journal_account_guard` to `fee.receipt.noaccount`, and `journal_reversal_guard` to `fee.receipt.mismatch`.
+*   **`src/server/ledger.ts`**
+    *   `dayBook(session, centreId, from, to)`. It authorizes `ledger.view` at the centre (Forbidden otherwise). It requires ISO dates, `from ≤ to`, and a span of at most 92 days (`"to: within 92 days of from"`).
+    *   Rows: `{ entryDate, reference, source, accountCode, accountName, debit, credit, narration, currency }`, ordered by entry date, entry id, line id.
+    *   Totals: `{ currency, debit, credit }[]`, computed in SQL.
+    *   `listAccounts(session)`: the active INCOME and LIABILITY accounts, for the fee-type form.
+*   **Collection gate.** With the ledger in place, fee-receipts DD-5's fifth condition is met. The others still apply. The rollout adds one condition: **every active fee type is mapped to an account** (Z6).
 
 ### Pages
 
-*   **`/ledger/day-book?centre=&from=&to=`.**
-    *   A form takes the centre (those in the user's `ledger.view` scope), and from and to dates (default: today, IST).
-    *   It shows a table of rows with totals.
-    *   A bad centre or bad parameters give a 404 or an empty result, as on other pages.
-*   **The fee type page** gains an "Account" select.
-*   **The home page** links "Day book" when the user holds `ledger.view` at any centre.
+*   **`/ledger/day-book?centre=&from=&to=`**
+    *   A form takes the centre (from the user's `ledger.view` centres) and a date range. The defaults are today in IST.
+    *   It shows a table with a Receipt or Reversal column, and per-currency totals.
+    *   A centre outside scope gives 404. Bad dates show the field error.
+*   **Fee type pages.** The fee type list and form gain an "Account" select.
+*   **Home page.** It links "Day book" for holders of `ledger.view` anywhere.
 
 ### Tests (`tests/fee-ledger.test.ts`)
 
-**Fixtures:**
-*   role 32 `ledger_viewer` (`ledger.view`) and user `…00fc` at centre A, with token `tok-ledA`;
-*   the `seedFeePlan` and ad-hoc test fee types map to income accounts. `seedMasters` sets `accountId`.
+**Fixtures (C9).**
+*   Permission row `ledger.view`.
+*   Role 32 `ledger_viewer` with `(32, 'ledger.view')`.
+*   User `…00fc` at centre A with token `tok-ledA`.
+*   `tests/fee-seed.ts` `masters()` maps Course Fee to 3909 and Registration to 3908. The ad-hoc and receipts tests map their extra types (C6, C8).
 
 | ID | Goal | What it does |
 |---|---|---|
-| T-FL-001 | G1, G2 | **A taxed STATE receipt** gives one entry: Dr CASH total; Cr Registration and Course Fee accounts their taxable sums; Cr CGST and SGST. **INTERSTATE** credits IGST. **A UPI receipt** debits BANK. **Ad-hoc lines** credit their own account. **A cancellation** posts the exact mirror, dated today, with `reversal_of`. **Refusals:** a receipt whose fee type has no account is refused with `fee.receipt.noaccount` and uses no number. **Balances:** the ledger balances per entry and overall. |
-| T-FL-002 | G3 | **As gems_app:** inserting, updating or deleting journals is refused (42501). **As the owner:** update, delete and truncate are refused. **Posting twice** is refused (unique). **An unbalanced entry** written by the function (through a mutation of the test data) is refused by name. **RLS:** a user without `ledger.view` sees no lines. **Fee type mapping:** a non-INCOME or inactive account is refused. |
-| T-FL-003 | G4 | **`dayBook`:** rows and totals for a range, the range cap, a bad centre (Forbidden), and another centre's lines not shown. **Fee setup** maps an account (audited). |
+| T-FL-001 | G1, G2 | **Postings:** a STATE cash receipt posts Dr CASH total / Cr 3908 and 3909 taxable / Cr CGST and SGST. An INTERSTATE UPI receipt posts Dr BANK / Cr IGST. A receipt with extras credits each extra's account. A USD receipt posts in USD with no tax lines. A cancel posts the mirror, dated today, with `reversal_of`. **Re-mapping:** after a fee type is re-mapped, a cancel still mirrors the original lines. **Refusals:** an unmapped fee type is refused early as `fee.receipt.noaccount` and uses no number. A same-transaction cancel (as owner) gives `journal_reversal_guard`. **Totals:** the ledger balances per entry and overall. |
+| T-FL-002 | G3 | **Writes:** as gems_app, insert, update and delete on journals give 42501, and a direct call of the trigger functions is refused. As owner, update, delete and truncate are refused. **Balance (C10):** an owner-installed deferred test trigger on `receipt_allocation` adds an unbalancing line under `session_replication_role = replica` before `receipt_zpost` runs, so the receipt is refused with `journal_balance_guard`. Or, if it is simpler, a test receipt is given an inactive account mapping between collection and commit, giving `journal_account_guard`. The build picks the one that runs. **Access:** RLS hides lines from a user without `ledger.view`. **Fee-type mapping:** an EXPENSE account, an inactive account, or an unknown account is refused. **Definers:** T-RLS-005 inventory and search path. |
+| T-FL-003 | G4 | **`dayBook`:** rows, sources, per-currency totals, the 92-day cap, a bad centre (Forbidden), other centres hidden. **Mapping:** fee setup maps an account, and it is audited. |
 
-**Changes to existing tests:**
-*   T-RLS-002 lists `journal_entry` and `journal_line`.
-*   T-RLS-005 adds `post_receipt_journal`.
-*   T-AUD-009 is unchanged: the fee type actions are the same.
-*   `seedMasters` maps accounts.
-*   T-FS-001 checks the new field's message.
+**Existing tests that change:**
+*   T-RLS-002 lists `account`, `journal_entry` and `journal_line` (`account` has no `centre_id`, so only the two journal tables appear).
+*   T-RLS-005 lists both trigger functions.
+*   T-FS-001 covers the `accountId` message.
+*   T-FR, T-RC and T-AF map their fee types.
+*   T-FR-002 is unchanged, because the total check still fires first.
 
-**Smoke:** the Day Book is a 404 without `ledger.view`, and the page renders for a holder.
+**Smoke.** The Day Book gives 404 without `ledger.view`. It renders for a holder whose centre has no lines.
 
 ## Decisions (recommended options)
 
-1.  **DD-1:** The database posts through one definer function, at commit or at cancellation. The app never writes journals.
-2.  **DD-2:** The chart is seeded from SPEC p. 15, with system keys for cash, bank and taxes. Each fee type maps to one active income account. An unmapped fee type refuses the receipt.
-3.  **DD-3 (PMC):** CASH posts to Cash in hand; every other mode to Bank (clearing), until bank accounts exist (R-035).
-4.  **DD-4:** The receipt journal (G1) and the reversal (G2). The reversal is dated on the IST cancellation date (receipt-cancel DD-6).
+1.  **DD-1:** The database posts through two definer trigger functions. Neither can be called, and the app has no grant on journals.
+2.  **DD-2:** The chart is seeded from SPEC p. 15 (the table above). Codes for heads without one are PMC.
+3.  **DD-3 (PMC):** CASH posts to Cash in hand. Every other mode posts to Bank (clearing) until R-035. Cheques are recognised at receipt; a dishonour is a separate source (D14).
+4.  **DD-4:** The receipt journal is G1. The reversal mirrors the original lines (G2).
 5.  **DD-5:** `ledger.view` is centre-scoped and gives the Day Book only.
 6.  **DD-6 (PMC):** The Day Book range is at most 92 days.
-7.  **DD-7:** Out of scope: see Non-Goals.
-8.  **DD-8:** No Round Off line. Each receipt line already carries its own residual (fee-receipts DD-3), so every journal balances exactly.
+7.  **DD-7 (PMC):** A fee type may map to an INCOME or LIABILITY account. Deposits and fees collected for others are liabilities (D-FIN-6). Accounts confirm the mapping list.
+8.  **DD-8:** There is no Round Off line. Each receipt line carries its own residual, so every journal balances exactly.
+9.  **DD-9:** Out of scope: see Non-Goals.
+10. **DD-10:** Journals carry the receipt's currency, and Day Book totals are per currency, until D-CUR-1 decides on foreign-currency accounting.
 
 ## Risks and Limits
 
-*   An owner can still disable triggers until D-FIN-8 (the hash chain) exists.
-*   "Bank (clearing)" mixes every non-cash mode until bank accounts exist. Accounts must accept this (PMC).
-*   The chart codes for heads the SPEC lists without a code are placeholders (PMC).
+*   **Owner trigger bypass.** An owner can still disable triggers until D-FIN-8 exists. The chain needs a per-centre chain head, locked in the posting functions, plus a canonical serialisation of each entry and its lines. The ETL reset that clears journals must then also reset the chain, and must be impossible in production (Z7, D13).
+*   **Balance check placement.** F1's balance is checked inside the posting functions, not by a separate deferred trigger on `journal_line` (D9). Only these functions write lines, and an owner's direct write already bypasses everything.
+*   **`receipt_id` is required.** Contra, opening and closing entries will need it to become nullable, with a matching check. That is a one-line change when they come (Z3).
+*   **Placeholder codes.** "Bank (clearing)" and the `G…` codes are placeholders for Accounts (PMC).
