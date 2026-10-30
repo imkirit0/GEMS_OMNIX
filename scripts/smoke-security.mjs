@@ -91,6 +91,16 @@ try {
   check("T-SEC-001 hidden-centre ticket 404 and identical to a missing one", tHidden.status === 404 && tMissing.status === 404
     && th === tm && !th.includes("SMK/2"), th === tm ? "" : "pages differ");
 
+  // ---------- ticket management view (T-TM: tiles, pickers within the visible tickets; bad parameters give an empty page) ----------
+  const tmPage = await get("/tickets", viewer);
+  const tmHtml = await tmPage.text();
+  check("T-TM the ticket view shows the tiles and only the viewer's centre in the picker", tmPage.status === 200 && tmHtml.includes("Forwarded")
+    && tmHtml.includes("TK-26/SMK/1") && tmHtml.includes(">SMK-A ") && !tmHtml.includes("SMK-B"), String(tmPage.status));
+  const tmBad = [await get("/tickets?status=NOPE", viewer), await get("/tickets?cursor=junk", viewer), await get("/tickets?status=OPEN&status=APPROVED", viewer)];
+  const tmBadHtml = await Promise.all(tmBad.map((r) => r.text()));
+  check("T-TM bad filters, a bad cursor and repeated parameters give 200 with no tickets", tmBad.every((r) => r.status === 200)
+    && tmBadHtml.every((h) => h.includes("No tickets.")), tmBad.map((r) => r.status).join(","));
+
   // T-SEC-005: crafted filters on the list
   const list = await (await get(`/centres?centre=${ids.A}&centre=${ids.B}&region=${ids.r1}&region=${ids.r2}`, viewer)).text();
   check("T-SEC-005 crafted filters show only the in-scope centre", list.includes("SMK-A") && !list.includes("SMK-B"));

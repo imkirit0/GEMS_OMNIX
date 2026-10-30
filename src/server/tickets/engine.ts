@@ -287,7 +287,7 @@ function decodeCursor(c?: string): { at: Date; id: string } | null {
 const listColumns = Prisma.sql`t.id::text, t.number, t.status::text, t.current_level as "currentLevel", t.level_count as "levelCount",
   ty.name as "typeName", ty.priority::text, t.centre_id as "centreId", c.code as "centreCode", t.raised_by::text as "raisedBy",
   t.created_at as "createdAt"`; // constant SQL, no input
-const page = (rows: TicketListRow[]) => ({ rows, next: rows.length === PAGE ? encodeCursor(rows[rows.length - 1]!) : null });
+const page = <R extends TicketListRow>(rows: R[]) => ({ rows, next: rows.length === PAGE ? encodeCursor(rows[rows.length - 1]!) : null });
 
 export async function approvalQueue(session: string | undefined, cursor?: string) {
   const c = decodeCursor(cursor);
@@ -301,23 +301,101 @@ export async function approvalQueue(session: string | undefined, cursor?: string
 
 const STATUSES = ["OPEN", "APPROVED", "REJECTED"], PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
 
-export async function listTickets(session: string | undefined,
-  f: { status?: string; typeId?: number; priority?: string; centreId?: number; cursor?: string } = {}) {
-  if ((f.status && !STATUSES.includes(f.status)) || (f.priority && !PRIORITIES.includes(f.priority))
-    || (f.typeId !== undefined && !Number.isSafeInteger(f.typeId)) || (f.centreId !== undefined && !Number.isSafeInteger(f.centreId))) {
-    throw new TicketError("invalid", "bad filter");
+// ---------- Ticket management view (docs/designs/ticket-management): one filter set for the list, the summary and the KPIs ----------
+
+/** Raw GET values; validated once here (Z2). "" or undefined is "not given"; anything else invalid matches nothing (G3). */
+export type TicketFilter = Partial<Record<"status" | "priority" | "type" | "centre" | "area" | "region" | "from" | "to" | "number", string | string[]>>;
+export type TicketManageRow = TicketListRow & { areaName: string; regionCode: string };
+type Parsed = { status?: string; priority?: string; type?: number; centre?: number; area?: number; region?: number;
+  from?: string; to?: string; like?: string };
+const ID_RE = /^\d{1,9}$/;
+/** A real calendar date: Date.parse rolls 2026-02-30 over to March, so round-trip it (R6). */
+const okDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
+function parseFilter(f: TicketFilter): Parsed | "invalid" {
+  const out: Parsed = {};
+  for (const [k, raw] of Object.entries(f)) {
+    if (raw === undefined || raw === "") continue;
+    if (typeof raw !== "string") return "invalid"; // a repeated parameter (R3)
+    if (k === "status") { if (!STATUSES.includes(raw)) return "invalid"; out.status = raw; }
+    else if (k === "priority") { if (!PRIORITIES.includes(raw)) return "invalid"; out.priority = raw; }
+    else if (k === "type" || k === "centre" || k === "area" || k === "region") { if (!ID_RE.test(raw)) return "invalid"; out[k] = Number(raw); }
+    else if (k === "from" || k === "to") { if (!okDate(raw)) return "invalid"; out[k] = raw; }
+    else if (k === "number") { if (raw.length > 40) return "invalid"; out.like = raw.replace(/[\\%_]/g, "\\$&") + "%"; } // literal wildcards (R12)
+    else return "invalid";
   }
-  const c = decodeCursor(f.cursor);
-  return withScope(session, async (tx) => page(await tx.$queryRaw<TicketListRow[]>`
-    select ${listColumns}
-    from app.ticket t join app.ticket_type ty on ty.id = t.type_id join app.centre c on c.id = t.centre_id
-    where app.ticket_may_view(t.id)
-      ${f.status ? Prisma.sql`and t.status = ${f.status}::app."TicketStatus"` : Prisma.empty}
-      ${f.priority ? Prisma.sql`and ty.priority = ${f.priority}::app."TicketPriority"` : Prisma.empty}
-      ${f.typeId !== undefined ? Prisma.sql`and t.type_id = ${f.typeId}` : Prisma.empty}
-      ${f.centreId !== undefined ? Prisma.sql`and t.centre_id = ${f.centreId}` : Prisma.empty}
-      ${c ? Prisma.sql`and (t.created_at, t.id) < (${c.at}, ${c.id}::uuid)` : Prisma.empty}
-    order by t.created_at desc, t.id desc limit ${PAGE}`));
+  return out;
+}
+// One FROM clause and one condition set for both reads (C11); dates are IST days, index-friendly (D2)
+const manageFrom = Prisma.sql`from app.ticket t join app.ticket_type ty on ty.id = t.type_id join app.centre c on c.id = t.centre_id
+  join app.area a on a.id = c.area_id join app.region r on r.id = a.region_id`;
+// Visibility as one set (0023 app.visible_ticket_ids, measured): ticket_may_view's rows, computed once per query
+// instead of once per row (D3; the per-row definer cost 13 s for 5.5k tickets of a user without ticket.view).
+const VISIBLE = Prisma.sql`t.id in (select app.visible_ticket_ids())`;
+const manageWhere = (p: Parsed) => Prisma.sql`where ${VISIBLE}
+  ${p.status ? Prisma.sql`and t.status = ${p.status}::app."TicketStatus"` : Prisma.empty}
+  ${p.priority ? Prisma.sql`and ty.priority = ${p.priority}::app."TicketPriority"` : Prisma.empty}
+  ${p.type !== undefined ? Prisma.sql`and t.type_id = ${p.type}` : Prisma.empty}
+  ${p.centre !== undefined ? Prisma.sql`and t.centre_id = ${p.centre}` : Prisma.empty}
+  ${p.area !== undefined ? Prisma.sql`and c.area_id = ${p.area}` : Prisma.empty}
+  ${p.region !== undefined ? Prisma.sql`and a.region_id = ${p.region}` : Prisma.empty}
+  ${p.from ? Prisma.sql`and t.created_at >= (${p.from}::date)::timestamp at time zone 'Asia/Kolkata'` : Prisma.empty}
+  ${p.to ? Prisma.sql`and t.created_at < ((${p.to}::date) + 1)::timestamp at time zone 'Asia/Kolkata'` : Prisma.empty}
+  ${p.like ? Prisma.sql`and t.number ilike ${p.like}` : Prisma.empty}`;
+
+export async function listTickets(session: string | undefined, f: TicketFilter & { cursor?: string | string[] } = {})
+  : Promise<{ rows: TicketManageRow[]; next: string | null }> {
+  const { cursor, ...rest } = f;
+  return withScope(session, async (tx) => {
+    const p = parseFilter(rest);
+    if (p === "invalid" || (cursor !== undefined && typeof cursor !== "string")) return { rows: [], next: null };
+    let c: { at: Date; id: string } | null;
+    try { c = decodeCursor(cursor); } catch (e) { if (e instanceof TicketError) return { rows: [], next: null }; throw e; } // a bad cursor matches nothing (Z1)
+    return page(await tx.$queryRaw<TicketManageRow[]>`
+      select ${listColumns}, a.name as "areaName", r.code as "regionCode"
+      ${manageFrom} ${manageWhere(p)}
+        ${c ? Prisma.sql`and (t.created_at, t.id) < (${c.at}, ${c.id}::uuid)` : Prisma.empty}
+      order by t.created_at desc, t.id desc limit ${PAGE}`);
+  });
+}
+
+export type TicketSummary = { kpi: { total: number; open: number; approved: number; rejected: number; forwarded: number };
+  byType: { typeId: number; code: string; name: string; open: number; approved: number; rejected: number; total: number; forwarded: number }[] };
+
+/** Per-type counts and the KPI tiles (their sums) under the same filters; the tiles follow every filter, status included (D6). */
+export async function ticketSummary(session: string | undefined, f: TicketFilter = {}): Promise<TicketSummary> {
+  return withScope(session, async (tx) => {
+    const p = parseFilter(f);
+    const byType = p === "invalid" ? [] : await tx.$queryRaw<TicketSummary["byType"]>`
+      select ty.id as "typeId", ty.code, ty.name,
+             count(*) filter (where t.status = 'OPEN')::int as open, count(*) filter (where t.status = 'APPROVED')::int as approved,
+             count(*) filter (where t.status = 'REJECTED')::int as rejected, count(*)::int as total,
+             count(*) filter (where t.status = 'OPEN' and exists (select 1 from app.ticket_event e where e.ticket_id = t.id
+               and e.action = 'FORWARD' and coalesce(e.detail->>'admin', '') <> 'true'))::int as forwarded
+      ${manageFrom} ${manageWhere(p)}
+      group by ty.id, ty.code, ty.name order by ty.code, ty.id`;
+    const sum = (k: "open" | "approved" | "rejected" | "total" | "forwarded") => byType.reduce((n, r) => n + r[k], 0);
+    return { kpi: { total: sum("total"), open: sum("open"), approved: sum("approved"), rejected: sum("rejected"), forwarded: sum("forwarded") }, byType };
+  });
+}
+
+/** The pickers: the centres and types of tickets the caller may view, with their areas and regions; one scan (R5). */
+export async function ticketFilterOptions(session: string | undefined) {
+  return withScope(session, async (tx) => {
+    const seen = await tx.$queryRaw<{ centreId: number; typeId: number }[]>`
+      select distinct t.centre_id as "centreId", t.type_id as "typeId" from app.ticket t where ${VISIBLE}`;
+    const centreIds = [...new Set(seen.map((x) => x.centreId))], typeIds = [...new Set(seen.map((x) => x.typeId))];
+    const centres = await tx.$queryRaw<{ id: number; code: string; name: string; areaId: number; areaName: string; regionId: number; regionCode: string }[]>`
+      select c.id, c.code, c.name, a.id as "areaId", a.name as "areaName", r.id as "regionId", r.code as "regionCode"
+      from app.centre c join app.area a on a.id = c.area_id join app.region r on r.id = a.region_id
+      where c.id = any (${centreIds}::int[]) order by c.code, c.id`;
+    const types = await tx.$queryRaw<{ id: number; code: string; name: string }[]>`
+      select id, code, name from app.ticket_type where id = any (${typeIds}::int[]) order by code, id`;
+    const regions = [...new Map(centres.map((c) => [c.regionId, { id: c.regionId, code: c.regionCode }])).values()]
+      .sort((x, y) => x.code.localeCompare(y.code) || x.id - y.id);
+    const areas = [...new Map(centres.map((c) => [c.areaId, { id: c.areaId, label: `${c.regionCode} / ${c.areaName}`, k: [c.regionCode, c.areaName] }])).values()]
+      .sort((x, y) => x.k[0]!.localeCompare(y.k[0]!) || x.k[1]!.localeCompare(y.k[1]!) || x.id - y.id).map(({ id, label }) => ({ id, label }));
+    return { regions, areas, centres: centres.map(({ id, code, name }) => ({ id, code, name })), types };
+  });
 }
 
 export async function raiseOptions(session: string | undefined) {

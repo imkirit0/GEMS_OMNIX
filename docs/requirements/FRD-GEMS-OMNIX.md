@@ -2831,7 +2831,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Operations/PRO (4), Operations (3), Accounts (3), PRO (1), Certification (1), Admissions (1)
 - **Workflows (05):** WF-X10 Internship exam + certificate; WF-X11 WE exam registration; WF-X4 CRM lead pipeline; WF-X7 Course mode change; WF-X8 Exam date / special exam requests; WF-X9 Absent / rejected re-exam; WF10 Voucher & licence; WF11 Material kits; WF6 Ticket engine; WF7 Student data & course change; WF8 Exam lifecycle
 - **Open decisions (04):** D-FEE-3, D-GAP-2, D-STO-1, D-STU-2, D-STU-3, D-SUP-1, D-TKT-1, D-TKT-2, D-TKT-3, D-TKT-4, NP-1, NP-8, PR-01
-- **Distinct acceptance tests (09):** 19
+- **Distinct acceptance tests (09):** 22
 
 #### FR-033.10: Level (part of FR-033)
 
@@ -2908,7 +2908,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-094.01 |
 | Business owner | Operations/PRO |
 | Open decisions | D-TKT-2, D-STO-1 |
-| Acceptance tests | T-TKT-001, T-TKT-003, T-TKT-019, T-TKT-020 |
+| Acceptance tests | T-TKT-001, T-TKT-003, T-TKT-019, T-TKT-020, T-TM-001, T-TM-002, T-TM-003 |
 | Workflows | WF6 Ticket engine |
 | Data migration | 2,412 pending at cutover need a treatment (C-03) |
 | Delivery stage | 5 Ticket workflows |
@@ -3870,7 +3870,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** MIS (25), Accounts (17), Academics (3), Admissions (1), Operations (1), Marketing (1), Stores (1), HR (1), Certification (1)
 - **Workflows (05):** WF-X18 Marketing targets; WF-X6 Online payment recheck & settlement; WF11 Material kits; WF15 Attendance, syllabus, placement; WF17b HRMS payroll; WF4 Fee setup & collection; WF5 Schemes & concessions; WF6 Ticket engine
 - **Open decisions (04):** D-ADM-2, D-ADM-4, D-FIN-1, D-GAP-2, D-HR-1, D-ORG-5, D-ROY-2, D-RPT-1, D-RPT-2, D-SCH-3, D-SEC-4, D-STU-4, PR-07
-- **Distinct acceptance tests (09):** 17
+- **Distinct acceptance tests (09):** 20
 
 #### FR-005: Home dashboard
 
@@ -4236,7 +4236,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-094.03 |
 | Business owner | Operations |
 | Open decisions | - |
-| Acceptance tests | T-TKT-014, T-RPT-008 |
+| Acceptance tests | T-TKT-014, T-RPT-008, T-TM-001, T-TM-002, T-TM-003 |
 | Workflows | WF6 Ticket engine |
 | Data migration | n/a |
 | Delivery stage | 5 Ticket workflows |

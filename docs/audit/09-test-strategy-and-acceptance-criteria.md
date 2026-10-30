@@ -226,6 +226,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-CB-002 | Placing learners | Only ACTIVE registrations of the centre go into an active batch of that centre, never beyond capacity, audited with register numbers; move, remove and nothing to change; the database guard refuses the same by SQL for every writer, including an insert with a batch, a status returning to ACTIVE, several rows in one statement and two concurrent sessions |
 | T-CB-003 | Routes | Batch and placement routes: same origin, field details, unknown operations, repeated ids and "no batch" |
 
+### T-TM: ticket management view (`docs/designs/ticket-management/ticket-management.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-TM-001 | KPIs, summary and filters | One filter set (status, priority, type, centre, area, region, raised from/to in IST, number prefix) drives the KPI tiles, the per-type summary and the list, and their counts agree; Forwarded counts open tickets an approver forwarded, not admin reassigns; every count, row and picker stays within the tickets the user may view |
+| T-TM-002 | Invalid filters | Bad values, impossible dates, repeated parameters, over-long numbers and a bad page cursor give empty results and zero counts, never an error or a wider result; wildcards in the number are literal |
+| T-TM-003 | One visibility set | `app.visible_ticket_ids()` returns exactly the tickets `app.ticket_may_view` allows, for every kind of viewer (centre `ticket.view`, raiser, named and role approver, forward target, named and role type viewer); the view's reads use it, within a 500 ms budget at the legacy volume |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

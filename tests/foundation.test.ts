@@ -82,7 +82,7 @@ describe("database isolation (T-RLS)", () => {
       "rbac_set_user_status", "rbac_unassign", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
       "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids",
       "ticket_forward_candidates", "ticket_may_act", "ticket_may_receive", "ticket_may_view", "ticket_people", "ticket_type_lock",
-      "user_centre_ids", "visible_centre_ids"]);
+      "user_centre_ids", "visible_centre_ids", "visible_ticket_ids"]);
     for (const f of fns) expect(f, f.proname).toMatchObject({ fixed: true, owner_bypasses: true });
 
     expect(await visibleCentres(T.uA)).toEqual([C.A]);

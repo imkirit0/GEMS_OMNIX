@@ -144,7 +144,7 @@ All four are recommended options under the standing instruction.
 
 1.  **DD-1:** one management view on `/tickets`: KPIs, a summary by type, and the list.
 2.  **DD-2:** pickers built from visible tickets; a date range in IST; the ticket number by prefix.
-3.  **DD-3:** reads only; no migration, no new permission.
+3.  **DD-3 (revised at build, on the measurement; recommended option):** reads plus one migration, 0023 `app.visible_ticket_ids()`, a set-returning definer equal to `ticket_may_view` (T-TM-003). The per-row definer cost 13 s for 5.5k tickets of a user without `ticket.view`, past the 5 s transaction limit. No new permission.
 4.  **DD-4:** exports and the per-handler columns come later.
 
 ## Alternatives Considered
