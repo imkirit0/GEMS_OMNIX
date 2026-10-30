@@ -101,6 +101,17 @@ try {
   check("T-TM bad filters, a bad cursor and repeated parameters give 200 with no tickets", tmBad.every((r) => r.status === 200)
     && tmBadHtml.every((h) => h.includes("No tickets.")), tmBad.map((r) => r.status).join(","));
 
+  // ---------- approvals workbench (T-AW: cards; bad parameters give an empty queue; the bulk route checks the origin) ----------
+  const awPage = await get("/tickets/approvals", viewer);
+  check("T-AW the approvals page renders its Total card", awPage.status === 200 && (await awPage.text()).includes("Total:"), String(awPage.status));
+  const awBad = [await get("/tickets/approvals?cursor=junk", viewer), await get("/tickets/approvals?type=abc", viewer)];
+  check("T-AW a bad cursor or filter gives 200 with nothing waiting", awBad.every((r) => r.status === 200)
+    && (await Promise.all(awBad.map((r) => r.text()))).every((h) => h.includes("Nothing waiting for you.")), awBad.map((r) => r.status).join(","));
+  const awForeign = await fetch(`${BASE}/tickets/approvals/bulk`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${viewer}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams([["action", "approve"], ["item", `${ownTicket}:1`]]) });
+  check("T-AW a bulk post from a foreign origin is refused", awForeign.status === 403, String(awForeign.status));
+
   // T-SEC-005: crafted filters on the list
   const list = await (await get(`/centres?centre=${ids.A}&centre=${ids.B}&region=${ids.r1}&region=${ids.r2}`, viewer)).text();
   check("T-SEC-005 crafted filters show only the in-scope centre", list.includes("SMK-A") && !list.includes("SMK-B"));

@@ -77,7 +77,7 @@ describe("database isolation (T-RLS)", () => {
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.prosecdef order by 1`).then((r) => r.rows));
     // every privileged function is listed on purpose: a new one must be reviewed and added here
-    expect(fns.map((f) => f.proname)).toEqual(["account_usable", "assert_can_grant_role", "audit", "can_grant_permission", "enquiry_counsellors", "enquiry_may_receive", "enquiry_people", "has_permission",
+    expect(fns.map((f) => f.proname)).toEqual(["account_usable", "actable_ticket_ids", "assert_can_grant_role", "audit", "can_grant_permission", "enquiry_counsellors", "enquiry_may_receive", "enquiry_people", "has_permission",
       "rate_take", "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
       "rbac_set_user_status", "rbac_unassign", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
       "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids",

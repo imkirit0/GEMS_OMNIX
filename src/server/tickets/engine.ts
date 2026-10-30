@@ -289,14 +289,80 @@ const listColumns = Prisma.sql`t.id::text, t.number, t.status::text, t.current_l
   t.created_at as "createdAt"`; // constant SQL, no input
 const page = <R extends TicketListRow>(rows: R[]) => ({ rows, next: rows.length === PAGE ? encodeCursor(rows[rows.length - 1]!) : null });
 
-export async function approvalQueue(session: string | undefined, cursor?: string) {
-  const c = decodeCursor(cursor);
-  return withScope(session, async (tx) => page(await tx.$queryRaw<TicketListRow[]>`
-    select ${listColumns}
-    from app.ticket t join app.ticket_type ty on ty.id = t.type_id join app.centre c on c.id = t.centre_id
-    where t.status = 'OPEN' and app.ticket_may_act(t.id)
-      ${c ? Prisma.sql`and (t.created_at, t.id) > (${c.at}, ${c.id}::uuid)` : Prisma.empty}
-    order by t.created_at, t.id limit ${PAGE}`));
+// ---------- Approvals workbench (docs/designs/approvals-workbench): the queue, its cards, bulk approve and reject ----------
+
+export type QueueFilter = Partial<Record<"type" | "centre" | "from" | "to", string | string[]>>;
+export type QueueRow = TicketListRow & { version: number };
+const QUEUE_KEYS = ["type", "centre", "from", "to"];
+/** The queue's filters: only these four keys; anything else matches nothing (R4). */
+const parseQueue = (f: Record<string, unknown>) =>
+  Object.keys(f).some((k) => !QUEUE_KEYS.includes(k) && f[k] !== undefined) ? "invalid" as const : parseFilter(f as TicketFilter);
+
+/** What the session may act on now, oldest first (T-TKT-003): the same rule act() applies, as one set. */
+export async function approvalQueue(session: string | undefined, f: QueueFilter & { cursor?: string | string[] } = {})
+  : Promise<{ rows: QueueRow[]; next: string | null }> {
+  const { cursor, ...rest } = f;
+  return withScope(session, async (tx) => {
+    const p = parseQueue(rest), c = cursorOf(cursor);
+    if (p === "invalid" || c === "invalid") return { rows: [], next: null }; // a bad cursor no longer throws (R8)
+    return page(await tx.$queryRaw<QueueRow[]>`
+      select ${listColumns}, t.version ${manageFrom} ${manageWhere(p, ACTABLE)}
+        ${c ? Prisma.sql`and (t.created_at, t.id) > (${c.at}, ${c.id}::uuid)` : Prisma.empty}
+      order by t.created_at, t.id limit ${PAGE}`);
+  });
+}
+
+export type QueueCards = { total: number; byType: { typeId: number; code: string; name: string; count: number }[];
+  byCentre: { centreId: number; code: string; name: string; count: number }[] };
+
+/** The queue's cards (R-144): per type ignoring the type filter, per centre ignoring the centre filter, so neither select
+ * traps the user (D8); total is derived (I4). */
+export async function queueCards(session: string | undefined, f: QueueFilter = {}): Promise<QueueCards> {
+  return withScope(session, async (tx) => {
+    const p = parseQueue(f);
+    if (p === "invalid") return { total: 0, byType: [], byCentre: [] };
+    const byType = await tx.$queryRaw<QueueCards["byType"]>`
+      select ty.id as "typeId", ty.code, ty.name, count(*)::int as count ${manageFrom} ${manageWhere({ ...p, type: undefined }, ACTABLE)}
+      group by ty.id, ty.code, ty.name order by ty.code, ty.id`;
+    const byCentre = await tx.$queryRaw<QueueCards["byCentre"]>`
+      select c.id as "centreId", c.code, c.name, count(*)::int as count ${manageFrom} ${manageWhere({ ...p, centre: undefined }, ACTABLE)}
+      group by c.id, c.code, c.name order by c.code, c.id`;
+    const total = p.type === undefined ? byType.reduce((n, r) => n + r.count, 0) : byType.find((r) => r.typeId === p.type)?.count ?? 0;
+    return { total, byType, byCentre };
+  });
+}
+
+export type BulkResult = { done: number; conflict: number; forbidden: number; invalid: number; failed: number };
+export const BULK_MAX = 50; // PMC; confirmed by the timing run (D2)
+
+/**
+ * Approve or reject several tickets, each through act() in its own transactions, with its own lock, version check,
+ * permission, handler and audit (DD-3). Refusals are counted by reason; anything else is rethrown and stops the batch,
+ * leaving what was done committed (a resubmit then reports those as conflicts).
+ */
+export async function bulkAct(session: string | undefined, b: { action: "approve" | "reject"; remarks?: string;
+  items: { ticketId: string; seenVersion: number }[] }): Promise<BulkResult> {
+  // nothing is touched unless the batch itself is well formed (Z7)
+  if (b?.action !== "approve" && b?.action !== "reject") throw new TicketError("invalid", "choose approve or reject");
+  if (!Array.isArray(b.items) || b.items.length < 1 || b.items.length > BULK_MAX) throw new TicketError("invalid", `choose 1-${BULK_MAX} tickets`);
+  const remarks = typeof b.remarks === "string" ? b.remarks.trim() : "";
+  if (b.action === "reject" && !remarks) throw new TicketError("invalid", "remarks are required to reject");
+  const r: BulkResult = { done: 0, conflict: 0, forbidden: 0, invalid: 0, failed: 0 };
+  for (const it of b.items) {
+    try {
+      await act(session, { ticketId: it.ticketId, action: b.action, seenVersion: it.seenVersion, remarks: remarks || undefined });
+      r.done++;
+    } catch (e) {
+      // counting (C3): a non-UUID id is TicketNotFound -> forbidden; a duplicate becomes a conflict (R6)
+      if (e instanceof Forbidden || e instanceof TicketNotFound) r.forbidden++;
+      else if (e instanceof ApplyFailed) r.failed++;
+      else if (e instanceof TicketError && (e.reason === "conflict" || e.reason === "stale")) r.conflict++;
+      else if (e instanceof TicketError && e.reason === "invalid") r.invalid++;
+      else if (e instanceof TicketError && e.reason === "inactive") r.failed++;
+      else throw e; // ScopeError, a lost connection, a guard's P0001, a "document" reason (cannot occur here): stop (C4, I6)
+    }
+  }
+  return r;
 }
 
 const STATUSES = ["OPEN", "APPROVED", "REJECTED"], PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
@@ -331,7 +397,9 @@ const manageFrom = Prisma.sql`from app.ticket t join app.ticket_type ty on ty.id
 // Visibility as one set (0023 app.visible_ticket_ids, measured): ticket_may_view's rows, computed once per query
 // instead of once per row (D3; the per-row definer cost 13 s for 5.5k tickets of a user without ticket.view).
 const VISIBLE = Prisma.sql`t.id in (select app.visible_ticket_ids())`;
-const manageWhere = (p: Parsed) => Prisma.sql`where ${VISIBLE}
+// The set of tickets the session may act on now (0024, measured: the per-row ticket_may_act cost 4.1 s on 2,412 open).
+const ACTABLE = Prisma.sql`t.id in (select app.actable_ticket_ids())`;
+const manageWhere = (p: Parsed, base = VISIBLE) => Prisma.sql`where ${base}
   ${p.status ? Prisma.sql`and t.status = ${p.status}::app."TicketStatus"` : Prisma.empty}
   ${p.priority ? Prisma.sql`and ty.priority = ${p.priority}::app."TicketPriority"` : Prisma.empty}
   ${p.type !== undefined ? Prisma.sql`and t.type_id = ${p.type}` : Prisma.empty}
@@ -342,14 +410,20 @@ const manageWhere = (p: Parsed) => Prisma.sql`where ${VISIBLE}
   ${p.to ? Prisma.sql`and t.created_at < ((${p.to}::date) + 1)::timestamp at time zone 'Asia/Kolkata'` : Prisma.empty}
   ${p.like ? Prisma.sql`and t.number ilike ${p.like}` : Prisma.empty}`;
 
+/** The page cursor, or "invalid" for an array or a string decodeCursor refuses: a bad cursor matches nothing (Z1, Z5). */
+function cursorOf(cursor: unknown): { at: Date; id: string } | null | "invalid" {
+  if (cursor === undefined || cursor === "") return null;
+  if (typeof cursor !== "string") return "invalid";
+  try { return decodeCursor(cursor); } catch (e) { if (e instanceof TicketError) return "invalid"; throw e; }
+}
+
 export async function listTickets(session: string | undefined, f: TicketFilter & { cursor?: string | string[] } = {})
   : Promise<{ rows: TicketManageRow[]; next: string | null }> {
   const { cursor, ...rest } = f;
   return withScope(session, async (tx) => {
     const p = parseFilter(rest);
-    if (p === "invalid" || (cursor !== undefined && typeof cursor !== "string")) return { rows: [], next: null };
-    let c: { at: Date; id: string } | null;
-    try { c = decodeCursor(cursor); } catch (e) { if (e instanceof TicketError) return { rows: [], next: null }; throw e; } // a bad cursor matches nothing (Z1)
+    const c = cursorOf(cursor);
+    if (p === "invalid" || c === "invalid") return { rows: [], next: null };
     return page(await tx.$queryRaw<TicketManageRow[]>`
       select ${listColumns}, a.name as "areaName", r.code as "regionCode"
       ${manageFrom} ${manageWhere(p)}
