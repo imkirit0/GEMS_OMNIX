@@ -71,6 +71,7 @@ model Centre {
   numberSeries    NumberSeries[]
   receipts        Receipt[]
   journalEntries  JournalEntry[]
+  feeHoldEvents   FeeHoldEvent[]
   tickets         Ticket[]
   ticketLevels    TicketLevel[]
   ticketEvents    TicketEvent[]
@@ -138,6 +139,7 @@ model AppUser {
   feeDuesCreated          FeeDue[]           @relation("feeDueCreatedBy")
   receiptsCreated         Receipt[]          @relation("receiptCreatedBy")
   receiptsCancelled       Receipt[]          @relation("receiptCancelledBy")
+  feeHoldEventsCreated    FeeHoldEvent[]     @relation("feeHoldEventCreatedBy")
 
   @@map("app_user")
   @@schema("app")
@@ -799,6 +801,7 @@ model FeeDue {
   feeType        FeeType      @relation(fields: [feeTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   creator        AppUser      @relation("feeDueCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   allocations    ReceiptAllocation[]
+  holdEvents     FeeHoldEvent[]
 
   @@unique([registrationId, feeTypeId, captionId])
   @@map("fee_due")
@@ -1224,5 +1227,24 @@ model JournalLine {
 
   @@index([entryId])
   @@map("journal_line")
+  @@schema("app")
+}
+
+// ---------- Fee holds (docs/designs/fee-holds; guard, immutability, the held/collectable view columns, RLS and grants in 0031) ----------
+// Append-only HOLD/RELEASE events per plan due; the latest event (id assigned under the fee-dues lock) is the state.
+model FeeHoldEvent {
+  id        BigInt   @id @default(autoincrement())
+  dueId     BigInt   @map("due_id")
+  centreId  Int      @map("centre_id")
+  action    String
+  reason    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  createdBy String   @map("created_by") @db.Uuid
+  due       FeeDue   @relation(fields: [dueId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centre    Centre   @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator   AppUser  @relation("feeHoldEventCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([dueId, id])
+  @@map("fee_hold_event")
   @@schema("app")
 }

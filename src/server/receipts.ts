@@ -45,6 +45,7 @@ async function receiptDb<T>(run: () => Promise<T>): Promise<T> {
     if (name === "receipt_over_guard") throw new RbacError("invalid", "the amount is more than what is outstanding", "fee.receipt.over");
     if (name === "journal_account_guard") throw new RbacError("invalid", "a fee type on this receipt has no ledger account", "fee.receipt.noaccount");
     if (name === "fee_due_adhoc_plan_guard") throw new RbacError("invalid", "that fee type is on the learner's plan", "fee.receipt.adhocplan");
+    if (name === "receipt_hold_guard") throw new RbacError("invalid", "some dues are on hold", "fee.receipt.held");
     if (name === "receipt_tax_guard") throw new RbacError("invalid", "the centre's GST details are incomplete", "fee.receipt.gst");
     // cancellation (receipt-cancel): the guard alone decides the day, the status and the step-up
     if (name === "receipt_cancel_late_guard") throw new RbacError("invalid", "the receipt is not from today", "fee.receipt.late");
@@ -136,12 +137,16 @@ export async function collectFee(session: string | undefined, personId: string, 
         }
       }
       // what is owed: PLAN dues only (fee_due_balance.owed, adhoc-fees DD-6)
-      const [owed] = await tx.$queryRaw<{ n: number; over: boolean; currency: string | null }[]>`
-        select count(*)::int as n, ${amount}::numeric > coalesce(sum(b.owed), 0) as over, min(d.currency::text) as currency
+      // a held due stays owed but is not collected (fee-holds DD-2): owed decides nothing/over, collectable decides held
+      const [owed] = await tx.$queryRaw<{ n: number; nc: number; over: boolean; overc: boolean; currency: string | null }[]>`
+        select count(*)::int as n, (count(*) filter (where b.collectable > 0))::int as nc,
+          ${amount}::numeric > coalesce(sum(b.owed), 0) as over, ${amount}::numeric > coalesce(sum(b.collectable), 0) as overc,
+          min(d.currency::text) as currency
         from app.fee_due_balance b join app.fee_due d on d.id = b.due_id
         where b.registration_id = ${regId}::uuid and b.owed > 0`;
       if (!zero && owed!.n === 0) throw new RbacError("invalid", "nothing is outstanding", "fee.receipt.nothing");
       if (owed!.over) throw new RbacError("invalid", "the amount is more than what is outstanding", "fee.receipt.over");
+      if (!zero && (owed!.nc === 0 || owed!.overc)) throw new RbacError("invalid", "some dues are on hold", "fee.receipt.held");
       const currency = owed!.currency ?? "INR";
       if (extras.length > 0 && currency !== "INR") throw bad("extras: INR only");
       const period = (await tx.$queryRaw<{ period: string }[]>`select app.financial_year((now() at time zone 'Asia/Kolkata')::date) as period`)[0]!.period;
@@ -171,10 +176,10 @@ export async function collectFee(session: string | undefined, personId: string, 
         insert into app.receipt_allocation (receipt_id, centre_id, due_id, amount)
         select ${id}::bigint, ${centreId}, x.due_id, x.take from (
           select b.due_id, d.due_on,
-            least(b.owed, ${amount}::numeric - coalesce(sum(b.owed) over (order by d.due_on, d.id
+            least(b.collectable, ${amount}::numeric - coalesce(sum(b.collectable) over (order by d.due_on, d.id
               rows between unbounded preceding and 1 preceding), 0)) as take
           from app.fee_due_balance b join app.fee_due d on d.id = b.due_id
-          where b.registration_id = ${regId}::uuid and b.owed > 0) x
+          where b.registration_id = ${regId}::uuid and b.collectable > 0) x
         where x.take > 0
         order by x.due_on, x.due_id`;
       lines += extras.length;

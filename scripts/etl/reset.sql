@@ -8,15 +8,17 @@
 alter table app.enquiry_followup disable trigger enquiry_followup_no_truncate;
 alter table app.fee_due disable trigger fee_due_no_truncate;
 alter table app.journal_line disable trigger journal_line_no_truncate;
+alter table app.fee_hold_event disable trigger fee_hold_event_no_truncate;
 alter table app.journal_entry disable trigger journal_entry_no_truncate;
 alter table app.receipt_allocation disable trigger receipt_allocation_no_truncate;
 alter table app.receipt disable trigger receipt_no_truncate;
 truncate raw.legacy_centre, raw.legacy_admission, raw.legacy_course_row,
   migration.key_map, migration.exception, migration.reconciliation, migration.run,
-  app.enquiry_followup, app.enquiry, app.journal_line, app.journal_entry, app.receipt_allocation, app.receipt, app.fee_due, app.registration, app.admission, app.person_detail, app.person;
+  app.enquiry_followup, app.enquiry, app.journal_line, app.journal_entry, app.fee_hold_event, app.receipt_allocation, app.receipt, app.fee_due, app.registration, app.admission, app.person_detail, app.person;
 alter table app.enquiry_followup enable trigger enquiry_followup_no_truncate;
 alter table app.fee_due enable trigger fee_due_no_truncate;
 alter table app.journal_line enable trigger journal_line_no_truncate;
+alter table app.fee_hold_event enable trigger fee_hold_event_no_truncate;
 alter table app.journal_entry enable trigger journal_entry_no_truncate;
 alter table app.receipt_allocation enable trigger receipt_allocation_no_truncate;
 alter table app.receipt enable trigger receipt_no_truncate;

@@ -37,7 +37,7 @@ export default async function Student({ params, searchParams }: { params: Promis
       <h1>{p.givenName} {p.familyName ?? ""}</h1>
       {saved && <p role="status">Saved.</p>}
       <AdminErrors error={error} detail={detail} labels={{ registrationId: "Course registration", centreId: "Centre", amount: "Amount", mode: "Mode",
-        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)", extras: "Ad-hoc items" }} />
+        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)", extras: "Ad-hoc items", reason: "Reason", action: "Action" }} />
       <p>Gender {p.gender ?? "not given"} · Born {p.dateOfBirth ?? "not given"} · Mobile {p.mobile ?? "not given"} · Email {p.email ?? "not given"}</p>
       <section>
         <h2>Contact and family</h2>
@@ -69,11 +69,16 @@ export default async function Student({ params, searchParams }: { params: Promis
                         <strong>Fees</strong>
                         {f.dues.length > 0 ? (
                           <table>
-                            <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Outstanding</th></tr></thead>
+                            <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Outstanding</th><th>Hold</th></tr></thead>
                             <tbody>
                               {f.dues.map((d) => <tr key={d.id}><td>{d.feeTypeName}</td><td>{d.captionName}</td><td>{d.dueOn}</td><td>{inr(d.gross)}</td>
-                                <td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td></tr>)}
-                              <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td>{inr(f.outstanding!)}</td></tr>
+                                <td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td><td>{f.canHold && (d.held || d.outstanding !== "0.00") ? (
+                                  <form method="post" action={`/students/${p.id}/holds`}>
+                                    <input type="hidden" name="dueId" value={d.id} /><input type="hidden" name="action" value={d.held ? "release" : "hold"} />
+                                    {d.held && <>On hold </>}<input name="reason" required maxLength={500} placeholder="Reason" aria-label={`Reason for ${d.feeTypeName} ${d.captionName}`} />{" "}
+                                    <button type="submit">{d.held ? "Release" : "Hold"}</button>
+                                  </form>) : d.held ? "On hold" : null}</td></tr>)}
+                              <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td>{inr(f.outstanding!)}</td><td>Collectable now {inr(f.collectable ?? "0")}</td></tr>
                             </tbody>
                           </table>
                         ) : f.canCreate ? (f.noPlan ? <p>No fee plan for this course yet.</p> : (
@@ -89,8 +94,8 @@ export default async function Student({ params, searchParams }: { params: Promis
                           <form method="post" action={`/students/${p.id}/receipts`}>
                             <input type="hidden" name="registrationId" value={r.id} />
                             <input type="hidden" name="idempotencyKey" value={randomUUID()} />
-                            <label>Amount towards dues (includes GST) <input name="amount" defaultValue={f.outstanding ?? "0"} inputMode="decimal" required /></label>
-                            {(f.outstanding === null || f.outstanding === "0.00") && <> (nothing owed)</>}{" "}
+                            <label>Amount towards dues (includes GST) <input name="amount" defaultValue={f.collectable ?? "0"} inputMode="decimal" required /></label>
+                            {(f.collectable === null || f.collectable === "0.00") && <> (nothing collectable)</>}{" "}
                             <label>Mode <select name="mode" defaultValue="CASH">{MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></label>{" "}
                             <label>Reference <input name="reference" maxLength={50} /></label>{" "}
                             <label>Instrument date <input name="instrumentDate" type="date" /></label>

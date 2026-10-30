@@ -283,6 +283,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-FL-002 | Ledger proven by the database | The app cannot write, change or remove journals or call the posting functions; an unbalanced entry and a reversal without its original are refused by name; journals are read only with ledger.view at their centre; fee types map only to active income or liability accounts |
 | T-FL-003 | Day Book | Lines of a centre for up to 92 days with source and totals per currency; other centres hidden; fee setup maps accounts, audited |
 
+### T-FH: fee holds (`docs/designs/fee-holds/fee-holds.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-FH-001 | Holding and releasing dues | A holder of `fee.hold` holds an owed plan due and releases it, each with a reason, audited; a held due stays owed but is not collected (collection takes the other dues; asking for more than is collectable is refused as held); refused: twice, an unheld release, no reason, nothing owed, a viewer, another person's due, an inactive centre, an ad-hoc due; ad-hoc items are still collected when every due is held |
+| T-FH-002 | Holds proven by the database | By SQL the guards refuse, by name, an allocation to a held due, a hold that does not alternate, an ad-hoc due, another centre's due and a paid-up due; ids follow the lock order under concurrent hold and release; events never change; row security |
+| T-FH-003 | Hold list and history | Held dues of a centre by fee type, course and year; events by kind for up to 92 days; the route checks origin and the person |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|
