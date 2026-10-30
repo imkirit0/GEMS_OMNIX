@@ -1,0 +1,89 @@
+# Mutation checks: fee schemes and concessions (docs/designs/fee-schemes), 2026-10-30
+# Each line: one mutation applied to migration 0032's functions, view or policies (admin, create or replace) or to server code, the named test run, then restored.
+# First run (77):
+MISSED G1 insert without manage
+MISSED G2 maker not stamped
+CAUGHT G3 delete live
+CAUGHT G4 draft diff off
+CAUGHT G5 edit not stamped
+CAUGHT G6 draft edit without manage
+CAUGHT G7 approve without approve
+CAUGHT G8 approve without step-up
+CAUGHT G9 approval diff off
+CAUGHT G10 creator may approve
+CAUGHT G11 editor may approve
+CAUGHT G12 no rule needed
+CAUGHT G13 no course needed
+CAUGHT G14 expired approvable
+CAUGHT G15 retire without approve
+CAUGHT G16 retire without step-up
+CAUGHT G17 retirement diff off
+CAUGHT G18 other transitions pass
+CAUGHT P1 live parts change
+CAUGHT P2 part edit not stamped
+CAUGHT L1 lock as invoker
+CAUGHT A1 assigner not stamped
+CAUGHT A2 inactive registration
+CAUGHT A3 draft scheme
+CAUGHT A4 before validity
+CAUGHT A5 after validity
+CAUGHT A6 any course
+CAUGHT A7 any centre
+CAUGHT A8 paid allowed
+CAUGHT C1 later transaction
+CAUGHT C2 another registration
+CAUGHT C3 ad-hoc due
+CAUGHT C4 truncating percent
+CAUGHT C5 later includes itself
+CAUGHT C6 earliest first
+CAUGHT C7 any fee type later
+CAUGHT C8 no cap at gross
+CAUGHT C9 no floor
+MISSED C10 zero kept
+MISSED C11 supplied amount kept
+CAUGHT C12 supplied AMOUNT kept
+CAUGHT V1 given unchecked
+CAUGHT W1 outstanding ignores concession
+CAUGHT W2 owed ignores concession
+CAUGHT W3 concession column zero
+CAUGHT R1 concessions readable by all
+CAUGHT R2 any assigner
+CAUGHT R3 drafts visible
+CAUGHT R4 concessions changeable
+CAUGHT R5 assignments changeable
+CAUGHT S1 self unmapped
+CAUGHT S2 incomplete unmapped
+CAUGHT S3 expired unmapped
+CAUGHT S4 retire reason length
+CAUGHT S5 parts not deleted first
+CAUGHT S6 retire of non-live
+CAUGHT S7 inactive fee type
+CAUGHT S8 validity unchecked
+CAUGHT S9 percent range
+CAUGHT S10 unknown course
+CAUGHT K1 person unchecked
+CAUGHT K2 inactive centre
+CAUGHT K3 paid unmapped
+CAUGHT K4 notfor unmapped
+CAUGHT K5 exists unmapped
+CAUGHT K6 audit payload
+MISSED K7 register scheme filter
+CAUGHT K8 register range
+CAUGHT K9 register any centre
+CAUGHT K10 centres without concession
+CAUGHT K11 schemes for any course
+CAUGHT K12 schemes for any centre
+CAUGHT K13 schemes for any date
+CAUGHT D1 canConcede ignores paid
+CAUGHT D2 canConcede any user
+CAUGHT D3 concession not shown
+CAUGHT D4 scheme not shown
+# Tests added for the misses: an owner-supplied maker and PERCENT amount (T-SC-003), filtered register rows (T-SC-004); C10 targeted T-SC-003, where a zero share occurs.
+# Rerun:
+MISSED G1 insert without manage
+MISSED G2 maker not stamped
+CAUGHT C10 zero kept
+CAUGHT C11 supplied amount kept
+CAUGHT K7 register scheme filter
+CAUGHT G2 maker not stamped
+# Result: 77 mutations, 76 CAUGHT, 1 equivalent (G1: row security refuses the same insert).

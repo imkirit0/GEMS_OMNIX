@@ -110,6 +110,8 @@ describe("T-SC fee schemes and concessions", () => {
     // expired; validation; duplicate code; delete a draft
     const old = await scheme([{ feeTypeId: seed.reg, kind: "PERCENT", value: "5" }], { validFrom: "2025-01-01", validTo: "2025-12-31", draft: true });
     expect(await thrown(sch.approveScheme(A, old))).toMatchObject({ key: "fee.scheme.expired" });
+    expect(await thrown(sch.approveScheme(A, await scheme([], { draft: true })))).toMatchObject({ key: "fee.scheme.incomplete" }); // a course but no rule
+    expect(await msg(sch.setSchemeRule(M, old, { feeTypeId: 9999, kind: "PERCENT", value: "5" }))).toBe("feeTypeId: inactive or unknown");
     expect(await msg(sch.createScheme(M, { code: "X", name: "X", validFrom: "2026-02-01", validTo: "2026-01-31" }))).toBe("validTo: not before validFrom");
     expect(await thrown(sch.createScheme(M, { code: "MINE", name: "Again", validFrom: "2026-01-01", validTo: "2026-12-31" }))).toMatchObject({ key: "fee.duplicate" });
     expect(await msg(sch.setSchemeRule(M, old, { feeTypeId: seed.reg, kind: "PERCENT", value: "150" }))).toBe("value: a percentage from 0.01 to 100");
@@ -184,6 +186,11 @@ describe("T-SC fee schemes and concessions", () => {
     expect(await thrown(assignScheme(K, L.personId, L4.dca, S))).toBeInstanceOf(PersonError); // another learner's registration
     expect(await msg(assignScheme(K, L4.personId, L4.dca, 0))).toBe("schemeId: inactive or unknown");
     expect(await sql(`select count(*)::int as n from app.fee_scheme_assignment where registration_id = $1`, [L4.dca])).toEqual([{ n: 0 }]);
+    const ended = await scheme([{ feeTypeId: seed.reg, kind: "PERCENT", value: "5" }]);
+    await asAdmin(async (db) => { await db.query("set session_replication_role = replica"); await db.query(`update app.fee_scheme set valid_to = '2026-10-27' where id = $1`, [ended]); });
+    expect(await thrown(assignScheme(K, L4.personId, L4.dca, ended))).toMatchObject({ key: "fee.scheme.notfor" }); // ended the day before admission
+    await sql(`update app.registration set status = 'DROP' where id = $1`, [L4.dca]);
+    expect(await thrown(assignScheme(K, L4.personId, L4.dca, S))).toMatchObject({ key: "fee.scheme.mismatch" });
     // an inactive centre (the session stays valid through the user's active centre A)
     await sql(`update app.centre set centre_class_id = 1 where id = $1`, [C.A2]);
     await sql(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, 36, 'CENTRE', $2), ($3, 29, 'CENTRE', $2)`, [SC.concede, C.A2, FD.a]);
@@ -209,6 +216,7 @@ describe("T-SC fee schemes and concessions", () => {
     expect((await as(M, q(`update app.fee_scheme set status = 'LIVE' where id = $1`, [d]))).err).toMatchObject({ code: "42501" });
     expect((await as(A, q(`insert into app.fee_scheme_rule (scheme_id, fee_type_id, kind, value) values ($1, $2, 'PERCENT', 5)`, [d, seed.course]))).err).toMatchObject({ code: "42501" });
     expect((await as(M, q(`update app.fee_scheme set status = 'DRAFT', code = 'NEWCODE' where id = $1`, [d]))).err).toMatchObject({ code: "42501" }); // code is not granted
+    expect((await as(M, q(`update app.fee_scheme set retired_reason = 'x' where id = $1`, [d]))).err?.message).toContain("fee_scheme_guard");
     // approval changes nothing else; needs a fresh step-up; not by the maker or last editor
     expect((await as(A, q(`update app.fee_scheme set status = 'LIVE', name = 'Other' where id = $1`, [d]))).err?.message).toContain("fee_scheme_guard");
     await setStepUp(A, 1000);
@@ -222,7 +230,13 @@ describe("T-SC fee schemes and concessions", () => {
     expect((await as(A, q(`update app.fee_scheme set status = 'LIVE' where id = $1 returning approved_by::text as by`, [d]))).v).toEqual({ by: SC.checker });
     await sql(`delete from app.role_assignment where user_id = $1 and role_id = 34`, [SC.checker]);
     // a live scheme and its parts are frozen; retirement changes nothing else
-    const S = await scheme([{ feeTypeId: seed.reg, kind: "PERCENT", value: "10" }, { feeTypeId: seed.course, kind: "AMOUNT", value: "100" }]);
+    const { id: EXAM } = await fee.createFeeType(FEE_S, { code: "exam", name: "Exam Fee", categoryId: seed.catId, sortOrder: 20, hsnSac: "999293", gstRate: "18",
+      accountId: (await sql(`select id from app.account where code = '3923'`))[0].id });
+    const S = await scheme([{ feeTypeId: seed.reg, kind: "PERCENT", value: "10" }, { feeTypeId: seed.course, kind: "AMOUNT", value: "100" }, { feeTypeId: EXAM, kind: "PERCENT", value: "10" }]);
+    expect((await as(M, q(`update app.fee_scheme set status = 'RETIRED', retired_reason = 'r' where id = $1`, [S]))).err).toMatchObject({ code: "42501" });
+    await setStepUp(A, 1000);
+    expect((await as(A, q(`update app.fee_scheme set status = 'RETIRED', retired_reason = 'r' where id = $1`, [S]))).err?.message).toContain("fee_scheme_stepup_guard");
+    await setStepUp(A, 0);
     expect((await as(M, q(`insert into app.fee_scheme_rule (scheme_id, fee_type_id, kind, value) values ($1, $2, 'PERCENT', 5)`, [S, seed.course]))).err?.message)
       .toContain("fee_scheme_part_guard");
     expect((await as(M, q(`delete from app.fee_scheme_course where scheme_id = $1`, [S]))).err?.message).toContain("fee_scheme_part_guard");
@@ -242,10 +256,11 @@ describe("T-SC fee schemes and concessions", () => {
     expect((await fresh(L2.dues[0]!)).v).toEqual({ amount: "50.00" });
     expect((await fresh(L.dues[0]!)).err?.message).toContain("fee_concession_guard"); // another registration's due
     await collectFee(COL, L2.personId, { registrationId: L2.dca, amount: "0", mode: "CASH", idempotencyKey: crypto.randomUUID(),
-      extras: [{ feeTypeId: (await fee.createFeeType(FEE_S, { code: "exam", name: "Exam Fee", categoryId: seed.catId, sortOrder: 20, hsnSac: "999293", gstRate: "18",
-        accountId: (await sql(`select id from app.account where code = '3923'`))[0].id })).id, amount: "10" }] });
+      extras: [{ feeTypeId: EXAM, amount: "10" }] });
     const [adhoc] = await sql(`select id::text from app.fee_due where registration_id = $1 and source = 'ADHOC'`, [L2.dca]);
-    expect((await fresh(adhoc.id)).err?.message).toContain("fee_concession_guard"); // not a plan due (an ad-hoc payment does not block)
+    expect((await fresh(adhoc.id)).err?.message).toContain("fee_concession_guard"); // not a plan due, though its type has a rule (an ad-hoc payment does not block)
+    expect((await as(V, q(`insert into app.fee_scheme_assignment (id, registration_id, centre_id, scheme_id) values (nextval('app.fee_scheme_assignment_id_seq'), $1, 1, $2)`,
+      [L2.dca, S]))).err).toMatchObject({ code: "42501" }); // a viewer
     expect((await as(K, q(`insert into app.fee_concession (assignment_id, due_id, centre_id, amount) values ($1, $2, 1, 1)`, [asg, L.dues[0]]))).err).toMatchObject({ code: "42501" });
     const owner = (steps: (c: pg.Client) => Promise<unknown>) => asAdmin(async (db) => {
       await db.query("begin");
@@ -256,8 +271,15 @@ describe("T-SC fee schemes and concessions", () => {
       const [{ id }] = (await c.query(`insert into app.fee_scheme_assignment (id, registration_id, centre_id, scheme_id, created_by)
         values (nextval('app.fee_scheme_assignment_id_seq'), $1, 1, $2, '00000000-0000-0000-0000-00000000000a') returning id, created_by::text as by`, [L2.dca, S])).rows;
       const [x] = (await c.query(`insert into app.fee_concession (assignment_id, due_id, centre_id, amount) values ($1, $2, 1, 1) returning amount::text`, [id, L2.dues[3]])).rows;
-      return [(await c.query(`select created_by::text as by from app.fee_scheme_assignment where id = $1`, [id])).rows[0].by, x.amount];
-    })).toEqual([SC.concede, "100.00"]); // who is the database's; the amount is stamped whatever is supplied
+      const [y] = (await c.query(`insert into app.fee_concession (assignment_id, due_id, centre_id, amount) values ($1, $2, 1, 1) returning amount::text`, [id, L2.dues[0]])).rows;
+      return [(await c.query(`select created_by::text as by from app.fee_scheme_assignment where id = $1`, [id])).rows[0].by, x.amount, y.amount];
+    })).toEqual([SC.concede, "100.00", "50.00"]); // who is the database's; the amount is stamped whatever is supplied
+    const asMaker = (q2: string, p: unknown[]) => asAdmin(async (db) => {
+      await db.query("begin");
+      try { await db.query("select set_config('app.session_id', $1, true)", [M]); return (await db.query(q2, p)).rows[0]; } finally { await db.query("rollback"); }
+    });
+    expect(await asMaker(`insert into app.fee_scheme (code, name, valid_from, valid_to, created_by, updated_by) values ('OWN', 'Own', '2026-01-01', '2026-12-31', $1, $1)
+      returning created_by::text as c, updated_by::text as u`, [SC.checker])).toEqual({ c: SC.maker, u: SC.maker });
     // an assignment that gives nothing is refused at commit
     await app.query("begin");
     await app.query("select set_config('app.session_id', $1, true)", [K]);
@@ -292,7 +314,8 @@ describe("T-SC fee schemes and concessions", () => {
       [today, L.personId, "DCA", `SCH${seq - 1}`, "Course Fee", "INSTALLMENT 2", "8000.00", "8000.00"],
       [today, L2.personId, "DCA", `SCH${seq}`, "Registration", "INSTALLMENT 1", "500.00", "50.00"],
       [today, L2.personId, "DCA", `SCH${seq}`, "Registration", "INSTALLMENT 2", "0.10", "0.01"]]);
-    expect(await concessionRegister(K, C.A, today, today, other)).toMatchObject({ total: "50.01" });
+    const filtered = await concessionRegister(K, C.A, today, today, other);
+    expect([filtered.total, filtered.rows.map((r) => r.amount)]).toEqual(["50.01", ["50.00", "0.01"]]);
     expect(await concessionRegister(K, C.A, "2026-01-01", "2026-01-31")).toEqual({ rows: [], total: "0.00" });
     expect(await msg(concessionRegister(K, C.A, "2026-01-01", "2026-04-03"))).toBe("to: within 92 days of from");
     expect(await msg(concessionRegister(K, C.A, today, "x"))).toBe("to: a date");
