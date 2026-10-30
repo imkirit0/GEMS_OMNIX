@@ -275,6 +275,20 @@ export type AdmitInput = {
 };
 export type Admitted = { personId: string; admissionId: string; admissionNo: string; registrations: { id: string; courseCode: string; registerNo: string }[] };
 
+/** Is the course sold at the centre? A course with named centres is sold only there (certifications DD-3, amending
+ * DD-7); otherwise by the centre's active class, so a centre without a class sells only the courses that name it (DD-15).
+ * Shared by admit() and fee plans (fee-structure R7). */
+export const offeredAtCentre = (courseId: Prisma.Sql, centreId: Prisma.Sql) => Prisma.sql`case
+  when exists (select 1 from app.course_centre x where x.course_id = ${courseId})
+    then exists (select 1 from app.course_centre x where x.course_id = ${courseId} and x.centre_id = ${centreId})
+  else exists (select 1 from app.course_centre_class cc join app.centre_class k on k.id = cc.centre_class_id and k.active
+               join app.centre ce on ce.centre_class_id = k.id where cc.course_id = ${courseId} and ce.id = ${centreId}) end`;
+/** Is the course sold through the class? Only when it names no centres, and the class is active and offers it. */
+export const offeredInClass = (courseId: Prisma.Sql, classId: Prisma.Sql) => Prisma.sql`(
+  not exists (select 1 from app.course_centre x where x.course_id = ${courseId})
+  and exists (select 1 from app.course_centre_class cc join app.centre_class k on k.id = cc.centre_class_id and k.active
+              where cc.course_id = ${courseId} and cc.centre_class_id = ${classId}))`;
+
 export async function admit(session: string | undefined, input: AdmitInput): Promise<Admitted> {
   // validation before the action: nothing to audit for a malformed request
   if (!Number.isSafeInteger(input.centreId)) throw invalid("centreId", "required");
@@ -336,11 +350,7 @@ export async function admit(session: string | undefined, input: AdmitInput): Pro
       // centre's active class, so a centre without a class sells only the courses that name it (DD-15)
       const offered = new Set((await tx.$queryRaw<{ code: string }[]>`
         select co.code from app.course co
-        where co.code = any (${list.map((c) => c.courseCode)}::text[]) and case
-          when exists (select 1 from app.course_centre x where x.course_id = co.id)
-            then exists (select 1 from app.course_centre x where x.course_id = co.id and x.centre_id = ${input.centreId})
-          else exists (select 1 from app.course_centre_class cc join app.centre_class k on k.id = cc.centre_class_id and k.active
-                       join app.centre ce on ce.centre_class_id = k.id where cc.course_id = co.id and ce.id = ${input.centreId}) end`)
+        where co.code = any (${list.map((c) => c.courseCode)}::text[]) and ${offeredAtCentre(Prisma.sql`co.id`, Prisma.sql`${input.centreId}`)}`)
         .map((r) => r.code));
       const refused = list.findIndex((c) => !offered.has(c.courseCode));
       if (refused >= 0) throw invalid(`courses[${refused}].courseCode`, "not offered at this centre");

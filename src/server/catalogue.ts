@@ -9,7 +9,7 @@ import { ownText } from "./details";
 import { academicYearOk, ACADEMIC_YEAR_RULE, CODE_RULE, isoDate, normCode, PersonError } from "./people";
 import { adminWrite, RbacError } from "./rbac";
 
-export type MasterKind = "course_category" | "course_division" | "centre_class" | "enquiry_path" | "enquiry_type";
+export type MasterKind = "course_category" | "course_division" | "centre_class" | "enquiry_path" | "enquiry_type" | "fee_category";
 // fixed fragments: no caller-supplied text reaches SQL as an identifier
 const TABLES: Record<MasterKind, Prisma.Sql> = {
   course_category: Prisma.sql`app.course_category`,
@@ -17,11 +17,12 @@ const TABLES: Record<MasterKind, Prisma.Sql> = {
   centre_class: Prisma.sql`app.centre_class`,
   enquiry_path: Prisma.sql`app.enquiry_path`, // enquiry design Z7: the same shape, its own permission
   enquiry_type: Prisma.sql`app.enquiry_type`,
+  fee_category: Prisma.sql`app.fee_category`, // fee-structure Z6: the same shape, fee.setup
 };
 /** Who maintains each master kind; the table's RLS write policy checks the same permission (0012, 0018). */
 const MASTER_PERMISSION: Record<MasterKind, string> = {
   course_category: "catalogue.manage", course_division: "catalogue.manage", centre_class: "catalogue.manage",
-  enquiry_path: "enquiry.setup", enquiry_type: "enquiry.setup",
+  enquiry_path: "enquiry.setup", enquiry_type: "enquiry.setup", fee_category: "fee.setup",
 };
 
 type Master = { id: number; code: string; name: string; active: boolean };

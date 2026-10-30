@@ -23,6 +23,10 @@ export const AUDIT_CATALOGUE = [
   // centre onboarding (src/server/centres.ts)
   "org.centre.create", "org.centre.update", "org.centre.activate", "org.centre.deactivate",
   "org.region.create", "org.region.update", "org.area.create", "org.area.update",
+  // fee masters and structure (src/server/fees.ts)
+  "fee.type.create", "fee.type.update", "fee.type.activate", "fee.type.deactivate",
+  "fee.caption.create", "fee.caption.update", "fee.caption.activate", "fee.caption.deactivate",
+  "fee.plan.create", "fee.plan.line", "fee.plan.delete", "fee.plan.publish",
   // phone call log (src/server/call-log.ts)
   "call.create",
   // course batches (src/server/batches.ts)

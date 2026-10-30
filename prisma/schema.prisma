@@ -85,6 +85,8 @@ model Centre {
 
   callLogs CallLog[]
 
+  feePlans FeePlan[]
+
   @@map("centre")
   @@schema("app")
 }
@@ -130,6 +132,7 @@ model AppUser {
   enquiryFollowups        EnquiryFollowup[]  @relation("enquiryFollowupBy")
   callLogsTaken           CallLog[]          @relation("callLogTeleCaller")
   callLogsLogged          CallLog[]          @relation("callLogBy")
+  feePlansPublished       FeePlan[]          @relation("feePlanPublishedBy")
 
   @@map("app_user")
   @@schema("app")
@@ -668,6 +671,97 @@ model Registration {
   @@schema("app")
 }
 
+// ---------- Fee masters and structure (docs/designs/fee-structure; checks, guards, RLS and grants in migration 0025) ----------
+// Plan amounts include GST (DD-1). Published plans never change (guards); the current plan is the highest published version.
+
+model FeeCategory {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  types     FeeType[]
+
+  @@map("fee_category")
+  @@schema("app")
+}
+
+model FeeType {
+  id         Int           @id @default(autoincrement())
+  code       String        @unique
+  name       String
+  categoryId Int           @map("category_id")
+  sortOrder  Int           @map("sort_order")
+  hsnSac     String        @map("hsn_sac")
+  gstRate    Decimal       @map("gst_rate") @db.Decimal(7, 4)
+  active     Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  category   FeeCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines      FeePlanLine[]
+
+  @@map("fee_type")
+  @@schema("app")
+}
+
+model FeeCaption {
+  id           Int           @id @default(autoincrement())
+  academicYear String        @map("academic_year")
+  name         String
+  dueOn        DateTime      @map("due_on") @db.Date
+  sortOrder    Int           @map("sort_order")
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  year         AcademicYear  @relation(fields: [academicYear], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  lines        FeePlanLine[]
+
+  @@unique([academicYear, name])
+  @@unique([id, academicYear])
+  @@map("fee_caption")
+  @@schema("app")
+}
+
+model FeePlan {
+  id            Int           @id @default(autoincrement())
+  academicYear  String        @map("academic_year")
+  courseId      Int           @map("course_id")
+  centreClassId Int?          @map("centre_class_id")
+  centreId      Int?          @map("centre_id")
+  version       Int
+  status        String        @default("DRAFT")
+  currency      String        @default("INR") @db.Char(3)
+  publishedAt   DateTime?     @map("published_at") @db.Timestamptz
+  publishedBy   String?       @map("published_by") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  year          AcademicYear  @relation(fields: [academicYear], references: [code], onDelete: Restrict, onUpdate: Restrict)
+  course        Course        @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centreClass   CentreClass?  @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centre        Centre?       @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  publisher     AppUser?      @relation("feePlanPublishedBy", fields: [publishedBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines         FeePlanLine[]
+
+  @@unique([academicYear, courseId, centreClassId, version])
+  @@unique([academicYear, courseId, centreId, version])
+  @@unique([id, academicYear])
+  @@map("fee_plan")
+  @@schema("app")
+}
+
+model FeePlanLine {
+  id           Int        @id @default(autoincrement())
+  planId       Int        @map("plan_id")
+  academicYear String     @map("academic_year")
+  feeTypeId    Int        @map("fee_type_id")
+  captionId    Int        @map("caption_id")
+  amount       Decimal    @db.Decimal(14, 2)
+  plan         FeePlan    @relation(fields: [planId, academicYear], references: [id, academicYear], onDelete: Restrict, onUpdate: Restrict)
+  feeType      FeeType    @relation(fields: [feeTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  caption      FeeCaption @relation(fields: [captionId, academicYear], references: [id, academicYear], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([planId, feeTypeId, captionId])
+  @@map("fee_plan_line")
+  @@schema("app")
+}
+
 // ---------- Phone call log (docs/designs/call-log; checks, guard, immutability, RLS and grants in migration 0022) ----------
 
 model CallLog {
@@ -749,6 +843,7 @@ model CentreClass {
   createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz
   centres   Centre[]
   courses   CourseCentreClass[]
+  feePlans  FeePlan[]
 
   @@map("centre_class")
   @@schema("app")
@@ -792,6 +887,8 @@ model Course {
   certifications    CourseCertification[]
   centres           CourseCentre[]
 
+  feePlans          FeePlan[]
+
   @@map("course")
   @@schema("app")
 }
@@ -816,6 +913,8 @@ model AcademicYear {
   open       Boolean     @default(true)
   createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz
   admissions Admission[]
+  feeCaptions FeeCaption[]
+  feePlans    FeePlan[]
 
   @@map("academic_year")
   @@schema("app")

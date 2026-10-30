@@ -19,6 +19,8 @@ export default async function Catalogue() {
         <li><a href="/admin/catalogue/masters/enquiry-paths">Enquiry paths</a></li>
         <li><a href="/admin/catalogue/masters/enquiry-types">Enquiry types</a></li>
         <li><a href="/enquiries/statuses">Enquiry statuses</a></li>
+        <li><a href="/admin/catalogue/masters/fee-categories">Fee categories</a></li>
+        <li><a href="/admin/fees">Fees: types, instalments and plans</a></li>
       </ul>
     </main>
   );

@@ -209,6 +209,22 @@ try {
     body: new URLSearchParams({ code: "EVIL", name: "Evil", areaId: "1", phone: "9800000000" }) });
   check("T-CO centre create from a foreign origin is refused", foreignCentre.status === 403, String(foreignCentre.status));
 
+  // ---------- fee structure (T-FS: everyone reads published plans without forms; bad ids 404; writes check origin) ----------
+  const fsPlans = await get("/admin/fees/plans", viewer);
+  const fsHtml = await fsPlans.text();
+  check("T-FS fee plans readable by a non-manager, without the new-plan form", fsPlans.status === 200 && !fsHtml.includes("New plan")
+    && !fsHtml.includes('method="post"'), String(fsPlans.status));
+  const fsBad = [(await get("/admin/fees/plans/987654321", viewer)).status, (await get("/admin/fees/plans/abc", viewer)).status];
+  check("T-FS an unknown or malformed plan is 404", fsBad.every((x) => x === 404), fsBad.join(","));
+  const fsForeign = [];
+  for (const path of ["/admin/fees/types/save", "/admin/fees/captions/save", "/admin/fees/plans/create", "/admin/fees/plans/1/save"]) {
+    fsForeign.push((await fetch(`${BASE}${path}`, { method: "POST", redirect: "manual",
+      headers: { cookie: `__Host-gems_session=${viewer}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+      body: new URLSearchParams({ op: "create" }) })).status);
+  }
+  check("T-FS fee writes from a foreign origin are refused", fsForeign.every((x) => x === 403), fsForeign.join(","));
+  check("T-FS fee categories page readable", (await get("/admin/catalogue/masters/fee-categories", viewer)).status === 200);
+
   // ---------- catalogue masters pages (T-MS: everyone reads, no forms for non-managers; slugs; origin) ----------
   for (const [path, marker] of [["/admin/catalogue/masters/categories", "SMK"], ["/admin/catalogue/years", "2026-27"], ["/admin/catalogue/centres", "SMK-A"]]) {
     const r = await get(path, viewer);

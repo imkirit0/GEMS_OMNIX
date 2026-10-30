@@ -240,6 +240,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-AW-002 | Queue filters and cards | Type, centre and IST date filters; the type and centre cards each ignore their own filter and the total matches the list; invalid filters, extra keys, repeated parameters and a bad cursor give empty results |
 | T-AW-003 | Bulk approve and reject | Up to 50 tickets, each through the single-ticket action with its own checks and audit; refusals counted by reason (changed, not allowed, invalid, failed); reject needs remarks; a stopped batch keeps what was done and a resubmit is safe; the route reads repeated items, refuses blank versions, and checks the origin |
 
+### T-FS: fee masters and structure (`docs/designs/fee-structure/fee-structure.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-FS-001 | Fee masters | A holder of `fee.setup` (step-up) maintains fee categories, fee types (SAC/HSN, GST rate from the approved list, order) and instalments (due date within the academic year); each message in order; duplicates refused; audited with values; nobody else can, also by SQL; every named check refuses its values |
+| T-FS-002 | Fee plans | Plans per year x course x centre class, or a centre override, for courses offered there; lines exact to the paisa; publish needs lines and active masters; a published plan and the due dates it uses never change, also by SQL and under concurrent edits; new versions copy the current one; one draft per key; resolution prefers the centre override, then the class plan, never a draft; class plans are INR |
+| T-FS-003 | Readers and routes | Everyone reads published plans, only fee setup sees drafts; routes need same origin and step-up and report field details |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|
