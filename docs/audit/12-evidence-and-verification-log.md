@@ -2038,6 +2038,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **210 passed + 3 skipped (timing) + 3 todo** (28 files);
   - the build and bundle scan passed;
   - the admin journey and all security smoke checks passed.
+  - Confirmed on GitHub: run 41031957913 for `f99bb42` succeeded.
 - **Limits and next steps:**
   - Fee collection cannot be used in production until DD-5's conditions are met. It also needs the F1 ledger, or an accepted backfill rule.
   - The receipt number format, place of supply and per-allocation rounding are PMC for the tax advisor.
