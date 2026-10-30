@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-30, fee holds built (Stage 4 F4b; S1–S4), fresh-clone CI green 222 tests; GitHub run pending (last evidence: E-056).
+**Last updated:** 2026-10-30, fee holds built (Stage 4 F4b; S1–S4), fresh-clone CI green 222 tests, GitHub run 41071274295 green (last evidence: E-056).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.

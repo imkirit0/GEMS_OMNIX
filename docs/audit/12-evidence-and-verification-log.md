@@ -2283,6 +2283,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **222 passed + 3 skipped (timing) + 3 todo** (32 files);
   - the build and the bundle scan passed;
   - the admin journey and all security smoke checks passed.
+  - Confirmed on GitHub: run 41071274295 for `e954533` succeeded.
 - **Limits and next steps:**
   - DD-4 (PMC): `fee.hold` is not sensitive.
   - Reminders, once they exist, must read `held` and `collectable`.
