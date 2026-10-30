@@ -1,7 +1,7 @@
 # Fee masters and fee structure (Stage 4, F1; WF4; R-050, R-051, R-057, R-059, R-073)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7, which ran in parallel ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md)), and step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), I1–I8 applied). Every finding is resolved below.
+*   **Status:** Approved for build on 2026-10-30 after the EGM review (steps 5–9). Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (steps 5–7 in parallel), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md). R1–R15 are in "Build notes (step 9)", which take precedence over the text above them.
 *   **Decisions:** DD-1…DD-7 are recommended options under the owner's instruction ("yes do the next step", 2026-10-30). E-049 approved the Stage 4 decisions.
 *   **Date:** 2026-10-30
 
@@ -294,6 +294,49 @@ Existing tests that change:
 *   T-AUD-009 scan and catalogue;
 *   fixtures;
 *   the masters tests, for the new `MasterKind`.
+
+## Build notes (step 9)
+
+These notes take precedence over the text above.
+
+*   **R1: the advisory-lock key.** It is built in TypeScript: `` `fee-plan:${year}:${courseId}:K${classId ?? ""}C${centreId ?? ""}` ``, then `select pg_advisory_xact_lock(hashtext(${key}))`. `createPlan`, `publishPlan` and `deletePlan` all use it. Built in SQL, the concatenation of a NULL is NULL, and a NULL key takes no lock.
+*   **R2: version uniqueness.** It uses two plain keys, `@@unique([academicYear, courseId, centreClassId, version])` and `@@unique([academicYear, courseId, centreId, version])`. NULLs count as distinct, so each key binds only its own kind of plan, and Prisma models both, so the drift gate holds. There are no partial indexes. "One DRAFT per key" is enforced by a BEFORE INSERT branch of `fee_plan_guard`, which refuses with `constraint "fee_plan_draft_guard"`. That branch builds the same key in SQL with `coalesce(x::text, '')` and takes the lock first.
+*   **R3: grants, per table.**
+
+    | Table | Grants |
+    |---|---|
+    | All five tables | `select` |
+    | All five sequences | `usage` |
+    | fee_category | `insert (code, name)`, `update (name, active)` |
+    | fee_type | `insert (code, name, category_id, sort_order, hsn_sac, gst_rate)`, `update (name, sort_order, hsn_sac, gst_rate, active)` |
+    | fee_caption | `insert (academic_year, name, due_on, sort_order)`, `update (name, due_on, sort_order, active)` |
+    | fee_plan | `insert (academic_year, course_id, centre_class_id, centre_id, version)`, `update (status)`, `delete` |
+    | fee_plan_line | `insert (plan_id, academic_year, fee_type_id, caption_id, amount)`, `update (amount)`, `delete` |
+
+*   **R4: publish versus deactivation.**
+    *   **Publish first.** A concurrent change of a used caption's `due_on` waits, then fails with `fee.caption.locked`. A concurrent deactivation waits, then succeeds: the published plan is unaffected, and inactive masters only block new lines and future publishes.
+    *   **Deactivation first.** Publish's `for share` read waits, then publish fails with `fee.plan.inactive`.
+*   **R5, R6: fixtures.**
+    *   Role **28** `fee_setup`, holding `fee.setup`; user `…00f6`; token `tok-feeS`.
+    *   The `fee.setup` permission is added to the fixture permissions.
+    *   The truncate gains `app.fee_plan_line, app.fee_plan, app.fee_caption, app.fee_type, app.fee_category`.
+*   **R7: offering.** `people.ts` exports two fragments:
+    *   `offeredAtCentre(courseId, centreId)`: today's `admit()` CASE, which `admit()` keeps using.
+    *   `offeredInClass(courseId, classId)`: the course has no `course_centre` row, and a `course_centre_class` row exists for an active class.
+
+    `createPlan` always enforces both, whatever `CATALOGUE_GATES` says. The course must be active.
+*   **R9:** `fee.plan.order` is dropped. With one draft per key and `max + 1`, it cannot occur.
+*   **R10:** `fee_category_code_check` and `fee_category_name_check` follow the `fee_type` checks.
+*   **R11:** a rate is a string matching `^\d{1,3}(\.\d{1,4})?$`. It is normalised (trailing zeros stripped), compared with the list `RATES = ["0", "5", "18", "40"]` (PMC), and read back as `gst_rate::text`.
+*   **R12:** `updateFeeType` may change name, sort order, `hsn_sac` and rate. Its category is fixed. `updateCaption` may change name, `due_on` and sort order.
+*   **R13:** totals per caption, per fee type and for the whole plan come from `sum(...)::text`. `src/lib/money.ts` exports `inr(s: string)`, which gives Indian digit grouping and the rupee sign, built from the string. The pages share a `FEE_FIELD_LABELS` table.
+*   **R14:** F1 plans are always INR, the column default. A new version copies its predecessor's currency.
+*   **R15:** the caption guard is `before update of due_on on app.fee_caption for each row when (new.due_on is distinct from old.due_on)`. Its body uses nested ifs.
+*   **Smoke checks (R8):**
+    *   a viewer gets 200 on `/admin/fees/plans` and sees no "New plan";
+    *   `/admin/fees/plans/987654321` and `/admin/fees/plans/abc` give 404;
+    *   a foreign-origin POST to each save or create route gives 403;
+    *   the fee-categories masters page gives 200.
 
 ## Decisions
 
