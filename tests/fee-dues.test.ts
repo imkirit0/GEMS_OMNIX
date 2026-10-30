@@ -69,6 +69,7 @@ describe("T-FD fee dues", () => {
       after: { planId: seed.planId, version: 1, count: 4, total: "20500.60" } });
     // once; no plan; an inactive centre; a registration no longer active
     expect(await thrown(createDues(D, L.personId, L.dca))).toMatchObject({ key: "fee.dues.exists" });
+    expect((await duesForPerson(D, L.personId)).map((r) => r.canCreate)).toEqual([false, true]); // dues made: nothing more to create
     expect(await thrown(createDues(D, L.personId, L.tally))).toMatchObject({ key: "fee.dues.noplan" });
     // an inactive centre (the session stays valid through the user's active centre A)
     const atA2 = await admit(ST_TOKEN.sr, input({ centreId: C.A2 }));
@@ -130,6 +131,8 @@ describe("T-FD fee dues", () => {
     await refused({ reg: L.tally }, "another course or year");
     const { id: draft } = await fee.createPlan(FEE_S, { academicYear: "2026-27", courseId: DCA, centreClassId: METRO }); // copies the lines
     await refused({ plan: draft }, "dues come from a published plan");
+    // the owner sees the draft, so its status (not its visibility) is what refuses it
+    expect((await sqlErr(...ins({ plan: draft })))?.message).toContain("dues come from a published plan");
     await sql(`update app.centre set centre_class_id = $1 where id = $2`, [METRO, C.A2]);
     const { id: a2 } = await fee.createPlan(FEE_S, { academicYear: "2026-27", courseId: DCA, centreId: C.A2 });
     await fee.setPlanLine(FEE_S, a2, { feeTypeId: line.feeTypeId, captionId: line.captionId, amount: line.amount });
@@ -168,6 +171,19 @@ describe("T-FD fee dues", () => {
     // a centre move with dues: the cascade into the registration is refused (D6); without dues it goes through
     expect(await sqlErr(`update app.admission set centre_id = $1 where id = $2`, [C.A2, L.admissionId])).toMatchObject({ code: "23503", message: expect.stringContaining("fee_due") });
     expect(await sqlErr(`update app.admission set centre_id = $1 where id = $2`, [C.A2, other.admissionId])).toBeNull();
+    // concurrent inserts from two plans: the guard's lock makes the second wait, then see the first and refuse
+    const third = await learner();
+    const [c1, c2] = [new pg.Client({ connectionString: process.env["APP_DATABASE_URL"] }), new pg.Client({ connectionString: process.env["APP_DATABASE_URL"] })];
+    await c1.connect(); await c2.connect();
+    try {
+      for (const c of [c1, c2]) { await c.query("begin"); await c.query("select set_config('app.session_id', $1, true)", [D]); }
+      const [q1, p1] = ins({ reg: third.dca }), [q2, p2] = ins({ reg: third.dca, plan: draft, type: seed.course, caption: seed.i1, gross: "12000.50" });
+      await c1.query(q1, p1);
+      const second = c2.query(q2, p2).then(() => null, (e: { message: string }) => e.message);
+      await new Promise((r) => setTimeout(r, 300));
+      await c1.query("commit");
+      expect(await second).toContain("a registration's dues come from one plan");
+    } finally { await c2.query("rollback").catch(() => {}); await c1.end(); await c2.end(); }
   });
 
   test("T-FD-003 the dues route: origin, success and errors back on the learner page, 404s", async () => {

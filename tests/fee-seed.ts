@@ -38,7 +38,8 @@ export async function seedFeePlan() {
     { feeTypeId: m.reg, captionId: m.i2, amount: "0.10", dueOn: "2027-01-31" },
     { feeTypeId: m.course, captionId: m.i2, amount: "8000.00", dueOn: "2027-01-31" },
   ];
-  for (const l of lines) await fee.setPlanLine(FEE_S, planId, { feeTypeId: l.feeTypeId, captionId: l.captionId, amount: l.amount });
+  // entered in reverse, so creation order comes from the dues query, not from line ids
+  for (const l of [...lines].reverse()) await fee.setPlanLine(FEE_S, planId, { feeTypeId: l.feeTypeId, captionId: l.captionId, amount: l.amount });
   await fee.publishPlan(FEE_S, planId, "seed");
   return { ...m, planId, lines, total: "20500.60" };
 }
