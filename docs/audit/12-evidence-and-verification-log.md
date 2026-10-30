@@ -1688,3 +1688,82 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/tickets/page.tsx | ca733e79f8e4c56b8a1c64c1fb0e02b6ba99c82f0350747d5ab0af2bc8730f62 |
 | tests/ticket-management.test.ts | 25d8c84d8061c1ad2aef7c9e5f9285b5d0bd36389c8886d7a64dd7957e01bbd1 |
 | tests/ticket-timing.test.ts | 6e3569d3a298e1e62a9e3bcaeb1f1db467a00e4ee180598dfdfee84496931f6b |
+
+## E-048 Approvals workbench built (Stage 5, second piece; R-094.04, R-144) (2026-10-30)
+- **Request.** The owner asked to "keep going with everything planned" (2026-10-30). This piece needs no fees.
+  - DD-1…DD-4 and the build approval were taken as recommended options.
+  - EGM review ran steps 5–7 in parallel, then 8 and 9. It raised no owner items.
+  - Problems found at review:
+    - repeated form fields collapsed to one;
+    - a blank version read as 0;
+    - not every refusal reason had a bucket;
+    - the filter selects trapped the user;
+    - the "invalid" bucket could not be reached in a test.
+  - Built in phases W1–W4.
+- **Measured first.** The approver queue called `app.ticket_may_act` once per OPEN row. On 2,412 open tickets (the legacy pending count), a user who may act on almost nothing waited **4.1 s**, against the 5 s transaction limit.
+- **W1 (documents).** T-AW-001…003 added to audit 09. R-094.04 and R-144 linked. CSV and FRD regenerated (0 errors).
+- **W2 (data and server).**
+  - **Migration 0024 `app.actable_ticket_ids()`** is the set form of `ticket_may_act`. T-AW-001 compares the two for every fixture user, reaching each branch alone:
+    - role and named approvers;
+    - an assigned user;
+    - a role held only at another centre;
+    - level 2 differing from level 1;
+    - an earlier approver;
+    - the raiser;
+    - no `ticket.approve`;
+    - closed tickets.
+
+    Public execute is refused. The T-RLS-005 inventory gains the function.
+  - **`manageWhere(p, base)`** now takes its base set as a parameter.
+  - **`approvalQueue`** accepts only the queue's four filter keys. Invalid input, or a bad cursor, gives an empty page; before, a bad cursor gave a 500.
+  - **`queueCards`** counts by type (ignoring the type filter) and by centre (ignoring the centre filter). The total is derived.
+  - **`bulkAct`** takes 1–50 tickets and runs each through `act()`.
+    - Refusals are counted as changed, not allowed, invalid or failed.
+    - Anything else is rethrown and stops the batch. Work already done stays committed, and a resubmit is safe: those tickets come back as conflicts.
+- **Found at build.**
+  - **Pre-existing paging defect.** The keyset cursor carried `created_at` as a JS Date (milliseconds), while Postgres keeps microseconds. Tickets raised within one millisecond of a page's last row repeated on the next queue page, or could be skipped in the newest-first list. The cursor now carries Postgres's own timestamp text, checked by format and compared as `timestamptz`.
+  - **Pre-existing admin-smoke flake.** A base64url setup token beginning with "-" (1 in 64) was read by node as an option ("bad option"), so the admin journey failed intermittently. Arguments are now passed after `--` (commit b5b58af).
+  - **Unexplained.** One fresh-clone run failed 7 auth tests with "AUTH_ENC_KEY must be 32 bytes". The CI environment file's key is 32 bytes, nothing changes it, and the immediate reruns passed. Recorded as an open intermittent failure with no cause found.
+- **W3 (pages).**
+  - **`/tickets/approvals`** (rewritten):
+    - cards;
+    - type and centre selects, plus IST dates;
+    - a tick box per row carrying `<id>:<version>`;
+    - remarks, and Approve/Reject buttons;
+    - result counts;
+    - paging that keeps the filters.
+  - **`POST /tickets/approvals/bulk`**:
+    - items read with `getAll`;
+    - a malformed or blank version is refused before anything is touched;
+    - the filters are kept in the redirect;
+    - the origin is checked.
+- **Tests.**
+  - `tests/approvals-workbench.test.ts` holds 3 tests.
+  - Timing (`TICKET_TIMING=1`): page reads (queue plus cards) take 21 ms for an active approver and 12 ms for an idle one. A 50-ticket bulk approve takes 1.26 s, with 50 done.
+  - Real server: 3 new checks.
+- **Mutation checks** (`evidence/mutation-approvals-workbench-2026-10-30.txt`): 34 in total (24 code, 10 database). 33 are CAUGHT; 1 is equivalent (the redundant visible-centre line, kept to mirror `ticket_may_act`).
+  - 4 code mutations were MISSED at first. The tests were tightened, and paging then exposed the cursor defect.
+  - 5 database mutations were MISSED while the test users each reached several branches. T-AW-001 was rewritten so each branch is reached alone.
+- **Checks.** A fresh clone of `b5b58af` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0 (`evidence/ci-approvals-workbench-2026-10-30.txt`):
+  - no drift; 0 type errors;
+  - **200 passed + 3 skipped (timing) + 3 todo** (25 files);
+  - build and bundle scan;
+  - admin journey and all security smoke checks passed.
+
+  The two earlier clone runs are described above.
+- **Limits and next steps.**
+  - The course-change modal waits on fees (D-STU-2).
+  - Per-handler columns, bulk forward and Select All are out of scope.
+  - Watch the AUTH_ENC_KEY intermittent failure.
+  - Not yet on Supabase (migrations 0012–0024).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0024_actable_ticket_ids/migration.sql | 0d3ff0578d00e58ee574dfb8107dfcd9de3682038ba6b649c2f765b6f74d4277 |
+| src/server/tickets/engine.ts | 80341750f1d299c662c26bca2d525c0b15ff66e11d957232eaa4e2a93b83cdf0 |
+| app/tickets/approvals/page.tsx | 9acfddad20538e0f5bdfa4fc6571de10a420265c829515ac2ea74d01300e654c |
+| app/tickets/approvals/bulk/route.ts | 498b856957a4694531e64e4e6942ac0e7b517e69d939e2a46152e3be536fc988 |
+| tests/approvals-workbench.test.ts | 1ff142aa4d5994f27b4ac5ff502fa02458753ed6e168eaa3d9c8c275f4f5df7f |
+| scripts/smoke-admin.sh | d94df7901674e19653eb80583a0b8760e1f65d1c2db76de7e2a1d50eaeaeb4b8 |
