@@ -251,3 +251,44 @@ Grant `usage` on every sequence.
 *   A registration that leaves ACTIVE keeps its concessions. A course change (WF7) re-evaluates through the ticket.
 *   A held due with owed 0 stays held, which is harmless.
 *   The policies let either scheme permission write. The guard decides which transition needs which permission (C13).
+
+--------------------------------------------------------------------------------
+
+## Revision after EGM steps 8 and 9 (approved)
+
+Reports: [`zoom_out_step8_report.md`](zoom_out_step8_report.md) and [`readiness_report.md`](readiness_report.md). Each finding is taken as recommended under the owner's standing instruction (2026-10-30). Where this section and the text above disagree, this section wins.
+
+*   **Scheme lock (R1, blocker).** `app.fee_scheme_lock(p_id int)` is `language sql security definer`, `set search_path = pg_catalog, app`, and returns `status, valid_from, valid_to` with `for share`, as `ticket_type_lock` does. It is revoked from public and granted to `gems_app`. The assignment guard calls it. It joins the T-RLS-005 definer list.
+*   **Edit stamp (Z8-1, R2).** The part guard runs `update app.fee_scheme set name = name where id = …`. `fee_scheme_guard` stamps `updated_at` and `updated_by` on every DRAFT update. Its diff excludes `name`, `valid_from`, `valid_to`, `updated_at` and `updated_by`, and is taken before the stamp.
+*   **Transitions change nothing else (R3).** Approval may change only `status` and the approval pair. Retirement may change only `status`, the retirement pair and `retired_reason`. Both use a `to_jsonb` diff.
+*   **Constraint names (Z8-2, R4).** One per branch; each maps to a key:
+
+    | Constraint | Raised when | Key |
+    |---|---|---|
+    | `fee_scheme_guard` | LIVE/RETIRED edited or deleted; a frozen column changed | `fee.scheme.locked` |
+    | `fee_scheme_part_guard` | a part of a non-DRAFT scheme changed | `fee.scheme.locked` |
+    | `fee_scheme_self_guard` | the approver is the creator or the last editor | `fee.scheme.self` |
+    | `fee_scheme_incomplete_guard` | approval without a rule or a course | `fee.scheme.incomplete` |
+    | `fee_scheme_expired_guard` | approval with `valid_to` before IST today | `fee.scheme.expired` |
+    | `fee_scheme_stepup_guard` | approval or retirement without fresh step-up | `StepUpRequired` |
+    | `fee_scheme_target_guard` | the scheme is not LIVE, not valid on `admitted_on`, or does not target the course or centre | `fee.scheme.notfor` |
+    | `fee_scheme_registration_guard` | the registration is not ACTIVE at the centre | `fee.scheme.mismatch` |
+    | `fee_scheme_paid_guard` | something is paid (Z8-5) | `fee.scheme.paid` |
+    | `fee_concession_guard` | a concession outside its assignment's transaction, registration, centre or rules | `fee.scheme.mismatch` |
+    | `fee_scheme_given_guard` | the assignment gives nothing (deferred) | `fee.scheme.nothing` |
+
+    A missing permission in any guard raises **42501**, which `adminWrite`/`scopedAction` turn into Forbidden, audited DENIED.
+*   **One per registration (Z8-4).** `fee_scheme_assignment.registration_id` is unique; 23505 maps to `fee.scheme.exists`. When reversal ships, this becomes a guard (Non-Goals).
+*   **One "paid" rule (Z8-5).** Assignment is refused if **any PLAN due of the registration** has `paid > 0`. The learner page offers the picker under the same rule.
+*   **Ids (Z8-3, R6).** The app reserves the assignment id with `nextval('app.fee_scheme_assignment_id_seq')` and passes it in. No guard sets `id`.
+*   **Audit (R5).** `assignScheme` audits `fee.concession.assign`, `targetType: "fee_scheme_assignment"`, `targetId` = the reserved id, on one literal line. Schemes use `targetType: "fee_scheme"`. All nine actions join `AUDIT_CATALOGUE`, and the T-AUD-009 scans add `schemes.ts` and `concessions.ts`.
+*   **Foreign keys (C12, R7).** `fee_scheme_rule.fee_type_id` → `fee_type`; `fee_scheme_course.course_id` → `course`; `fee_scheme_centre.centre_id` → `centre`; parts → `fee_scheme`; `created_by`, `updated_by`, `approved_by`, `retired_by` → `app_user`. All are ON DELETE RESTRICT. `deleteScheme` deletes rules, courses and centres first, then the scheme.
+*   **Latest-first spread (Z8-6, PMC).** An AMOUNT discount is taken from the last instalments first, so the earliest instalments are collected in full and a learner who leaves early has not already used the discount. Accounts confirms with DD-2.
+*   **Drafts hidden (Z8-7).** `fee_scheme`'s select policy is `status <> 'DRAFT' or has_permission('scheme.manage', null) or has_permission('scheme.approve', null)`.
+*   **Errors at commit (R8).** The mapper wraps both inside and around `scopedAction`, as `receiptDb` and `holdDb` do.
+*   **Authorization (R9).** The register needs `student.view` at the centre. `concessionCentres` is the centres where the user holds both `fee.concession` and `student.view`. `schemesFor` needs `student.view` at the registration's centre.
+*   **View (R10).** Keep the `::numeric(14,2)` casts on `outstanding` and `owed`; cast `concession` to `numeric(14,2)`; add it as the last outer column.
+*   **Tests (R11–R13).**
+    *   T-SC-003 asserts that the app cannot supply `amount` (42501), and that an admin-supplied amount is replaced by the stamped one.
+    *   T-RLS-002 selects tables that have a `centre_id` column. In its sorted list, `fee_concession` goes before `fee_due`, and `fee_scheme_assignment` and `fee_scheme_centre` after `fee_plan`.
+    *   Fixtures use full UUIDs: maker `00000000-0000-0000-0000-0000000000fe`, checker `00000000-0000-0000-0000-000000000100`, concede `00000000-0000-0000-0000-000000000101`. Both scheme sessions are stepped up with the existing helper.
