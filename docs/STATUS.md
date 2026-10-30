@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-30, same-day receipt cancellation built (Stage 4 F4a; S1–S4), fresh-clone CI green 213 tests; GitHub run pending (last evidence: E-053).
+**Last updated:** 2026-10-30, same-day receipt cancellation built (Stage 4 F4a; S1–S4), fresh-clone CI green 213 tests, GitHub run 41059810781 green (last evidence: E-053).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
