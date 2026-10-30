@@ -233,6 +233,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-TM-002 | Invalid filters | Bad values, impossible dates, repeated parameters, over-long numbers and a bad page cursor give empty results and zero counts, never an error or a wider result; wildcards in the number are literal |
 | T-TM-003 | One visibility set | `app.visible_ticket_ids()` returns exactly the tickets `app.ticket_may_view` allows, for every kind of viewer (centre `ticket.view`, raiser, named and role approver, forward target, named and role type viewer); the view's reads use it, within a 500 ms budget at the legacy volume |
 
+### T-AW: approvals workbench (`docs/designs/approvals-workbench/approvals-workbench.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-AW-001 | One actable set | `app.actable_ticket_ids()` returns exactly the tickets `app.ticket_may_act` allows, for every kind of approver (named, role at that centre, assigned, with the raiser, an earlier approver, no ticket.approve, closed and invisible tickets excluded); the queue and its cards use it within 500 ms at the legacy volume |
+| T-AW-002 | Queue filters and cards | Type, centre and IST date filters; the type and centre cards each ignore their own filter and the total matches the list; invalid filters, extra keys, repeated parameters and a bad cursor give empty results |
+| T-AW-003 | Bulk approve and reject | Up to 50 tickets, each through the single-ticket action with its own checks and audit; refusals counted by reason (changed, not allowed, invalid, failed); reject needs remarks; a stopped batch keeps what was done and a resubmit is safe; the route reads repeated items, refuses blank versions, and checks the origin |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

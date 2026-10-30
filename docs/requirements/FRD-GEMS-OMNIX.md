@@ -2831,7 +2831,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Operations/PRO (4), Operations (3), Accounts (3), PRO (1), Certification (1), Admissions (1)
 - **Workflows (05):** WF-X10 Internship exam + certificate; WF-X11 WE exam registration; WF-X4 CRM lead pipeline; WF-X7 Course mode change; WF-X8 Exam date / special exam requests; WF-X9 Absent / rejected re-exam; WF10 Voucher & licence; WF11 Material kits; WF6 Ticket engine; WF7 Student data & course change; WF8 Exam lifecycle
 - **Open decisions (04):** D-FEE-3, D-GAP-2, D-STO-1, D-STU-2, D-STU-3, D-SUP-1, D-TKT-1, D-TKT-2, D-TKT-3, D-TKT-4, NP-1, NP-8, PR-01
-- **Distinct acceptance tests (09):** 22
+- **Distinct acceptance tests (09):** 25
 
 #### FR-033.10: Level (part of FR-033)
 
@@ -2925,7 +2925,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-094.01 |
 | Business owner | Operations/PRO |
 | Open decisions | D-TKT-1, D-TKT-4, D-STU-2 |
-| Acceptance tests | T-TKT-005, T-TKT-006, T-TKT-007, T-TKT-018, T-TKT-021, T-TKT-022 |
+| Acceptance tests | T-TKT-005, T-TKT-006, T-TKT-007, T-TKT-018, T-TKT-021, T-TKT-022, T-AW-002, T-AW-003 |
 | Workflows | WF6 Ticket engine; WF7 Student data & course change |
 | Data migration | n/a |
 | Delivery stage | 5 Ticket workflows |
@@ -3005,7 +3005,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-094 |
 | Business owner | Operations |
 | Open decisions | PR-01 |
-| Acceptance tests | T-TKT-003, T-SEC-012 |
+| Acceptance tests | T-TKT-003, T-SEC-012, T-AW-001, T-AW-002 |
 | Workflows | WF6 Ticket engine |
 | Data migration | n/a |
 | Delivery stage | 5 Ticket workflows |

@@ -1,7 +1,7 @@
 # Approvals workbench (Stage 5, second piece; R-094.04, R-144)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below) and step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), I1–I9 applied). DD-1…DD-4 are recommended options under the owner's standing instruction (2026-10-29, re-confirmed 2026-10-30).
+*   **Status:** Approved for build on 2026-10-30 after the EGM review (steps 5–9), under the owner's standing instruction of 2026-10-29, re-confirmed 2026-10-30. Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (steps 5–7 in parallel), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md) (R1–R10 applied at build).
 *   **Date:** 2026-10-30
 
 Evidence classes follow `docs/audit/00-README.md`. Limits are PMC. Input: [`input-brief.md`](input-brief.md).
@@ -33,6 +33,7 @@ This piece adds:
 ## Non-Goals
 
 *   Bulk forward. Forwarding picks a person for each ticket.
+*   "Select All" (no JavaScript on these pages; R10).
 *   The course-change modal (fees, D-STU-2).
 *   Per-handler columns.
 *   R-144's fund-transfer and exam queues.
