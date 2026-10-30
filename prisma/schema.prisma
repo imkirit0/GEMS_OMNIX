@@ -133,6 +133,7 @@ model AppUser {
   callLogsTaken           CallLog[]          @relation("callLogTeleCaller")
   callLogsLogged          CallLog[]          @relation("callLogBy")
   feePlansPublished       FeePlan[]          @relation("feePlanPublishedBy")
+  feeDuesCreated          FeeDue[]           @relation("feeDueCreatedBy")
 
   @@map("app_user")
   @@schema("app")
@@ -665,6 +666,9 @@ model Registration {
   batchId     Int?               @map("batch_id")
   batch       Batch?             @relation(fields: [batchId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict, map: "registration_batch_fkey")
 
+  dues        FeeDue[]
+
+  @@unique([id, centreId])
   @@index([admissionId])
   @@index([batchId])
   @@map("registration")
@@ -757,8 +761,34 @@ model FeePlanLine {
   feeType      FeeType    @relation(fields: [feeTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   caption      FeeCaption @relation(fields: [captionId, academicYear], references: [id, academicYear], onDelete: Restrict, onUpdate: Restrict)
 
+  dues         FeeDue[]
+
   @@unique([planId, feeTypeId, captionId])
   @@map("fee_plan_line")
+  @@schema("app")
+}
+
+// ---------- Fee dues (docs/designs/fee-dues; checks, guard, immutability, RLS and grants in migration 0026) ----------
+// Immutable and gross-only (DD-3): concessions, holds, adjustments and allocations are later rows that reference the id.
+// The line key implies the plan, fee type and caption, so those need no separate relations.
+model FeeDue {
+  id             BigInt       @id @default(autoincrement())
+  registrationId String       @map("registration_id") @db.Uuid
+  centreId       Int          @map("centre_id")
+  planId         Int          @map("plan_id")
+  feeTypeId      Int          @map("fee_type_id")
+  captionId      Int          @map("caption_id")
+  dueOn          DateTime     @map("due_on") @db.Date
+  gross          Decimal      @db.Decimal(14, 2)
+  currency       String       @db.Char(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  createdBy      String       @map("created_by") @db.Uuid
+  registration   Registration @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  line           FeePlanLine  @relation(fields: [planId, feeTypeId, captionId], references: [planId, feeTypeId, captionId], onDelete: Restrict, onUpdate: Restrict)
+  creator        AppUser      @relation("feeDueCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([registrationId, feeTypeId, captionId])
+  @@map("fee_due")
   @@schema("app")
 }
 

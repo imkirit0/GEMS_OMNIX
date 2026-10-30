@@ -358,6 +358,16 @@ try {
     && (dOk.headers.get("location") ?? "").endsWith(`/students/${own}`) && JSON.stringify(await detailAudits()) === '["OK"]', String(dOk.status));
   check("T-LD-002 the learner's page shows the saved detail", (await (await get(`/students/${own}`, stu)).text()).includes("Smoke town"));
 
+  // ---------- fee dues (T-FD: the Fees row for a fee.dues holder; none for a viewer; origin) ----------
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'fee.dues')`, [studentRole]);
+  const fdHtml = await (await get(`/students/${own}`, stu)).text();
+  check("T-FD the learner page shows the Fees row (no plan yet) to a fee.dues holder", fdHtml.includes("Fees") && fdHtml.includes("No fee plan for this course yet"));
+  check("T-FD a view-only user sees no Fees row and no dues form", !(await (await get(`/students/${own}`, sv)).text()).includes("Create dues"));
+  const fdForeign = await fetch(`${BASE}/students/${own}/dues`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ registrationId: randomUUID() }) });
+  check("T-FD a dues post from a foreign origin is refused", fdForeign.status === 403, String(fdForeign.status));
+
   // ---------- enquiry (T-ENQ: 404 parity, Origin-less action post, a real create, the Enroll link) ----------
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view'), ($1, 'enquiry.manage')`, [studentRole]);
   const hiddenEnq = (await db.query(`insert into app.enquiry (centre_id, given_name, date_of_birth, gender, mobile, path_id, type_id, status_id,

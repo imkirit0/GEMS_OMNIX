@@ -11,9 +11,9 @@ import { withScope } from "../src/server/db";
 import * as cat from "../src/server/catalogue";
 import * as fee from "../src/server/fees";
 import { asAdmin, C, reset, rows, setStepUp, T } from "./fixtures";
+import { CCNA, DCA, masters, METRO, placeCentre, TALLY } from "./fee-seed";
 
 const S = "tok-feeS";
-const DCA = 1, TALLY = 2, CCNA = 5, METRO = 1; // fixture ids (restart identity)
 const thrown = async (p: Promise<unknown>) => { try { await p; } catch (e) { return e; } throw new Error("expected a rejection"); };
 const msg = async (p: Promise<unknown>) => ((await thrown(p)) as Error).message;
 const sql = (q: string, p: unknown[] = []) => asAdmin((db) => db.query(q, p).then((r) => r.rows));
@@ -34,21 +34,8 @@ beforeAll(async () => { app = new pg.Client({ connectionString: process.env["APP
 afterAll(async () => { await app.end(); await auth().close(); });
 beforeEach(async () => {
   await reset(); await setStepUp(S, 0);
-  // centre A in METRO; DCA and TALLY sold through METRO; CCNA names centre B only
-  await sql(`update app.centre set centre_class_id = $1 where id = $2`, [METRO, C.A]);
-  await sql(`insert into app.course_centre_class (course_id, centre_class_id) values ($1, $3), ($2, $3)`, [DCA, TALLY, METRO]);
-  await sql(`insert into app.course_centre (course_id, centre_id) values ($1, $2)`, [CCNA, C.B]);
+  await placeCentre();
 });
-
-/** A category, a course-fee type and two instalments for 2026-27. */
-async function masters() {
-  const { id: catId } = await cat.createMaster(S, "fee_category", { code: "course fee", name: "Course fee" });
-  const { id: course } = await fee.createFeeType(S, { code: "cf", name: "Course Fee", categoryId: catId, sortOrder: 10, hsnSac: "999293", gstRate: "18.00" });
-  const { id: reg } = await fee.createFeeType(S, { code: "reg", name: "Registration", categoryId: catId, sortOrder: 1, hsnSac: "999293", gstRate: "18" });
-  const { id: i1 } = await fee.createCaption(S, { academicYear: "2026-27", name: "INSTALLMENT 1", dueOn: "2026-11-30", sortOrder: 1 });
-  const { id: i2 } = await fee.createCaption(S, { academicYear: "2026-27", name: "INSTALLMENT 2", dueOn: "2027-01-31", sortOrder: 2 });
-  return { catId, course, reg, i1, i2 };
-}
 
 describe("T-FS fee masters and structure", () => {
   test("T-FS-001 fee masters: categories, types, instalments; messages, checks, audit, who may", async () => {

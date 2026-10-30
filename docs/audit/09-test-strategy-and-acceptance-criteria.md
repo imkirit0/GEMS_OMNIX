@@ -247,6 +247,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-FS-002 | Fee plans | Plans per year x course x centre class, or a centre override, for courses offered there; lines exact to the paisa; publish needs lines and active masters; a published plan and the due dates it uses never change, also by SQL and under concurrent edits; new versions copy the current one; one draft per key; resolution prefers the centre override, then the class plan, never a draft; class plans are INR |
 | T-FS-003 | Readers and routes | Everyone reads published plans, only fee setup sees drafts; routes need same origin and step-up and report field details |
 
+### T-FD: fee dues (`docs/designs/fee-dues/fee-dues.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-FD-001 | Creating dues | A holder of `fee.dues` and `student.view` at the centre creates an ACTIVE registration's dues once, one per plan line in order, exact to the paisa, in the plan's currency, audited with count and total; refused for a second time, no published plan, an inactive centre, a non-ACTIVE registration, a viewer, another person's registration and a centre outside scope; a newer plan never reprices; the learner page lists dues and totals by registration |
+| T-FD-002 | Dues proven by the database | By SQL the guard refuses, by name, another course's, centre's or year's plan, a wrong amount, due date or currency, a draft plan, a non-ACTIVE registration and a second plan; dues never change or disappear (update, delete, truncate); a centre move with dues is refused; who and when are stamped |
+| T-FD-003 | Dues route | Same origin; success and errors return to the learner page; another person's registration or a bad id gives 404 |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

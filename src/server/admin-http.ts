@@ -1,6 +1,7 @@
 // Shared plumbing for admin form POSTs: same-origin, session cookie, and one error mapping.
 import { Forbidden } from "./action";
 import { ScopeError } from "./db";
+import { PersonError } from "./person-rules";
 import { forbidden, readCookie, sameOrigin, seeOther, SESSION_COOKIE } from "./auth/http";
 import { RbacError, StepUpRequired } from "./rbac";
 import { TicketDuplicate, TicketError, TicketNotFound } from "./tickets/handlers";
@@ -41,6 +42,7 @@ export async function adminPost(req: Request, backTo: string | ((fields: Record<
       return seeOther(req, e.reason === "stale" || e.reason === "invalid" ? `${to}&detail=${encodeURIComponent(e.message)}` : to);
     }
     if (e instanceof TicketNotFound) return new Response("Not found", { status: 404 }); // same as a missing ticket
+    if (e instanceof PersonError && e.reason === "notfound") return new Response("Not found", { status: 404 }); // fee dues R1
     if (e instanceof TicketDuplicate) return seeOther(req, `/tickets/${e.id}`);
     if (e instanceof ScopeError) return seeOther(req, "/login?error=expired");
     throw e;
@@ -49,6 +51,9 @@ export async function adminPost(req: Request, backTo: string | ((fields: Record<
 
 export const ADMIN_MESSAGES: Record<string, string> = {
   forbidden: "You are not allowed to do that.",
+  "fee.dues.exists": "This course already has its dues.",
+  "fee.dues.noplan": "No published fee plan prices this course at this centre for that year.",
+  "fee.dues.mismatch": "The dues did not match the fee plan; nothing was saved.",
   "rbac.forbidden": "You can only grant roles where you hold every one of their permissions.",
   "ticket.invalid": "Some values were missing or not allowed. Check the form and try again.",
   "ticket.document": "A document is missing, too large, of a type that is not allowed, or already used.",
