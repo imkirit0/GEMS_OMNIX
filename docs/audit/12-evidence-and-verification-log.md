@@ -1643,3 +1643,48 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/calls/page.tsx | cf60aeed1d96037d3f7f863db0d215d596f9d9ae5eb6e23eb15e52f397933333 |
 | app/calls/save/route.ts | 4be5e61584077853d2125045ead51f5e9748184ac66a72373c7144942b6a2cf2 |
 | tests/call-log.test.ts | 8106de0d8f5d29f021b46a73f1bd11f20da9986ce494e3f7ba6a227e5ffe91bd |
+
+## E-047 Ticket management view built (Stage 5, first piece; R-094.03, R-094.05) (2026-10-30)
+- **Request.** The owner asked to "keep going with everything planned" (2026-10-30).
+  - Stage 3's specified workflows are built. Stage 4 (fees) waits on the roadmap's G-FIN gate (Accounts sign-offs, paused). So the Stage 5 work that needs no fees was taken, as a recommended option.
+  - DD-1…DD-4 and the build approval were taken as recommended options.
+  - The EGM review ran steps 5–7 in parallel, then steps 8 and 9, with no owner items.
+  - Found at review: a bad page cursor gave a 500; the page silently dropped invalid ids, widening the result; the shared list columns would break the approvals queue; the date rule was stated twice.
+  - Built in phases T1–T4.
+- **T1 (documents).** T-TM-001…003 added to audit 09; R-094.03 and R-094.05 linked; CSV and FRD regenerated (0 errors).
+- **T2 (server).**
+  - `listTickets`, the new `ticketSummary` (KPI tiles, the per-type summary, Forwarded counting approver forwards only) and `ticketFilterOptions` (pickers from visible tickets, in one scan) share one validated filter set:
+    - status, priority, type, centre, area and region;
+    - raised from/to as IST days, in an index-friendly range;
+    - a number prefix that ignores case and treats wildcards literally.
+  - Invalid values, impossible dates, repeated parameters and a bad cursor all match nothing, never an error and never a wider result.
+- **Found at build (measured).**
+  - `app.ticket_may_view` per row costs about 2 ms through the definer: more than 5 s (the transaction limit) for an ALL-scope summary, and 13 s for a user without `ticket.view` at one centre's 5,514 tickets. This also affected the existing list.
+  - DD-3 ("no migration") was revised on the measurement, as a recommended option. Migration 0023 adds `app.visible_ticket_ids()`, which computes each branch of `ticket_may_view` once per query (its array helpers in sub-selects).
+  - T-TM-003 proves the set equals `ticket_may_view` for every fixture user and for a test-local one. Each branch is reached only by users without `ticket.view`, plus a ticket at an invisible centre.
+  - At 16,542 tickets: summary 46 ms, options 35 ms, list 47 ms (ALL scope); 13 ms for a user without view. The budget is 500 ms (PMC).
+  - T-RLS-005 inventory gains the function.
+- **T3 (page).**
+  - `/tickets`: tiles, filter selects (a selected value outside the options is still shown), IST date inputs, number, the summary by type, the list with area and region, and paging that keeps the filters.
+  - `tests/ticket-timing.test.ts` holds the timing run (skipped unless `TICKET_TIMING=1`).
+- **Tests.** `tests/ticket-management.test.ts` holds 3 tests. Real server: 2 new checks (tiles and pickers for the viewer; bad filters, a bad cursor and repeated parameters give 200 with "No tickets.").
+- **Mutation checks** (`evidence/mutation-ticket-management-2026-10-30.txt`).
+  - 32 in total (24 code, 8 database): 31 CAUGHT, 1 equivalent (24, the number length bound).
+  - 4 code mutations were MISSED at first, because row security hid the same rows and the fixture area and centre ids coincide. All 8 database mutations were first run while the test users all held `ticket.view`. The tests were tightened, and all are now CAUGHT.
+  - There was no real-server mutation for this piece: the page only passes raw parameters through.
+- **Checks.** A fresh clone of `df771e6` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0: no drift; 0 type errors; **197 passed + 2 skipped (timing) + 3 todo** (24 files); build and bundle scan; admin journey and all security smoke checks passed (`evidence/ci-ticket-management-2026-10-30.txt`).
+- **Limits and next steps.**
+  - Exports and the per-handler columns (title, remarks, student) come later.
+  - `approvalQueue` still uses the per-row `ticket_may_act` (OPEN tickets only); measure it when queues grow.
+  - "Forwarded" semantics: PRO to confirm.
+  - Not yet on Supabase (migrations 0012–0023).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0023_visible_ticket_ids/migration.sql | 600c96100a7755c8c4d938265777c8a8ad7533e25479c6255ec1328dc606b43d |
+| src/server/tickets/engine.ts | afb1d0efbde9f66bb4dbd725b7d58f883e311769d21d4f001c50d8841bac8c28 |
+| app/tickets/page.tsx | ca733e79f8e4c56b8a1c64c1fb0e02b6ba99c82f0350747d5ab0af2bc8730f62 |
+| tests/ticket-management.test.ts | 25d8c84d8061c1ad2aef7c9e5f9285b5d0bd36389c8886d7a64dd7957e01bbd1 |
+| tests/ticket-timing.test.ts | 6e3569d3a298e1e62a9e3bcaeb1f1db467a00e4ee180598dfdfee84496931f6b |

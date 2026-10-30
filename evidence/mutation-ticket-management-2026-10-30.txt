@@ -1,0 +1,64 @@
+Ticket management view mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-30, local Docker database.
+Code mutations: applied, the named test run (vitest -t), restored. Database mutations of 0023: each branch of
+app.visible_ticket_ids removed in turn (create or replace), T-TM run, restored. No real-server mutation this piece: the page's
+only logic is passing raw parameters through, which the engine tests and the smoke checks cover.
+
+Code (first run):
+MISSED 1 summary/list without visibility
+MISSED 2 visibility by centre view only
+MISSED 3 options from all centres
+CAUGHT 4 types from all types
+CAUGHT 5 ignore status
+CAUGHT 6 ignore priority
+CAUGHT 7 ignore type
+CAUGHT 8 ignore centre
+MISSED 9 area uses centre id
+CAUGHT 10 ignore region
+CAUGHT 11 from in UTC
+CAUGHT 12 to without +1
+CAUGHT 14 no like escape
+CAUGHT 15 like not ilike
+CAUGHT 16 contains not prefix
+CAUGHT 17 admin reassign counted
+CAUGHT 18 forwarded not open only
+CAUGHT 20 invalid widens
+CAUGHT 21 no round-trip date
+CAUGHT 22 bad status ignored
+CAUGHT 23 bad cursor rethrown
+MISSED 24 41-character number
+CAUGHT 25 summary bypasses filters
+CAUGHT 26 id regex loose
+
+1, 2, 3, 9 were MISSED: row security hid the same rows for the test users, and area and centre ids coincide in the
+fixtures. T-TM-001 gained a named-viewer-only user and a centre moved to another area. Rerun:
+CAUGHT 1 summary/list without visibility
+CAUGHT 2 visibility by centre view only
+CAUGHT 3 options from all centres
+CAUGHT 9 area uses centre id
+24 is equivalent: a 41-character number matches no ticket either way; the limit only bounds the input.
+
+Database (first run, while T-TM-003's users all held ticket.view through their roles):
+CAUGHT 27 no centre ticket.view branch
+MISSED 28 no raiser branch
+MISSED 29 no named approver branch
+MISSED 30 no role approver branch
+MISSED 31 no forward target branch
+CAUGHT 32 no named type viewer branch
+MISSED 33 role approver at any centre
+CAUGHT 34 no visible-centre filter
+
+T-TM-003 was rewritten so each branch is reached only by users without ticket.view, plus a ticket at an invisible centre. Rerun:
+CAUGHT 27 no centre ticket.view branch
+CAUGHT 28 no raiser branch
+CAUGHT 29 no named approver branch
+CAUGHT 30 no role approver branch
+CAUGHT 31 no forward target branch
+CAUGHT 32 no named type viewer branch
+CAUGHT 33 role approver at any centre
+CAUGHT 34 no visible-centre filter
+
+Timing (tests/ticket-timing.test.ts, TICKET_TIMING=1, 16,542 seeded tickets, median of 5):
+  per-row ticket_may_view, ALL-scope viewer: summary > 5 s (the transaction limit)
+  per-row ticket_may_view, user without ticket.view: 13 s for one centre's 5,514 tickets
+  app.visible_ticket_ids (0023), ALL-scope viewer: summary 46 ms, options 35 ms, list 47 ms
+  app.visible_ticket_ids (0023), user without ticket.view: summary 13 ms
