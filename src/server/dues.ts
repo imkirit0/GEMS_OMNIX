@@ -17,7 +17,8 @@ export type RegistrationDues = { registrationId: string; dues: DueRow[]; total: 
   outstanding: string | null; receipts: ReceiptRow[]; canCollect: boolean };
 
 /** Fee collection switch (fee-receipts DD-5), committed closed: opens only after the tax advisor's check, Accounts' worked
- * examples, the legacy FEEREC seed (NP-8), the 16-character check and the ledger (or an accepted backfill rule). */
+ * examples, the legacy FEEREC seed (NP-8) and the 16-character check. The ledger is built (fee-ledger, E-055); rollout checklist: every
+ * active fee type mapped to an account, or its receipts are refused. */
 export const FEE_GATES = { collectionLive: false };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

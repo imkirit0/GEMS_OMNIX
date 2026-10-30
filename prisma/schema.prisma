@@ -70,6 +70,7 @@ model Centre {
   scopes          RoleAssignment[]
   numberSeries    NumberSeries[]
   receipts        Receipt[]
+  journalEntries  JournalEntry[]
   tickets         Ticket[]
   ticketLevels    TicketLevel[]
   ticketEvents    TicketEvent[]
@@ -707,6 +708,9 @@ model FeeType {
   category   FeeCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   lines      FeePlanLine[]
   dues          FeeDue[]
+  // the ledger account it posts to (docs/designs/fee-ledger; guard in 0030)
+  accountId  Int?          @map("account_id")
+  account    Account?      @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@map("fee_type")
   @@schema("app")
@@ -829,6 +833,7 @@ model Receipt {
   registration   Registration        @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
   creator        AppUser             @relation("receiptCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   lines          ReceiptAllocation[]
+  journals       JournalEntry[]
 
   @@unique([id, centreId])
   @@unique([centreId, period, number])
@@ -1164,5 +1169,60 @@ model CourseCentre {
 
   @@id([courseId, centreId])
   @@map("course_centre")
+  @@schema("app")
+}
+
+// ---------- Fee ledger (docs/designs/fee-ledger; guards, posting trigger functions, RLS and grants in migration 0030) ----------
+// Written only by the database's definer trigger functions at receipt and cancellation; never changed (F1, F2, F6).
+model Account {
+  id        Int           @id @default(autoincrement())
+  code      String        @unique
+  name      String
+  kind      String
+  systemKey String?       @unique @map("system_key")
+  active    Boolean       @default(true)
+  feeTypes  FeeType[]
+  lines     JournalLine[]
+
+  @@map("account")
+  @@schema("app")
+}
+
+model JournalEntry {
+  id         BigInt         @id @default(autoincrement())
+  centreId   Int            @map("centre_id")
+  entryDate  DateTime       @map("entry_date") @db.Date
+  currency   String         @db.Char(3)
+  source     String
+  receiptId  BigInt         @map("receipt_id")
+  reversalOf BigInt?        @map("reversal_of")
+  reference  String
+  narration  String
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  centre     Centre         @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  receipt    Receipt        @relation(fields: [receiptId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  original   JournalEntry?  @relation("journalReversal", fields: [reversalOf], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reversals  JournalEntry[] @relation("journalReversal")
+  lines      JournalLine[]
+
+  @@unique([id, centreId])
+  @@unique([receiptId, source])
+  @@index([centreId, entryDate])
+  @@map("journal_entry")
+  @@schema("app")
+}
+
+model JournalLine {
+  id        BigInt       @id @default(autoincrement())
+  entryId   BigInt       @map("entry_id")
+  centreId  Int          @map("centre_id")
+  accountId Int          @map("account_id")
+  debit     Decimal      @db.Decimal(14, 2)
+  credit    Decimal      @db.Decimal(14, 2)
+  entry     JournalEntry @relation(fields: [entryId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  account   Account      @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([entryId])
+  @@map("journal_line")
   @@schema("app")
 }

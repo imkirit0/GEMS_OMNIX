@@ -49,7 +49,7 @@ describe("database isolation (T-RLS)", () => {
         and (c.relname = 'centre' or exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'centre_id' and not a.attisdropped))
       order by 1`).then((r) => r.rows));
     // course_centre: catalogue data, select using (true); centre names stay gated by app.centre (certifications D5)
-    expect(rows.map((r) => r.relname)).toEqual(["admission", "batch", "call_log", "centre", "course_centre", "enquiry", "enquiry_followup", "fee_due", "fee_plan", "number_series", "receipt", "receipt_allocation", "registration", "ticket", "ticket_document",
+    expect(rows.map((r) => r.relname)).toEqual(["admission", "batch", "call_log", "centre", "course_centre", "enquiry", "enquiry_followup", "fee_due", "fee_plan", "journal_entry", "journal_line", "number_series", "receipt", "receipt_allocation", "registration", "ticket", "ticket_document",
       "ticket_event", "ticket_level", "ticket_upload"]); // not vacuous
     for (const r of rows) {
       expect(r.rls && r.force, r.relname).toBe(true);
@@ -79,7 +79,7 @@ describe("database isolation (T-RLS)", () => {
     // every privileged function is listed on purpose: a new one must be reviewed and added here
     expect(fns.map((f) => f.proname)).toEqual(["account_usable", "actable_ticket_ids", "assert_can_grant_role", "audit", "can_grant_permission", "enquiry_counsellors", "enquiry_may_receive", "enquiry_people", "has_permission",
       "rate_take", "rbac_assign", "rbac_create_role", "rbac_create_user", "rbac_issue_setup_token", "rbac_set_role_permissions",
-      "rbac_set_user_status", "rbac_unassign", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
+      "rbac_set_user_status", "rbac_unassign", "receipt_post_journal", "receipt_post_reversal", "recent_export_count", "recompute_requires_totp", "require_permission", "revoke_user_sessions_internal",
       "scoped_centre_ids", "session_step_up_fresh", "session_user_id", "target_centre_ids",
       "ticket_forward_candidates", "ticket_may_act", "ticket_may_receive", "ticket_may_view", "ticket_people", "ticket_type_lock",
       "user_centre_ids", "visible_centre_ids", "visible_ticket_ids"]);

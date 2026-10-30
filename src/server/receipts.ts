@@ -43,6 +43,7 @@ async function receiptDb<T>(run: () => Promise<T>): Promise<T> {
     const c = cause?.originalCode;
     const name = /constraint "([^"]+)"/.exec(cause?.originalMessage ?? "")?.[1] ?? "";
     if (name === "receipt_over_guard") throw new RbacError("invalid", "the amount is more than what is outstanding", "fee.receipt.over");
+    if (name === "journal_account_guard") throw new RbacError("invalid", "a fee type on this receipt has no ledger account", "fee.receipt.noaccount");
     if (name === "fee_due_adhoc_plan_guard") throw new RbacError("invalid", "that fee type is on the learner's plan", "fee.receipt.adhocplan");
     if (name === "receipt_tax_guard") throw new RbacError("invalid", "the centre's GST details are incomplete", "fee.receipt.gst");
     // cancellation (receipt-cancel): the guard alone decides the day, the status and the step-up

@@ -2122,7 +2122,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Accounts (40)
 - **Workflows (05):** WF14 Year closing & promotion
 - **Open decisions (04):** D-CUR-1, D-FEE-2, D-FIN-1, D-FIN-3, D-FIN-4, D-FIN-6, D-MIG-2, D-MIG-3, D-YEAR-1, D-YEAR-2, D-YEAR-3, NP-1, NP-6, PR-02
-- **Distinct acceptance tests (09):** 10
+- **Distinct acceptance tests (09):** 13
 
 #### FR-027: Academic & Financial Year management (closing checklist)
 
@@ -2200,7 +2200,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-064 |
 | Business owner | Accounts |
 | Open decisions | D-FIN-1, PR-02 |
-| Acceptance tests | T-FEE-001 |
+| Acceptance tests | T-FEE-001, T-FL-001, T-FL-002 |
 | Workflows | - |
 | Data migration | journals per FY (K7,K8) |
 | Delivery stage | 4 Fees, receipts, payments, accounting |
@@ -2233,7 +2233,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | - |
 | Business owner | Accounts |
 | Open decisions | D-FIN-1 |
-| Acceptance tests | T-FEE-001 |
+| Acceptance tests | T-FEE-001, T-FL-001, T-FL-002, T-FL-003 |
 | Workflows | - |
 | Data migration | IMPORTED; mapping approved by Accounts |
 | Delivery stage | 4 Fees, receipts, payments, accounting |
@@ -2282,7 +2282,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-042 |
 | Business owner | Accounts |
 | Open decisions | - |
-| Acceptance tests | T-RPT-009 |
+| Acceptance tests | T-RPT-009, T-FL-003 |
 | Workflows | - |
 | Data migration | K10 |
 | Delivery stage | 4 Fees, receipts, payments, accounting |

@@ -382,6 +382,12 @@ try {
     body: new URLSearchParams({ reason: "x" }) });
   check("T-RC a cancel post from a foreign origin is refused", rcForeign.status === 403, String(rcForeign.status));
 
+  // ---------- fee ledger (T-FL: the Day Book needs ledger.view; renders for a holder) ----------
+  check("T-FL the Day Book is 404 without ledger.view", (await get("/ledger/day-book", stu)).status === 404);
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'ledger.view')`, [studentRole]);
+  const dbPage = await get("/ledger/day-book", stu);
+  check("T-FL the Day Book renders for a ledger.view holder", dbPage.status === 200 && (await dbPage.text()).includes("Day book"), String(dbPage.status));
+
   // ---------- enquiry (T-ENQ: 404 parity, Origin-less action post, a real create, the Enroll link) ----------
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view'), ($1, 'enquiry.manage')`, [studentRole]);
   const hiddenEnq = (await db.query(`insert into app.enquiry (centre_id, given_name, date_of_birth, gender, mobile, path_id, type_id, status_id,

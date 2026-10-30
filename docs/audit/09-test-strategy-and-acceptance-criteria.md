@@ -276,6 +276,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-AF-002 | Ad-hoc dues proven by the database | By SQL an ad-hoc due not paid in full at commit, with a plan, an inactive type, a plan type or another currency is refused by name; a void ad-hoc due is never paid later; only fee.collect creates them; the dues view keeps row security; plan dues unchanged |
 | T-AF-003 | Ad-hoc items through the form | Repeated fields, a half-filled row refused with its field, success on the receipt |
 
+### T-FL: fee ledger (`docs/designs/fee-ledger/fee-ledger.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-FL-001 | Journals at receipt and cancellation | Each receipt posts one balanced journal by the database at commit (cash or bank debit; income or liability per fee type's account; CGST, SGST, IGST), in the receipt's currency; each cancellation posts the exact mirror of the original lines, dated on the cancel date; a fee type without an account refuses the receipt and uses no number; every entry balances |
+| T-FL-002 | Ledger proven by the database | The app cannot write, change or remove journals or call the posting functions; an unbalanced entry and a reversal without its original are refused by name; journals are read only with ledger.view at their centre; fee types map only to active income or liability accounts |
+| T-FL-003 | Day Book | Lines of a centre for up to 92 days with source and totals per currency; other centres hidden; fee setup maps accounts, audited |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

@@ -39,8 +39,8 @@ beforeAll(async () => { app = new pg.Client({ connectionString: process.env["APP
 afterAll(async () => { await app.end(); await auth().close(); });
 beforeEach(async () => {
   await reset(); await setStepUp(FEE_S, 0); seed = await seedFeePlan(); await setStepUp(R, 0);
-  ({ id: EXAM } = await fee.createFeeType(FEE_S, { code: "exam", name: "Exam Fee", categoryId: seed.catId, sortOrder: 20, hsnSac: "999293", gstRate: "18" }));
-  ({ id: KIT } = await fee.createFeeType(FEE_S, { code: "kit", name: "Academic Kit", categoryId: seed.catId, sortOrder: 30, hsnSac: "4901", gstRate: "5" }));
+  ({ id: EXAM } = await fee.createFeeType(FEE_S, { code: "exam", name: "Exam Fee", categoryId: seed.catId, sortOrder: 20, hsnSac: "999293", gstRate: "18", accountId: (await sql(`select id from app.account where code = '3923'`))[0].id }));
+  ({ id: KIT } = await fee.createFeeType(FEE_S, { code: "kit", name: "Academic Kit", categoryId: seed.catId, sortOrder: 30, hsnSac: "4901", gstRate: "5", accountId: (await sql(`select id from app.account where code = '3920'`))[0].id }));
   FEE_GATES.collectionLive = true;
   const [{ p }] = await sql(`select app.financial_year((now() at time zone 'Asia/Kolkata')::date) as p`);
   await sql(`insert into app.number_series (centre_id, doc_type, period, gap_rule) select c, 'FEEREC', $1, 'GAPLESS' from unnest(array[1, 2, 3]) c
@@ -174,7 +174,8 @@ describe("T-AF ad-hoc fees", () => {
         return null;
       } catch (e) { return (e as Error).message; } finally { await db.query("rollback"); }
     });
-    expect(voidInOne).toContain("fee_due_adhoc_paid_guard");
+    // since the ledger (fee-ledger G2), a cancel in the receipt's own transaction is refused first: nothing is posted to reverse
+    expect(voidInOne).toContain("journal_reversal_guard");
     // the view still applies the caller's row security; the fee type is a real key
     const [{ o }] = await sql(`select array_to_string(reloptions, ',') as o from pg_class where relname = 'fee_due_balance'`);
     expect(o).toContain("security_invoker=true");

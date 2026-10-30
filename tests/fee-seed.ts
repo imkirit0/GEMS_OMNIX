@@ -18,9 +18,11 @@ export async function placeCentre() {
 /** A category, a course-fee type and a registration type, and two instalments for 2026-27. */
 export async function masters() {
   const S = FEE_S;
+  // fee types post to their ledger heads (fee-ledger DD-2): Course Fee 3909, Registration 3908
+  const acc = async (code: string) => (await sql(`select id from app.account where code = $1`, [code]))[0].id as number;
   const { id: catId } = await cat.createMaster(S, "fee_category", { code: "course fee", name: "Course fee" });
-  const { id: course } = await fee.createFeeType(S, { code: "cf", name: "Course Fee", categoryId: catId, sortOrder: 10, hsnSac: "999293", gstRate: "18.00" });
-  const { id: reg } = await fee.createFeeType(S, { code: "reg", name: "Registration", categoryId: catId, sortOrder: 1, hsnSac: "999293", gstRate: "18" });
+  const { id: course } = await fee.createFeeType(S, { code: "cf", name: "Course Fee", categoryId: catId, sortOrder: 10, hsnSac: "999293", gstRate: "18.00", accountId: await acc("3909") });
+  const { id: reg } = await fee.createFeeType(S, { code: "reg", name: "Registration", categoryId: catId, sortOrder: 1, hsnSac: "999293", gstRate: "18", accountId: await acc("3908") });
   const { id: i1 } = await fee.createCaption(S, { academicYear: "2026-27", name: "INSTALLMENT 1", dueOn: "2026-11-30", sortOrder: 1 });
   const { id: i2 } = await fee.createCaption(S, { academicYear: "2026-27", name: "INSTALLMENT 2", dueOn: "2027-01-31", sortOrder: 2 });
   return { catId, course, reg, i1, i2 };

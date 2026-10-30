@@ -37,6 +37,7 @@ const GUARD_KEY: Record<string, [string, string]> = {
   fee_caption_guard: ["fee.caption.locked", "this instalment is used by a published plan"],
   fee_plan_draft_guard: ["fee.duplicate", "a draft for this plan already exists"],
   fee_plan_empty_guard: ["fee.plan.empty", "add at least one line before publishing"],
+  fee_type_account_guard: ["fee.account", "this account cannot take fees"],
 };
 async function feeDb<T>(run: () => Promise<T>): Promise<T> {
   try {
@@ -57,46 +58,63 @@ const canManage = async (tx: Tx) => (await tx.$queryRaw<{ ok: boolean }[]>`selec
 // ---------- Fee types ----------
 
 export type FeeTypeRow = { id: number; code: string; name: string; categoryId: number; categoryCode: string; sortOrder: number;
-  hsnSac: string; gstRate: string; active: boolean };
+  hsnSac: string; gstRate: string; active: boolean; accountId: number | null; accountCode: string | null };
+const ACCOUNT_RULE = "accountId: an active income or liability account";
+/** null = not mapped; else a positive id, checked in the transaction against the chart (fee-ledger DD-7). */
+const accountOf = (v: unknown) => { if (v === null) return null; if (!Number.isSafeInteger(v) || (v as number) < 1) throw bad(ACCOUNT_RULE); return v as number; };
+async function accountOk(tx: Tx, id: number | null) {
+  if (id === null) return;
+  const [a] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from app.account where id = ${id} and active and kind in ('INCOME', 'LIABILITY') and system_key is null`;
+  if (!a) throw bad(ACCOUNT_RULE);
+}
 
 export const listFeeTypes = (session: string | undefined) => withScope(session, async (tx) => ({
   rows: await tx.$queryRaw<FeeTypeRow[]>`select t.id, t.code, t.name, t.category_id as "categoryId", c.code as "categoryCode",
-      t.sort_order as "sortOrder", t.hsn_sac as "hsnSac", trim_scale(t.gst_rate)::text as "gstRate", t.active
-    from app.fee_type t join app.fee_category c on c.id = t.category_id order by t.sort_order, t.code`,
+      t.sort_order as "sortOrder", t.hsn_sac as "hsnSac", trim_scale(t.gst_rate)::text as "gstRate", t.active,
+      t.account_id as "accountId", a.code as "accountCode"
+    from app.fee_type t join app.fee_category c on c.id = t.category_id left join app.account a on a.id = t.account_id
+    order by t.sort_order, t.code`,
+  accounts: await tx.$queryRaw<{ id: number; code: string; name: string }[]>`
+    select id, code, name from app.account where active and kind in ('INCOME', 'LIABILITY') and system_key is null order by code`,
   categories: await tx.$queryRaw<{ id: number; code: string; name: string }[]>`select id, code, name from app.fee_category where active order by code`,
   canManage: await canManage(tx),
 }));
 
 export async function createFeeType(session: string | undefined, t: { code: string; name: string; categoryId: number; sortOrder: number;
-  hsnSac: string; gstRate: string }): Promise<{ id: number }> {
+  hsnSac: string; gstRate: string; accountId?: number | null }): Promise<{ id: number }> {
   const c = code(t?.code), n = name(t?.name), cat = idOf("categoryId", t?.categoryId), so = sortOf(t?.sortOrder), h = hsnOf(t?.hsnSac), r = rateOf(t?.gstRate);
+  const acc = accountOf(t?.accountId ?? null);
   return adminWrite(session, { action: "fee.type.create", permission: SETUP, targetType: "fee_type" }, (tx) => feeDb(async () => {
     const [k] = await tx.$queryRaw<{ ok: number }[]>`select 1 as ok from app.fee_category where id = ${cat} and active for share`;
     if (!k) throw bad("categoryId: inactive or unknown");
-    return (await tx.$queryRaw<{ id: number }[]>`insert into app.fee_type (code, name, category_id, sort_order, hsn_sac, gst_rate)
-      values (${c}, ${n}, ${cat}, ${so}, ${h}, ${r}::numeric) returning id`)[0]!;
-  }), (x) => ({ after: { id: x.id, code: c, name: n, categoryId: cat, sortOrder: so, hsnSac: h, gstRate: r } }));
+    await accountOk(tx, acc);
+    return (await tx.$queryRaw<{ id: number }[]>`insert into app.fee_type (code, name, category_id, sort_order, hsn_sac, gst_rate, account_id)
+      values (${c}, ${n}, ${cat}, ${so}, ${h}, ${r}::numeric, ${acc}) returning id`)[0]!;
+  }), (x) => ({ after: { id: x.id, code: c, name: n, categoryId: cat, sortOrder: so, hsnSac: h, gstRate: r, accountId: acc } }));
 }
 
-type TypeChanges = Partial<{ name: string; sortOrder: number; hsnSac: string; gstRate: string }>;
+type TypeChanges = Partial<{ name: string; sortOrder: number; hsnSac: string; gstRate: string; accountId: number | null }>;
 export async function updateFeeType(session: string | undefined, id: number, ch: TypeChanges): Promise<void> {
   const i = idOf("id", id);
-  const f: Record<string, string | number> = {};
+  const f: Record<string, string | number | null> = {};
   if (ch?.name !== undefined) f["name"] = name(ch.name);
   if (ch?.sortOrder !== undefined) f["sortOrder"] = sortOf(ch.sortOrder);
   if (ch?.hsnSac !== undefined) f["hsnSac"] = hsnOf(ch.hsnSac);
   if (ch?.gstRate !== undefined) f["gstRate"] = rateOf(ch.gstRate);
+  if (ch?.accountId !== undefined) f["accountId"] = accountOf(ch.accountId);
   if (Object.keys(f).length === 0) throw bad("nothing to change");
   let diff: [string, unknown, unknown][] = [];
   return adminWrite(session, { action: "fee.type.update", permission: SETUP, targetType: "fee_type", targetId: String(i) }, (tx) => feeDb(async () => {
-    const [cur] = await tx.$queryRaw<{ name: string; sortOrder: number; hsnSac: string; gstRate: string }[]>`
-      select name, sort_order as "sortOrder", hsn_sac as "hsnSac", trim_scale(gst_rate)::text as "gstRate" from app.fee_type where id = ${i} for update`;
+    const [cur] = await tx.$queryRaw<{ name: string; sortOrder: number; hsnSac: string; gstRate: string; accountId: number | null }[]>`
+      select name, sort_order as "sortOrder", hsn_sac as "hsnSac", trim_scale(gst_rate)::text as "gstRate", account_id as "accountId"
+      from app.fee_type where id = ${i} for update`;
     if (!cur) throw new RbacError("notfound", "fee type not found");
     diff = Object.entries(f).filter(([k, v]) => cur[k as keyof typeof cur] !== v).map(([k, v]) => [k, cur[k as keyof typeof cur], v]);
     if (diff.length === 0) throw bad("nothing to change");
     const next = { ...cur, ...f } as typeof cur;
+    if (diff.some(([k]) => k === "accountId")) await accountOk(tx, next.accountId);
     await tx.$executeRaw`update app.fee_type set name = ${next.name}, sort_order = ${next.sortOrder}, hsn_sac = ${next.hsnSac},
-      gst_rate = ${next.gstRate}::numeric where id = ${i}`;
+      gst_rate = ${next.gstRate}::numeric, account_id = ${next.accountId} where id = ${i}`;
   }), () => ({ before: Object.fromEntries(diff.map(([k, b]) => [k, b])), after: Object.fromEntries(diff.map(([k, , a]) => [k, a])) }));
 }
 
