@@ -3,7 +3,7 @@
 // viewer, median of 5 runs, against the 500 ms budget (PMC). Prints the plan of the summary query as gems_app.
 import { beforeAll, describe, expect, test } from "vitest";
 import { withScope } from "../src/server/db";
-import { listTickets, ticketFilterOptions, ticketSummary } from "../src/server/tickets/engine";
+import { approvalQueue, listTickets, ticketFilterOptions, ticketSummary } from "../src/server/tickets/engine";
 import { asAdmin, reset, TK, TK_ROLE, tkToken } from "./fixtures";
 
 const N = 16542;
@@ -56,5 +56,16 @@ describe.skipIf(!process.env["TICKET_TIMING"])("ticket management view timing", 
     const median = ms.sort((a, b) => a - b)[1]!;
     console.log(JSON.stringify({ perRowPath: { summaryMs: Math.round(median), rowsAtCentreA: Math.ceil(N / 3) } }));
     expect(median).toBeLessThan(500);
+  }, 120_000);
+
+  // the approver's queue: ticket_may_act per OPEN row (2,412 open, the legacy pending count); TK.l1 approves level 1 at A
+  test("approval queue for a level-1 approver", async () => {
+    const ms: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const t0 = performance.now();
+      try { await approvalQueue(tkToken(process.env["AQ_USER"] === "reviewer" ? "reviewer" : "l1")); } catch (e) { console.log(JSON.stringify({ approvalQueueError: (e as Error).message.slice(0, 80) })); }
+      ms.push(performance.now() - t0);
+    }
+    console.log(JSON.stringify({ approvalQueueMs: Math.round(ms.sort((a, b) => a - b)[1]!) }));
   }, 120_000);
 });
