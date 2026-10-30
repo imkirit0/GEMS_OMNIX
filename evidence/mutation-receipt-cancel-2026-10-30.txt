@@ -1,0 +1,45 @@
+Receipt cancellation mutation checks, 2026-10-30 (docs/designs/receipt-cancel; scratchpad mutate_rc.py). Code mutations applied, the named test run, restored; database mutations of 0028 (guard by create or replace, policy, trigger, check, grant) applied as SQL, the named test run, restored.
+34 mutations (22 code, 12 database): 31 CAUGHT, 3 equivalent.
+Round 1:
+CAUGHT G1 no lock
+CAUGHT G2 any transition
+CAUGHT G2b back to ACTIVE allowed
+CAUGHT G3 any day
+CAUGHT G4 no step-up
+MISSED G5 when not stamped
+CAUGHT G6 who not stamped
+CAUGHT G7 other columns may change
+CAUGHT D1 update policy open
+CAUGHT D2 delete allowed
+MISSED D3 cancel check dropped
+CAUGHT D4 who granted
+CAUGHT C1 gate ignored
+CAUGHT C2 id unchecked
+CAUGHT C3 reason optional
+CAUGHT C4 reason length
+CAUGHT C5 reason untrimmed
+CAUGHT C6 out of scope found
+MISSED C7 zero rows not checked
+CAUGHT C8 late unmapped
+CAUGHT C9 cancelled unmapped
+CAUGHT C10 step-up unmapped
+CAUGHT C11 audit without lines
+CAUGHT C12 late not audited
+CAUGHT C13 cancelled replay shown as paid
+MISSED C14 canCancel any status
+CAUGHT C15 canCancel any day
+CAUGHT C16 canCancel any user
+MISSED C17 view not required
+CAUGHT R1 resubmit is an error
+CAUGHT R2 no cancelled flag
+MISSED R3 id unchecked
+CAUGHT N1 status not listed
+CAUGHT N2 catalogue gap
+Round 2 (tests tightened: cancelled_at = now(); a reason-less cancel as the owner; canCancel false once cancelled):
+CAUGHT G5 when not stamped
+CAUGHT D3 cancel check dropped
+CAUGHT C14 canCancel any status
+Equivalent:
+  C7 zero rows not checked: the pre-flight (student.view) and scopedAction (fee.receipt.cancel at the centre) match the update policy, so the app cannot reach 0 rows; kept as a guard against drift
+  C17 view not required: the receipt is visible only under student.view (pre-flight), so a cancel holder without it is not found first
+  R3 route id unchecked: cancelReceipt refuses a malformed id as PersonError, which adminPost answers with the same 404

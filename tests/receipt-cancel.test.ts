@@ -99,6 +99,7 @@ describe("T-RC receipt cancellation", () => {
     const view = await getReceipt(V, r1.receiptId);
     expect(view).toMatchObject({ status: "CANCELLED", cancelReason: "wrong amount", cancelledAt: expect.stringMatching(/^\d{4}-\d\d-\d\d \d\d:\d\d$/), canCancel: false });
     expect((await getReceipt(R, r2.receiptId)).canCancel).toBe(false); // not today
+    expect((await getReceipt(R, r1.receiptId)).canCancel).toBe(false); // already cancelled
     expect((await duesForPerson(V, L.personId))[0]!.receipts.map((x) => [x.id, x.status])).toEqual([[r2.receiptId, "ACTIVE"], [r1.receiptId, "CANCELLED"]]);
   });
 
@@ -112,7 +113,7 @@ describe("T-RC receipt cancellation", () => {
       catch (e) { return { rows: [], count: 0, err: e as { code: string; message: string } }; }
       finally { await app.query("rollback"); }
     };
-    const cancel = `update app.receipt set status = 'CANCELLED', cancel_reason = 'x' where id = $1 returning cancelled_by::text, cancelled_at is not null as at`;
+    const cancel = `update app.receipt set status = 'CANCELLED', cancel_reason = 'x' where id = $1 returning cancelled_by::text, cancelled_at = now() as at`;
     // the right update passes; who and when are the database's
     expect(await as(R, cancel, [a.receiptId])).toMatchObject({ err: null, rows: [{ cancelled_by: FR.a, at: true }] });
     // a collector who may not cancel touches no row (row security)
@@ -136,6 +137,16 @@ describe("T-RC receipt cancellation", () => {
       } catch (e) { return (e as Error).message; } finally { await db.query("rollback"); }
     });
     expect(frozen).toContain("receipt_cancel_frozen_guard");
+    // cancelled without a reason: refused by the named check, even as the owner
+    const noReason = await asAdmin(async (db) => {
+      await db.query("begin");
+      try {
+        await db.query("select set_config('app.session_id', $1, true)", [R]);
+        await db.query(`update app.receipt set status = 'CANCELLED' where id = $1`, [a.receiptId]);
+        return null;
+      } catch (e) { return (e as Error).message; } finally { await db.query("rollback"); }
+    });
+    expect(noReason).toContain("receipt_cancel_check");
     // back to ACTIVE: refused
     await cancelReceipt(R, a.receiptId, "test");
     expect((await as(R, `update app.receipt set status = 'ACTIVE', cancel_reason = null where id = $1`, [a.receiptId])).err?.message).toContain("receipt_cancel_status_guard");
