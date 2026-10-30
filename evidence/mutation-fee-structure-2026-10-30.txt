@@ -1,0 +1,70 @@
+Fee structure mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-30, local Docker database.
+Code mutations: applied, the named test run (vitest -t), restored. Database mutations of 0025: applied as SQL (guards by
+create or replace, policies, foreign keys, named checks), the named test run, restored; then no drift.
+
+Code (first run):
+CAUGHT 7 rate list unchecked
+CAUGHT 7b rate not normalised
+CAUGHT 8 due date not checked in year
+MISSED 8b category not checked
+CAUGHT 8c message order
+CAUGHT 8d no nothing-to-change (type)
+CAUGHT 8e already-state allowed
+CAUGHT 8f duplicate unmapped
+CAUGHT 26 closed year allowed
+CAUGHT 27 class offering unchecked
+CAUGHT 28 centre offering unchecked
+CAUGHT 29 copy drops lines
+CAUGHT 29b copy from a draft too
+CAUGHT 31 amount as float
+CAUGHT 31b total as float
+CAUGHT 32 resolve returns drafts
+CAUGHT 33 resolve prefers class
+CAUGHT 33b resolve oldest version
+MISSED 24 publish allows empty
+CAUGHT 25 publish ignores inactive
+MISSED 25b line with inactive type
+CAUGHT 25c line with other-year caption
+CAUGHT 25d line nothing-to-change
+CAUGHT 36 action not catalogued
+CAUGHT 38 no same-origin
+CAUGHT 38b unknown op accepted
+CAUGHT 38c empty amount not removal
+CAUGHT 38d plan id regex
+CAUGHT 10 no step-up
+
+8b and 25b were MISSED: no test used an inactive category or set a line with an inactive fee type. Added. Rerun:
+CAUGHT 8b category not checked
+MISSED 24 publish allows empty
+CAUGHT 25b line with inactive type
+24 is equivalent: the database's fee_plan_empty_guard refuses an empty publish with the same key (fee.plan.empty).
+
+Database (first run):
+CAUGHT 15 no draft branch
+CAUGHT 17 line guard without lock
+CAUGHT 18 line guard allows published
+CAUGHT 19 published plan updatable
+CAUGHT 21 publish stamps no publisher
+CAUGHT 22 no caption guard
+MISSED 22b caption guard any status
+CAUGHT 34 drafts visible to all
+CAUGHT 35 no plan delete policy
+CAUGHT 9 type insert open
+CAUGHT 30 caption FK not composite
+CAUGHT 1-6 drop fee_type_hsn_sac_check
+CAUGHT 1-6 drop fee_type_gst_rate_check
+CAUGHT 1-6 drop fee_type_sort_order_check
+CAUGHT 1-6 drop fee_type_name_check
+CAUGHT 1-6 drop fee_type_code_check
+CAUGHT 1-6 drop fee_category_code_check
+CAUGHT 1-6 drop fee_category_name_check
+CAUGHT 1-6 drop fee_caption_name_check
+CAUGHT 1-6 drop fee_caption_sort_order_check
+CAUGHT 11-13 drop fee_plan_key_check
+CAUGHT 11-13 drop fee_plan_class_currency_check
+CAUGHT 11-13 drop fee_plan_currency_check
+MISSED 11-13 drop fee_plan_published_check
+
+22b was MISSED (no due-date change while only a draft used the instalment); T-FS-002 gained it. Rerun:
+CAUGHT 22b caption guard any status
+fee_plan_published_check is equivalent: fee_plan_guard refuses inserting anything but a draft and stamps both publish columns on publish.

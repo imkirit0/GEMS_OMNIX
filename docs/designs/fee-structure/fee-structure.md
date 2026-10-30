@@ -1,7 +1,7 @@
 # Fee masters and fee structure (Stage 4, F1; WF4; R-050, R-051, R-057, R-059, R-073)
 
 *   **Author:** gtm
-*   **Status:** Approved for build on 2026-10-30 after the EGM review (steps 5–9). Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (steps 5–7 in parallel), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md). R1–R15 are in "Build notes (step 9)", which take precedence over the text above them.
+*   **Status:** Built 2026-10-30 (E-050). Approved for build on 2026-10-30 after the EGM review (steps 5–9). Reports: [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md) (steps 5–7 in parallel), [`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), [`implementation_readiness_report.md`](implementation_readiness_report.md). R1–R15 are in "Build notes (step 9)", which take precedence over the text above them.
 *   **Decisions:** DD-1…DD-7 are recommended options under the owner's instruction ("yes do the next step", 2026-10-30). E-049 approved the Stage 4 decisions.
 *   **Date:** 2026-10-30
 
