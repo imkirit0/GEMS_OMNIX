@@ -1,0 +1,61 @@
+Phone call log mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-30, local Docker database.
+Code mutations: applied, the named test run (vitest -t), restored. Database mutations of 0022: applied as SQL, the named test run, restored;
+then no drift. 42: migration text (ETL G6). 40: next build, fresh database, next start, smoke.
+
+Code (first run):
+MISSED 20 not truncated by fixtures
+CAUGHT 21 no rb wrap
+MISSED 22 name before phone
+CAUGHT 23 future date allowed
+CAUGHT 24 follow-up same day refused
+CAUGHT 25 duration 1.5 accepted
+CAUGHT 26 no view authorize
+CAUGHT 27 no trading gate
+CAUGHT 28 tele-caller unchecked
+CAUGHT 29 null means default
+CAUGHT 30 audit with values
+CAUGHT 30b audit lists every field
+CAUGHT 31 audit target not reserved id
+CAUGHT 32 order id asc
+CAUGHT 33 to exclusive
+CAUGHT 34 invalid filter returns all
+CAUGHT 35 no +1
+CAUGHT 35b due is >=
+CAUGHT 35c list without authorize
+MISSED 35d 23503 not mapped
+CAUGHT 36 action renamed
+CAUGHT 37 route keeps empty strings
+CAUGHT 37b route: absent tele-caller is none
+CAUGHT 38 no same-origin
+
+22 was MISSED: T-CL-001 gained a bad phone with a bad name. Rerun:
+CAUGHT 22 name before phone
+20 is equivalent: reset() truncates app.centre with cascade and restart identity, which reaches call_log.
+35d is equivalent: the app checks the tele-caller with enquiry_may_receive before the insert, so the foreign key cannot fail from the app.
+
+Database:
+CAUGHT 8 guard keeps at
+CAUGHT 9 guard keeps by_user
+CAUGHT 10 no update/delete trigger
+CAUGHT 11 no truncate trigger
+CAUGHT 12 no force
+CAUGHT 13 select on manage
+CAUGHT 14 insert on view
+CAUGHT 15 no delete policy
+CAUGHT 16 by_user in the insert grant
+CAUGHT 17 update granted
+CAUGHT 18 no sequence grant
+CAUGHT 1-7 drop call_log_phone_check
+CAUGHT 1-7 drop call_log_name_check
+CAUGHT 1-7 drop call_log_description_check
+CAUGHT 1-7 drop call_log_note_check
+CAUGHT 1-7 drop call_log_call_type_check
+CAUGHT 1-7 drop call_log_duration_min_check
+CAUGHT 1-7 drop call_log_follow_up_check
+CAUGHT 2 name 101
+
+Migration text:
+CAUGHT 42 gems_etl named in 0022
+
+Real server:
+CAUGHT 40 call form for viewers  | FAIL  T-CL the call list renders for an enquiry viewer, without a form  (200)
