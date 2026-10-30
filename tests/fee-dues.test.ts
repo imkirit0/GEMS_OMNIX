@@ -101,7 +101,7 @@ describe("T-FD fee dues", () => {
       [`insert into app.fee_due (registration_id, centre_id, plan_id, fee_type_id, caption_id, due_on, gross, currency)
         values ($1, $2, $3, $4, $5, $6, $7, $8) returning created_by::text, created_at`,
       [o.reg ?? L.dca, o.centre ?? C.A, o.plan ?? seed.planId, o.type ?? line.feeTypeId, o.caption ?? line.captionId, o.due ?? line.dueOn,
-        o.gross ?? line.amount, o.cur ?? "INR"]] as const;
+        o.gross ?? line.amount, o.cur ?? "INR"]] as [string, unknown[]];
     const refused = async (o: Parameters<typeof ins>[0], text: string) => {
       const { err } = await as(D, ...ins(o));
       expect(err, text).toMatchObject({ code: "23514" });
