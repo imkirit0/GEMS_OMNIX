@@ -1,5 +1,5 @@
 Fee receipts mutation checks, 2026-10-30 (docs/designs/fee-receipts; scratchpad mutate_fr.py). Code mutations: applied, the named test run, restored. Database mutations of 0027: guards by create or replace, policies, triggers, grants and the view, applied as SQL, the named test run, restored.
-70 mutations (38 code, 32 database): 62 CAUGHT, 8 equivalent.
+70 mutations (36 code, 34 database): 62 CAUGHT, 8 equivalent.
 Round 1:
 MISSED G1 receipt guard: no lock
 CAUGHT G2 created_at not stamped
