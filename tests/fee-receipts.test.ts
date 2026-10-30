@@ -278,7 +278,9 @@ describe("T-FR fee receipts", () => {
     // kept for good, even by the owner
     for (const t of ["receipt", "receipt_allocation"]) {
       for (const q of [`update app.${t} set centre_id = centre_id`, `delete from app.${t}`, `truncate app.${t} cascade`]) {
-        expect((await sqlErr(q))?.message, q).toContain(`${t} is append-only`);
+        // a receipt's only update is the same-day cancel (receipt-cancel, 0028): anything else is refused by its guard
+        const want = t === "receipt" && q.startsWith("update") ? "receipt_cancel_status_guard" : `${t} is append-only`;
+        expect((await sqlErr(q))?.message, q).toContain(want);
       }
     }
     // a commit-time error reaches the app as a refusal, not a server error (R3)

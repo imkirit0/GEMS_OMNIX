@@ -136,6 +136,7 @@ model AppUser {
   feePlansPublished       FeePlan[]          @relation("feePlanPublishedBy")
   feeDuesCreated          FeeDue[]           @relation("feeDueCreatedBy")
   receiptsCreated         Receipt[]          @relation("receiptCreatedBy")
+  receiptsCancelled       Receipt[]          @relation("receiptCancelledBy")
 
   @@map("app_user")
   @@schema("app")
@@ -815,6 +816,11 @@ model Receipt {
   status         String              @default("ACTIVE")
   createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz
   createdBy      String              @map("created_by") @db.Uuid
+  // same-day cancellation (docs/designs/receipt-cancel; guard, check, policy and grant in migration 0028)
+  cancelledAt    DateTime?           @map("cancelled_at") @db.Timestamptz
+  cancelledBy    String?             @map("cancelled_by") @db.Uuid
+  cancelReason   String?             @map("cancel_reason")
+  canceller      AppUser?            @relation("receiptCancelledBy", fields: [cancelledBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   centre         Centre              @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   registration   Registration        @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
   creator        AppUser             @relation("receiptCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)

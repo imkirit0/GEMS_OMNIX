@@ -12,7 +12,7 @@ import { RbacError } from "./rbac";
 
 export type DueRow = { id: string; feeTypeName: string; captionName: string; dueOn: string; gross: string; currency: string;
   paid: string; outstanding: string };
-export type ReceiptRow = { id: string; receiptNo: string; receivedOn: string; total: string; mode: string };
+export type ReceiptRow = { id: string; receiptNo: string; receivedOn: string; total: string; mode: string; status: string };
 export type RegistrationDues = { registrationId: string; dues: DueRow[]; total: string | null; canCreate: boolean; noPlan: boolean;
   outstanding: string | null; receipts: ReceiptRow[]; canCollect: boolean };
 
@@ -110,7 +110,7 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
       where d.registration_id = any (${ids}::uuid[]) group by d.registration_id`).map((t) => [t.id, t]));
     const receipts = await tx.$queryRaw<(ReceiptRow & { registrationId: string })[]>`
       select id::text, registration_id::text as "registrationId", receipt_no as "receiptNo", received_on::text as "receivedOn",
-        total::text as total, mode
+        total::text as total, mode, status
       from app.receipt where registration_id = any (${ids}::uuid[]) order by id desc`;
     const out: RegistrationDues[] = [];
     for (const r of regs) {

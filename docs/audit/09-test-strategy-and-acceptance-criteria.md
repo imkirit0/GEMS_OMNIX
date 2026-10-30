@@ -262,6 +262,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-FR-003 | Exactly once | The same idempotency key returns the original receipt, also under a concurrent double submit; a key reused for another registration is refused; concurrent receipts on one series get distinct, consecutive numbers |
 | T-FR-004 | Reading receipts and routes | The learner page shows paid, outstanding and receipts; a printable receipt with its GST lines; out of scope or bad ids give 404; same origin; success and replay land on the receipt, errors on the learner page |
 
+### T-RC: receipt cancellation, same day (`docs/designs/receipt-cancel/receipt-cancel.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-RC-001 | Cancelling on the day | A holder of `fee.receipt.cancel` (sensitive, fresh step-up) and `student.view` cancels an ACTIVE receipt of today with a reason: outstanding restored, the receipt, its lines and its number kept, the next receipt takes the next number; audited with the lines; refused without a reason, twice, after its day (audited as failed), with a stale step-up, for a collector, out of scope and while collection is off; a collect resubmitted with a cancelled receipt's key is refused |
+| T-RC-002 | Cancellation proven by the database | By SQL the guard refuses, by name, any change but ACTIVE to CANCELLED, a past-day receipt, a stale step-up and any other column changed; who and when stamped; delete and truncate still refused; lines still immutable; a concurrent collection sees the restored outstanding only after commit |
+| T-RC-003 | Cancel route | Same origin; success and a resubmitted cancel land on the receipt; errors on the receipt page; a stale step-up goes to step-up; bad or out-of-scope ids give 404 |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

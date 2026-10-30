@@ -8,7 +8,7 @@ import { bad } from "./catalogue";
 import { FEE_GATES, lockKey } from "./dues";
 import { allocate, SeriesMissing } from "./numbering";
 import { isoDate, istToday, PersonError } from "./person-rules";
-import { RbacError } from "./rbac";
+import { RbacError, StepUpRequired } from "./rbac";
 
 export { FEE_GATES };
 export const MODES = ["CASH", "CHEQUE", "DD", "BANK_TRANSFER", "UPI", "CARD"] as const;
@@ -17,7 +17,7 @@ export type Collected = { receiptId: string; receiptNo: string; total: string; r
 export type ReceiptLine = { feeTypeName: string; captionName: string; hsnSac: string; gstRate: string; taxable: string; cgst: string;
   sgst: string; igst: string; amount: string };
 export type ReceiptView = { id: string; receiptNo: string; receivedOn: string; mode: string; reference: string | null; instrumentDate: string | null;
-  currency: string; total: string; status: string; centreCode: string; centreName: string; gstin: string | null; learner: string;
+  currency: string; total: string; status: string; cancelledAt: string | null; cancelReason: string | null; canCancel: boolean; centreCode: string; centreName: string; gstin: string | null; learner: string;
   courseCode: string; courseName: string; registerNo: string; personId: string; lines: ReceiptLine[];
   totals: { taxable: string; cgst: string; sgst: string; igst: string } };
 
@@ -38,6 +38,10 @@ async function receiptDb<T>(run: () => Promise<T>): Promise<T> {
     const name = /constraint "([^"]+)"/.exec(cause?.originalMessage ?? "")?.[1] ?? "";
     if (name === "receipt_over_guard") throw new RbacError("invalid", "the amount is more than what is outstanding", "fee.receipt.over");
     if (name === "receipt_tax_guard") throw new RbacError("invalid", "the centre's GST details are incomplete", "fee.receipt.gst");
+    // cancellation (receipt-cancel): the guard alone decides the day, the status and the step-up
+    if (name === "receipt_cancel_late_guard") throw new RbacError("invalid", "the receipt is not from today", "fee.receipt.late");
+    if (name === "receipt_cancel_status_guard") throw new RbacError("invalid", "the receipt is cancelled", "fee.receipt.cancelled");
+    if (name === "receipt_cancel_stepup_guard") throw new StepUpRequired("re-enter your password to continue");
     // a 23505 on the idempotency key: another registration's receipt or one out of sight (Z8-3)
     if (c === "23514" || c === "23503" || c === "23505") throw mismatch();
     if (c === "42501") throw new Forbidden(cause?.originalMessage ?? "forbidden");
@@ -87,9 +91,12 @@ export async function collectFee(session: string | undefined, personId: string, 
       await authorize(tx, "student.view", centreId);
       await tx.$executeRaw`select pg_advisory_xact_lock(hashtext(${lockKey(regId)}))`;
       // replay under the lock (C1, D1), before the trading gate (Z8-7)
-      const [seen] = await tx.$queryRaw<{ id: string; reg: string; receiptNo: string; total: string }[]>`
-        select id::text, registration_id::text as reg, receipt_no as "receiptNo", total::text as total from app.receipt where idempotency_key = ${key}::uuid`;
+      const [seen] = await tx.$queryRaw<{ id: string; reg: string; receiptNo: string; total: string; status: string }[]>`
+        select id::text, registration_id::text as reg, receipt_no as "receiptNo", total::text as total, status
+        from app.receipt where idempotency_key = ${key}::uuid`;
       if (seen) {
+        // a form resubmitted after its receipt was cancelled is never shown as a payment (receipt-cancel D1)
+        if (seen.status === "CANCELLED") throw new RbacError("invalid", "the receipt is cancelled", "fee.receipt.cancelled");
         if (seen.reg !== regId.toLowerCase()) throw mismatch();
         done = { receiptId: seen.id, receiptNo: seen.receiptNo, total: seen.total, replay: true };
         return done;
@@ -140,6 +147,9 @@ export function getReceipt(session: string | undefined, receiptId: string): Prom
     const [h] = await tx.$queryRaw<Omit<ReceiptView, "lines" | "totals">[]>`
       select r.id::text, r.receipt_no as "receiptNo", r.received_on::text as "receivedOn", r.mode, r.reference,
         r.instrument_date::text as "instrumentDate", r.currency::text as currency, r.total::text as total, r.status,
+        to_char(r.cancelled_at at time zone 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') as "cancelledAt", r.cancel_reason as "cancelReason",
+        (${FEE_GATES.collectionLive} and r.status = 'ACTIVE' and r.received_on = (now() at time zone 'Asia/Kolkata')::date
+          and app.has_permission('fee.receipt.cancel', r.centre_id)) as "canCancel",
         c.code as "centreCode", c.name as "centreName", c.gstin, trim(p.given_name || ' ' || coalesce(p.family_name, '')) as learner,
         co.code as "courseCode", co.name as "courseName", g.register_no as "registerNo", p.id::text as "personId"
       from app.receipt r join app.centre c on c.id = r.centre_id join app.registration g on g.id = r.registration_id
@@ -157,4 +167,37 @@ export function getReceipt(session: string | undefined, receiptId: string): Prom
       from app.receipt_allocation where receipt_id = ${receiptId}::bigint`;
     return { ...h, lines, totals: totals! };
   });
+}
+
+/**
+ * Cancels a receipt on its own day (receipt-cancel G1). The database decides the day, the status and the step-up
+ * (receipt_cancel_guard, 0028); dues come back through fee_due_balance. Unseen or malformed ids: not found (404).
+ */
+export async function cancelReceipt(session: string | undefined, receiptId: string, reason: string): Promise<{ receiptNo: string }> {
+  if (!FEE_GATES.collectionLive) throw new RbacError("invalid", "fee collection is not switched on", "fee.receipt.closed");
+  if (typeof receiptId !== "string" || !ID.test(receiptId)) throw new PersonError("notfound");
+  const r = typeof reason === "string" ? reason.trim() : "";
+  if (r === "") throw bad("reason: required");
+  if (r.length > 500) throw bad("reason: 1-500 characters");
+  const centreId = await withScope(session, async (tx) =>
+    (await tx.$queryRaw<{ c: number }[]>`select centre_id as c from app.receipt where id = ${receiptId}::bigint`)[0]?.c);
+  if (centreId === undefined) throw new PersonError("notfound");
+  let before: { status: string; receiptNo: string; total: string; registrationId: string } | undefined;
+  let lines: { dueId: string; amount: string }[] = [];
+  return receiptDb(() => scopedAction(session, { action: "fee.receipt.cancel", permission: "fee.receipt.cancel", centreId, targetType: "receipt",
+    targetId: receiptId, reason: r },
+    (tx) => receiptDb(async () => {
+      await authorize(tx, "student.view", centreId);
+      // for the audit only; the guard decides
+      [before] = await tx.$queryRaw<{ status: string; receiptNo: string; total: string; registrationId: string }[]>`
+        select status, receipt_no as "receiptNo", total::text as total, registration_id::text as "registrationId" from app.receipt where id = ${receiptId}::bigint`;
+      lines = await tx.$queryRaw<{ dueId: string; amount: string }[]>`
+        select due_id::text as "dueId", amount::text as amount from app.receipt_allocation where receipt_id = ${receiptId}::bigint order by id`;
+      const n = await tx.$executeRaw`update app.receipt set status = 'CANCELLED', cancel_reason = ${r} where id = ${receiptId}::bigint`;
+      if (n !== 1) throw new PersonError("notfound"); // RLS hid it: never audited as done (D3)
+      return { receiptNo: before!.receiptNo };
+    }),
+    () => ({ before: { status: before?.status }, after: { status: "CANCELLED", receiptNo: before?.receiptNo, total: before?.total,
+      registrationId: before?.registrationId, lines } }),
+    (e) => (e instanceof RbacError && e.key === "fee.receipt.late" ? { action: "fee.receipt.cancel", extra: { after: { refused: "late" } } } : null)));
 }

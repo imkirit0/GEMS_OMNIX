@@ -60,6 +60,8 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "fee.receipt.noseries": "The receipt series is not set up for this centre; ask head office.",
   "fee.receipt.gst": "The centre's GST details are incomplete; ask head office.",
   "fee.receipt.mismatch": "The receipt did not match the dues; nothing was saved.",
+  "fee.receipt.late": "This receipt is not from today; ask for a cancellation ticket.",
+  "fee.receipt.cancelled": "This receipt is cancelled.",
   "rbac.forbidden": "You can only grant roles where you hold every one of their permissions.",
   "ticket.invalid": "Some values were missing or not allowed. Check the form and try again.",
   "ticket.document": "A document is missing, too large, of a type that is not allowed, or already used.",

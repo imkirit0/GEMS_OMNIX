@@ -377,6 +377,10 @@ try {
     headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
     body: new URLSearchParams({ registrationId: randomUUID(), amount: "1", mode: "CASH", idempotencyKey: randomUUID() }) });
   check("T-FR a receipt post from a foreign origin is refused", frForeign.status === 403, String(frForeign.status));
+  const rcForeign = await fetch(`${BASE}/receipts/1/cancel`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ reason: "x" }) });
+  check("T-RC a cancel post from a foreign origin is refused", rcForeign.status === 403, String(rcForeign.status));
 
   // ---------- enquiry (T-ENQ: 404 parity, Origin-less action post, a real create, the Enroll link) ----------
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view'), ($1, 'enquiry.manage')`, [studentRole]);

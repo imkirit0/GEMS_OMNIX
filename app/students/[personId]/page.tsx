@@ -75,7 +75,7 @@ export default async function Student({ params, searchParams }: { params: Promis
                               </tbody>
                             </table>
                             {f.receipts.length > 0 && (
-                              <p>Receipts: {f.receipts.map((x, i) => <span key={x.id}>{i > 0 && " · "}<a href={`/receipts/${x.id}`}>{x.receiptNo}</a> {x.receivedOn} {inr(x.total)} {x.mode}</span>)}</p>
+                              <p>Receipts: {f.receipts.map((x, i) => <span key={x.id}>{i > 0 && " · "}<a href={`/receipts/${x.id}`}>{x.receiptNo}</a> {x.receivedOn} {inr(x.total)} {x.mode}{x.status === "CANCELLED" ? " (cancelled)" : ""}</span>)}</p>
                             )}
                             {f.canCollect && (
                               <form method="post" action={`/students/${p.id}/receipts`}>
