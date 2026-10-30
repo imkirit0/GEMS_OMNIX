@@ -1626,7 +1626,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - no drift; 0 type errors;
   - **194 passed + 3 todo** (22 files);
   - build and bundle scan;
-  - the admin journey and all security smoke checks passed (`evidence/ci-call-log-2026-10-30.txt`).
+  - the admin journey and all security smoke checks passed (`evidence/ci-call-log-2026-10-30.txt`). Confirmed on GitHub: run 41005494769 for `b1ad93f` succeeded.
 - **Limits and next steps:**
   - Phone search comes with a POST search form when a screen needs it.
   - The tele-caller and logger are stored but not shown.
