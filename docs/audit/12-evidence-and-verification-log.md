@@ -1750,7 +1750,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - build and bundle scan;
   - admin journey and all security smoke checks passed.
 
-  The two earlier clone runs are described above.
+  The two earlier clone runs are described above. Confirmed on GitHub: run 41014866226 for `62b6d07` succeeded.
 - **Limits and next steps.**
   - The course-change modal waits on fees (D-STU-2).
   - Per-handler columns, bulk forward and Select All are out of scope.

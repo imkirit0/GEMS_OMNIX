@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-30, approvals workbench built (Stage 5 second piece; W1–W4), fresh-clone CI green 200 tests (last evidence: E-048).
+**Last updated:** 2026-10-30, approvals workbench built (Stage 5 second piece; W1–W4), fresh-clone CI green 200 tests, GitHub run 41014866226 green (last evidence: E-048).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
