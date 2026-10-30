@@ -1,6 +1,8 @@
 # 04 Manager decision register (v1.1)
 
 **Every proposed default is UNCONFIRMED.** Status for all rows: **Open, not approved** (2026-10-26).
+
+**2026-10-30 (E-049):** the project owner approved the recommended defaults of the Stage 4 rows (D-FEE-1…6, D-SCH-1…3, D-FIN-1…9, D-CUR-1, NP-1…NP-8) in chat; each such row is marked. All other rows stay open.
 - A default may be used only in non-production environments to unblock design and tests.
 - Unresolved financial, access-control and data-retention decisions (marked **⛔ prod-gate**) block deployment through the configuration approval check (01 §C-07).
 - Longer evidence notes for v0 rows are in `baseline/v0-plan.md` §3 and §6.6.
@@ -36,26 +38,26 @@ Column order: ID · decision · owner · evidence · proposed default (UNCONFIRM
 ## Fees, schemes, finance (all ⛔ prod-gate, owner Accounts unless noted)
 | ID | Decision | Evidence | Default | If wrong | Tests |
 |---|---|---|---|---|---|
-| D-FEE-1 | Ad-hoc fees without a prior due | WF p9 | Ad-hoc due created in the same transaction | Unreconcilable receipts | T-FEE-001 |
-| D-FEE-2 | Cancel / amount change / transfer / scheme edit: password or ticket | WF p9; RCT type exists | Ticket (maker-checker) + step-up | Fraud or delay | T-FEE-012, T-AUTH-015 |
-| D-FEE-3 | Payment modes and live gateway(s) | WF p9; SPEC pp. 14, 50 | Adapter interface; build confirmed gateways only | Missing gateway at cutover | T-FEE-018…023 |
-| D-FEE-4 | Partial/installment allocation order | SPEC p29 Q1 | Oldest due date, then fee order | Wrong outstanding/GST | T-FEE-002 |
-| D-FEE-5 | Meaning of fee hold | SPEC p50 | Excluded from collection and reminders | Collection wrongly blocked | T-FEE-011 |
-| D-FEE-6 | Fines used (master empty) | SPEC p48 | Not built (PR-08) | Missing late fees | — |
-| D-SCH-1 | Who creates/approves schemes (owner Marketing/Accounts) | WF p10 | HO creates; live after approval | Unauthorised discounts | T-E2E-005 |
-| D-SCH-2 | Multiple schemes; course-change effect | WF p10 | One per registration; re-evaluated via ticket | Wrong dues | T-XM-03 |
-| D-SCH-3 | Expired schemes; targets link (owner Marketing) | WF p11 | Existing keep; new only if valid on admission date | Mispricing | T-E2E-005 |
-| D-FIN-1 | Cash vs accrual | SPEC p15 | Cash basis | Wrong books | T-FEE-001 |
-| D-FIN-2 | Tax point / invoice | — | Tax invoice at receipt | GST non-compliance | T-FEE-003 |
-| D-FIN-3 | Cancellation window/approver | SPEC p16 | Same day by centre admin + step-up; later via ticket | Fraud | T-FEE-012 |
-| D-FIN-4 | GST rounding | — | Per line, half-up, residual to Round Off | Tax mismatch | T-FEE-016 |
-| D-FIN-5 | Refunds (undocumented) | none | Not supported until specified | Cannot refund | T-FEE-025 |
-| D-FIN-6 | Caution deposit | SPEC p15 (account exists) | Liability; refund per D-FIN-5 | — | T-FEE-001 |
-| D-FIN-7 | Paid Fee Import posting | SPEC p49 | Post into an opening/migration period | Ledger gaps | T-IMP-001 |
-| D-FIN-8 | Hash-chained finance audit | — | Yes | Weak tamper evidence | T-AUD-008 |
-| D-FIN-9 | Advances / application fees | SPEC p50 | Unapplied-payment liability | Early revenue | T-FEE-024 |
-| D-CUR-1 | Multi-currency, non-GST centres | SPEC pp. 2, 13 | Currency per centre; GST India only | Wrong tax | T-FEE-005 |
-| NP-1…NP-8 | Numbering policy (owner Accounts + Certification) | see 01 §C-02.1 | Unset. Tickets (PMC, ticket-engine design, 2026-10-28): NP-1 one network-wide ticket counter (DD-8, accepted by the project owner); NP-5 sequence not padded, at most 30 characters, prefix fixed text per type (DD-10). Person core (PMC, person-core design, 2026-10-28): Register No one network-wide series (period ALL), Admission No network-wide per academic year with chained years, both seeded from legacy at cutover (DD-2, DD-7) | Duplicates; non-compliant serials | T-NUM-001…010, T-TKT-002 |
+| D-FEE-1 | Ad-hoc fees without a prior due | WF p9 | Ad-hoc due created in the same transaction **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Unreconcilable receipts | T-FEE-001 |
+| D-FEE-2 | Cancel / amount change / transfer / scheme edit: password or ticket | WF p9; RCT type exists | Ticket (maker-checker) + step-up **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Fraud or delay | T-FEE-012, T-AUTH-015 |
+| D-FEE-3 | Payment modes and live gateway(s) | WF p9; SPEC pp. 14, 50 | Adapter interface; build confirmed gateways only **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Missing gateway at cutover | T-FEE-018…023 |
+| D-FEE-4 | Partial/installment allocation order | SPEC p29 Q1 | Oldest due date, then fee order **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Wrong outstanding/GST | T-FEE-002 |
+| D-FEE-5 | Meaning of fee hold | SPEC p50 | Excluded from collection and reminders **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Collection wrongly blocked | T-FEE-011 |
+| D-FEE-6 | Fines used (master empty) | SPEC p48 | Not built (PR-08) **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Missing late fees | — |
+| D-SCH-1 | Who creates/approves schemes (owner Marketing/Accounts) | WF p10 | HO creates; live after approval **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Unauthorised discounts | T-E2E-005 |
+| D-SCH-2 | Multiple schemes; course-change effect | WF p10 | One per registration; re-evaluated via ticket **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Wrong dues | T-XM-03 |
+| D-SCH-3 | Expired schemes; targets link (owner Marketing) | WF p11 | Existing keep; new only if valid on admission date **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Mispricing | T-E2E-005 |
+| D-FIN-1 | Cash vs accrual | SPEC p15 | Cash basis **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Wrong books | T-FEE-001 |
+| D-FIN-2 | Tax point / invoice | — | Tax invoice at receipt **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | GST non-compliance | T-FEE-003 |
+| D-FIN-3 | Cancellation window/approver | SPEC p16 | Same day by centre admin + step-up; later via ticket **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Fraud | T-FEE-012 |
+| D-FIN-4 | GST rounding | — | Per line, half-up, residual to Round Off **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Tax mismatch | T-FEE-016 |
+| D-FIN-5 | Refunds (undocumented) | none | Not supported until specified **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Cannot refund | T-FEE-025 |
+| D-FIN-6 | Caution deposit | SPEC p15 (account exists) | Liability; refund per D-FIN-5 **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | — | T-FEE-001 |
+| D-FIN-7 | Paid Fee Import posting | SPEC p49 | Post into an opening/migration period **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Ledger gaps | T-IMP-001 |
+| D-FIN-8 | Hash-chained finance audit | — | Yes **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Weak tamper evidence | T-AUD-008 |
+| D-FIN-9 | Advances / application fees | SPEC p50 | Unapplied-payment liability **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Early revenue | T-FEE-024 |
+| D-CUR-1 | Multi-currency, non-GST centres | SPEC pp. 2, 13 | Currency per centre; GST India only **Approved 2026-10-30 by the project owner (chat: "approve all recommended"); E-049.** | Wrong tax | T-FEE-005 |
+| NP-1…NP-8 | Numbering policy (owner Accounts + Certification) | see 01 §C-02.1 | Approved 2026-10-30 by the project owner (E-049): NP-1 Receipts and invoices per centre; register numbers network-wide; NP-2 Receipts and invoices reset per financial year; register numbers never; NP-3 Gapless for tax invoices and receipts; NP-4 Cancelled numbers retained and marked cancelled, never reused; NP-5 Legacy formats, within the GST 16-character limit (to be checked by the tax advisor before go-live); NP-6 Legacy prefixes kept (FEEREC, REC, INV, ...), one per document type; NP-7 Register number per registration, one global series; NP-8 Continue from the legacy current numbers (e.g. 2064112, 43887). Earlier: Unset. Tickets (PMC, ticket-engine design, 2026-10-28): NP-1 one network-wide ticket counter (DD-8, accepted by the project owner); NP-5 sequence not padded, at most 30 characters, prefix fixed text per type (DD-10). Person core (PMC, person-core design, 2026-10-28): Register No one network-wide series (period ALL), Admission No network-wide per academic year with chained years, both seeded from legacy at cutover (DD-2, DD-7) | Duplicates; non-compliant serials | T-NUM-001…010, T-TKT-002 |
 
 ## Tickets, exams, certificates, supply, royalty, year end
 | ID | Decision | Owner | Evidence | Default | If wrong | Tests |

@@ -1767,3 +1767,49 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/tickets/approvals/bulk/route.ts | 498b856957a4694531e64e4e6942ac0e7b517e69d939e2a46152e3be536fc988 |
 | tests/approvals-workbench.test.ts | 1ff142aa4d5994f27b4ac5ff502fa02458753ed6e168eaa3d9c8c275f4f5df7f |
 | scripts/smoke-admin.sh | d94df7901674e19653eb80583a0b8760e1f65d1c2db76de7e2a1d50eaeaeb4b8 |
+
+## E-049 Stage 4 business decisions approved by the project owner (G-FIN gate, decisions part) (2026-10-30)
+- **What was asked.** On 2026-10-30, at the owner's request ("what is the finance decisions you want"), the 27 Stage 4 decisions were listed with their recommended defaults:
+  - numbering, NP-1…NP-8 (owner: Accounts and Certification);
+  - fees, D-FEE-1…6 (owner: Accounts);
+  - schemes, D-SCH-1…3 (owner: Marketing and Accounts);
+  - accounting and tax, D-FIN-1…9 and D-CUR-1 (owner: Accounts and the tax advisor).
+- **The approval.** The project owner replied in chat, 2026-10-30: "approve all recommended". All 27 recommended defaults are approved as written:
+  - `docs/audit/04-manager-decision-register.md`: each row is marked, and a dated note is added to the header;
+  - `docs/audit/revisions/v1.1-corrections.md` §C-02.1: each NP row is marked.
+- **Approved values, in short:**
+  - **Numbering:**
+    - receipts and invoices per centre, reset each financial year, gapless;
+    - cancelled numbers kept and never reused;
+    - legacy formats and prefixes;
+    - register numbers network-wide, one per registration, never reset;
+    - counters continue from the legacy values.
+  - **Fees:**
+    - an ad-hoc due is created with its receipt;
+    - cancellations and changes go through a two-person ticket plus step-up;
+    - only the confirmed gateways are built;
+    - part-payments go to the oldest due first, then by fee order;
+    - held fees are neither collected nor reminded;
+    - no fines.
+  - **Schemes:**
+    - head office creates schemes, and they go live after approval;
+    - one scheme per registration, re-evaluated by ticket;
+    - an expired scheme stays for learners already on it.
+  - **Accounting:**
+    - cash basis;
+    - the tax invoice is issued at receipt;
+    - same-day cancellation by the centre admin with step-up, later by ticket;
+    - GST rounded per line, half-up, with the residual to Round Off;
+    - no refunds until they are specified;
+    - the caution deposit is a liability;
+    - imported paid fees go to an opening period;
+    - a hash-chained finance audit;
+    - advances are held as unapplied payments;
+    - one currency per centre, GST for India only.
+- **Recorded limits:**
+  - The register names Accounts, Certification, Marketing and the tax advisor as the owners of these decisions. This approval is the project owner's. If any of those owners is a different person, their confirmation is still needed before production.
+  - The NP-5 format must still be checked by the tax advisor against the GST 16-character limit before go-live.
+  - G-FIN also asks for "golden datasets and worked examples": real receipts, part-payments and a GST calculation. **These are not yet supplied.** Stage 4 designs can start, and the worked examples are the acceptance data before Stage 4 is accepted.
+  - D-FEE-3 needs the gateway names. Until they are given, only cash and offline modes are built.
+  - The ticket go-live gates (`TICKET_GATES`, correction-tickets DD-18) stay closed. The numbering policy is now approved, but under NP-8 the counters must first be seeded from the legacy values, which is part of the migration (paused).
+- **Classes.** These rows move from PMC to approved business rules (SRC by owner decision) for Stage 4 design. The tests still run both NP-3 modes, as audit 09 says; the shipped mode is gapless.
