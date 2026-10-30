@@ -163,7 +163,7 @@ describe("T-FD fee dues", () => {
     expect((await as(T.uA, "select count(*)::int n from app.fee_due")).rows[0]).toEqual({ n: 0 });
     expect((await as(V, "select count(*)::int n from app.fee_due")).rows[0]).toEqual({ n: 4 });
     // kept forever: no update, delete or truncate, even as the owner; gems_app has no update or delete either
-    for (const q of ["update app.fee_due set gross = 0", "delete from app.fee_due", "truncate app.fee_due"]) {
+    for (const q of ["update app.fee_due set gross = 0", "delete from app.fee_due", "truncate app.fee_due cascade"]) { // cascade: past the receipts FK, to the trigger
       expect((await sqlErr(q))?.message, q).toContain("fee_due is append-only");
     }
     expect((await as(D, "update app.fee_due set gross = 0")).err).toMatchObject({ code: "42501" });
