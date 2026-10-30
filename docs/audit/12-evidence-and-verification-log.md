@@ -2241,3 +2241,67 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/page.tsx | 86cc258b914e81f38622ed45287a69cd655bcf2b0cce0e8cd4bcd4443fc6f5b3 |
 | tests/fee-ledger.test.ts | 3ffc26169fe379ecbde44fe832a6c98332097b7c2e4de62f4fdc99aba7ca294a |
 | scripts/etl/reset.sql | b3fcffda77e45eaca5294bcf9a93b8bf01825fbcf54edc8911c459c77b6213ed |
+
+## E-056 Fee holds built (Stage 4, F4b; WF4; R-067, D-FEE-5) (2026-10-30)
+- **Request:** the owner's standing instruction of 2026-10-30 ("keep working … agree on the recommended option … finish everything all steps"). DD-1…DD-8 and the build approval were taken as the recommended options under that instruction, not as an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel (zoom-out Z1–Z7, comprehension C1–C10, critic D1–D9; no blockers). Steps 8 (Z8-1…5) and 9 (R1–R14) followed. Every finding is resolved in `docs/designs/fee-holds/fee-holds.md`, and the reports are in the same folder. There were no owner items.
+  - **Found at review:**
+    - The latest event was ordered by an id taken before the lock, so concurrent raw SQL could leave the wrong state (D1).
+    - "Held" was worked out in several places (Z1, D2, Z8-1).
+    - The lock key needed the registration, but the design never read it (C2, D3).
+    - Collection messages misled cashiers when dues were held (C1, D4).
+    - Receipts carrying only ad-hoc items would have been refused when every due was held (R2).
+    - The ETL reset and the audit scan were missed (R4, R5).
+- **Built:**
+  - **Migration 0031.**
+    - Adds `fee_hold_event`, which holds HOLD and RELEASE rows, each with a reason.
+    - The guard reads the due, then takes the `fee-dues:` lock and assigns `new.id` under that lock. It stamps who and when. It then checks:
+      - the due is a PLAN due of its own centre;
+      - holds and releases alternate;
+      - a HOLD needs an amount owed.
+    - Events are immutable.
+    - `fee_due_balance` gains `held` (the latest event, via a lateral join) and `collectable`. The view keeps `security_invoker`.
+    - `receipt_allocation_guard` refuses a held due.
+    - RLS: `student.view` reads events, and `fee.hold` writes them.
+    - The migration adds the `fee.hold` permission.
+  - **`holds.ts`.** Provides `setHold`, which checks that the due belongs to the learner in the URL, applies the trading gate, and audits `fee.hold` or `fee.release` with the due, registration and amount owed. It also provides `holdCentres`, `heldDues` (filters by fee type, course and year) and `holdHistory` (by kind, up to 92 days).
+  - **`collectFee`.** Allocates over `collectable` and refuses with `fee.receipt.held` when held dues are the reason an amount cannot be collected. Ad-hoc items are unaffected.
+  - **`duesForPerson`.** Adds `held`, `collectable` and `canHold`.
+  - **Pages and routes.**
+    - The learner page gets a Hold/Release column, a "Collectable now" figure, and a collect form that defaults to the collectable amount.
+    - New route: `POST /students/[personId]/holds`.
+    - New page: `/fees/holds`, with the hold list and its history.
+    - A home link.
+  - **ETL reset.** It now clears hold events.
+- **Tests:** `tests/fee-holds.test.ts` (T-FH-001…003), including a two-client race showing that ids follow the lock order.
+  - The fixtures gain role 33 `fee_hold` and the token `tok-feeH`.
+  - T-RLS-002, T-AUD-009 (catalogue and scan) and T-FD-001 are updated.
+  - The real server runs 3 new checks.
+- **Mutation checks** (`evidence/mutation-fee-holds-2026-10-30.txt`): 37 in total (22 code, 15 database). 34 are CAUGHT and 3 are equivalent. 2 were MISSED at first; owner-side tests were added and both are now CAUGHT.
+- **Checks:** a fresh clone of `6012275`, using the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0 (`evidence/ci-fee-holds-2026-10-30.txt`):
+  - no drift;
+  - **222 passed + 3 skipped (timing) + 3 todo** (32 files);
+  - the build and the bundle scan passed;
+  - the admin journey and all security smoke checks passed.
+- **Limits and next steps:**
+  - DD-4 (PMC): `fee.hold` is not sensitive.
+  - Reminders, once they exist, must read `held` and `collectable`.
+  - The legacy import mapping is recorded; the import itself is paused.
+  - Migrations 0012–0031 are not yet on Supabase.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0031_fee_holds/migration.sql | a7529fceeaa5dae11ec2531d7e0baa4d985a7f8dfe6b87bc77c3c436ccfa0bb1 |
+| prisma/schema.prisma | 371d181c35e0b5b442dc718ff52e6199284f251233f870b96499d0470cfba220 |
+| src/server/holds.ts | 948dc2fe8d6e7d3f7cddc631969631e90d693af3ed322fa9f3a070befb96c354 |
+| src/server/receipts.ts | 0446b61e55c459c2e71fabd45e9a32754786842bd230d4f894b332aa2486aa70 |
+| src/server/dues.ts | 9f671d86241717a25d8d016151ac43bcadf88f808d7526c95e8c9060a8bcc466 |
+| src/server/admin-http.ts | 947ec5a4897cb791fa625995395694fa9cad9a57a1ba1c400512c88e0d38ad38 |
+| app/fees/holds/page.tsx | 570d155c6a0c1fbb421ae981da8d4777fd55816ec6443a7aff5e72dec9dd6345 |
+| app/students/[personId]/holds/route.ts | 8ed9205f18cbe384dad3706b142c8baccc6c87ad5f1e386d29c30ee01f7f7f8f |
+| app/students/[personId]/page.tsx | 0d60f4f57782a6fb0776dfc3dd5c193a2d9f4efc3d1d0b0c7f26f5560368b396 |
+| app/page.tsx | 8689d1c06ce41c9dfabdb1f739507c0d6de0d76f77710e061c5ee728f10183df |
+| tests/fee-holds.test.ts | e61d0c52d3a5631900843636ad9c6648f3efb6ab6dbb76a725310a7f28f756eb |
+| scripts/etl/reset.sql | 6e7d2fb7e6f4b82f6f26e3c4e3b379283e8fd8d980bc8bb26fdc36b71d4e7fcf |

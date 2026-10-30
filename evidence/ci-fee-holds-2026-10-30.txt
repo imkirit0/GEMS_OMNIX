@@ -1,0 +1,415 @@
+
+== T-DOC-001: requirements matrix consistency
+ERRORS (0):
+warning: in the working copy of 'docs/audit/02-requirements-traceability-matrix.csv', CRLF will be replaced by LF the next time Git touches it
+
+== FRD is generated from the matrix and committed in sync
+FRD written: 290 requirements in 19 modules; 162 linked to a workflow
+warning: in the working copy of 'docs/requirements/FRD-GEMS-OMNIX.md', CRLF will be replaced by LF the next time Git touches it
+
+== Prisma client
+Loaded Prisma config from prisma7.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+generated
+
+== Fresh database
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Created 
+ Network gems-omnix-dev_default Created 
+ Container gems-omnix-dev-db-1 Creating 
+ Container gems-omnix-dev-db-1 Created 
+ Container gems-omnix-dev-pooler-1 Creating 
+ Container gems-omnix-dev-pooler-1 Created 
+ Container gems-omnix-dev-db-1 Starting 
+ Container gems-omnix-dev-db-1 Started 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-db-1 Healthy 
+ Container gems-omnix-dev-pooler-1 Starting 
+ Container gems-omnix-dev-pooler-1 Started 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-pooler-1 Waiting 
+ Container gems-omnix-dev-db-1 Healthy 
+ Container gems-omnix-dev-pooler-1 Healthy 
+Loaded Prisma config from prisma7.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+Datasource "db": PostgreSQL database "gems", schemas "app" at "127.0.0.1:54320"
+
+31 migrations found in prisma/migrations
+
+Applying migration `0001_foundation`
+Applying migration `0002_security`
+Applying migration `0003_auth`
+Applying migration `0004_auth_hardening`
+Applying migration `0005_rbac`
+Applying migration `0006_centre_view`
+Applying migration `0007_exports`
+Applying migration `0008_audit_fields`
+Applying migration `0009_tickets`
+Applying migration `0010_search_rate_limit`
+Applying migration `0011_person_core`
+Applying migration `0012_catalogue`
+Applying migration `0013_system_admin_all`
+Applying migration `0014_admission_unique`
+Applying migration `0015_person_detail`
+Applying migration `0016_course_master`
+Applying migration `0017_centre_class_write`
+Applying migration `0018_enquiry`
+Applying migration `0019_certifications`
+Applying migration `0020_centre_onboarding`
+Applying migration `0021_course_batches`
+Applying migration `0022_call_log`
+Applying migration `0023_visible_ticket_ids`
+Applying migration `0024_actable_ticket_ids`
+Applying migration `0025_fee_structure`
+Applying migration `0026_fee_dues`
+Applying migration `0027_fee_receipts`
+Applying migration `0028_receipt_cancel`
+Applying migration `0029_adhoc_fees`
+Applying migration `0030_fee_ledger`
+Applying migration `0031_fee_holds`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 0001_foundation/
+    └─ migration.sql
+  └─ 0002_security/
+    └─ migration.sql
+  └─ 0003_auth/
+    └─ migration.sql
+  └─ 0004_auth_hardening/
+    └─ migration.sql
+  └─ 0005_rbac/
+    └─ migration.sql
+  └─ 0006_centre_view/
+    └─ migration.sql
+  └─ 0007_exports/
+    └─ migration.sql
+  └─ 0008_audit_fields/
+    └─ migration.sql
+  └─ 0009_tickets/
+    └─ migration.sql
+  └─ 0010_search_rate_limit/
+    └─ migration.sql
+  └─ 0011_person_core/
+    └─ migration.sql
+  └─ 0012_catalogue/
+    └─ migration.sql
+  └─ 0013_system_admin_all/
+    └─ migration.sql
+  └─ 0014_admission_unique/
+    └─ migration.sql
+  └─ 0015_person_detail/
+    └─ migration.sql
+  └─ 0016_course_master/
+    └─ migration.sql
+  └─ 0017_centre_class_write/
+    └─ migration.sql
+  └─ 0018_enquiry/
+    └─ migration.sql
+  └─ 0019_certifications/
+    └─ migration.sql
+  └─ 0020_centre_onboarding/
+    └─ migration.sql
+  └─ 0021_course_batches/
+    └─ migration.sql
+  └─ 0022_call_log/
+    └─ migration.sql
+  └─ 0023_visible_ticket_ids/
+    └─ migration.sql
+  └─ 0024_actable_ticket_ids/
+    └─ migration.sql
+  └─ 0025_fee_structure/
+    └─ migration.sql
+  └─ 0026_fee_dues/
+    └─ migration.sql
+  └─ 0027_fee_receipts/
+    └─ migration.sql
+  └─ 0028_receipt_cancel/
+    └─ migration.sql
+  └─ 0029_adhoc_fees/
+    └─ migration.sql
+  └─ 0030_fee_ledger/
+    └─ migration.sql
+  └─ 0031_fee_holds/
+    └─ migration.sql
+
+All migrations have been successfully applied.
+etl setup done
+
+== Schema drift: Prisma schema must equal the migrated database
+Loaded Prisma config from prisma7.config.ts.
+
+-- This is an empty migration.
+
+no drift
+
+== No unsafe raw SQL (T-RLS-013)
+none
+
+== Typecheck
+0 errors
+
+== Tests
+
+ RUN  v4.1.12 C:/Users/DELL/AppData/Local/Temp/claude/D--GEMS-OMNIX/a5108cb1-d98f-45ff-9195-898f35de6fed/scratchpad/ciclone
+
+
+ Test Files  31 passed | 1 skipped (32)
+      Tests  222 passed | 3 skipped | 3 todo (228)
+   Start at  19:50:17
+   Duration  97.90s (transform 776ms, setup 0ms, import 3.33s, tests 91.56s, environment 2ms)
+
+
+== Production build
+▲ Next.js 16.4.2 (Turbopack)
+✓ Running next.config.ts took 25ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.5s
+  Running TypeScript ...
+  Finished TypeScript in 3.7s ...
+  Collecting page data using 23 workers ...
+  Generating static pages using 23 workers (0/66) ...
+  Generating static pages using 23 workers (16/66) 
+  Generating static pages using 23 workers (32/66) 
+  Generating static pages using 23 workers (49/66) 
+✓ Generating static pages using 23 workers (66/66) in 239ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin/assignments/[id]/remove
+├ ƒ /admin/catalogue
+├ ƒ /admin/catalogue/centres
+├ ƒ /admin/catalogue/centres/save
+├ ƒ /admin/catalogue/certifications
+├ ƒ /admin/catalogue/certifications/save
+├ ƒ /admin/catalogue/courses
+├ ƒ /admin/catalogue/courses/[id]
+├ ƒ /admin/catalogue/courses/[id]/save
+├ ƒ /admin/catalogue/courses/create
+├ ƒ /admin/catalogue/courses/new
+├ ƒ /admin/catalogue/masters/[slug]
+├ ƒ /admin/catalogue/masters/[slug]/save
+├ ƒ /admin/catalogue/years
+├ ƒ /admin/catalogue/years/save
+├ ƒ /admin/fees
+├ ƒ /admin/fees/captions
+├ ƒ /admin/fees/captions/save
+├ ƒ /admin/fees/plans
+├ ƒ /admin/fees/plans/[id]
+├ ƒ /admin/fees/plans/[id]/save
+├ ƒ /admin/fees/plans/create
+├ ƒ /admin/fees/types
+├ ƒ /admin/fees/types/save
+├ ƒ /admin/roles
+├ ƒ /admin/roles/[id]
+├ ƒ /admin/roles/[id]/permissions
+├ ƒ /admin/roles/create
+├ ƒ /admin/ticket-types
+├ ƒ /admin/ticket-types/[id]
+├ ƒ /admin/ticket-types/[id]/save
+├ ƒ /admin/ticket-types/create
+├ ƒ /admin/users
+├ ƒ /admin/users/[id]
+├ ƒ /admin/users/[id]/assign
+├ ƒ /admin/users/[id]/setup-link
+├ ƒ /admin/users/[id]/status
+├ ƒ /admin/users/create
+├ ƒ /auth/enrol/confirm
+├ ƒ /auth/enrol/start
+├ ƒ /auth/login
+├ ƒ /auth/logout
+├ ƒ /auth/reset/confirm
+├ ƒ /auth/reset/request
+├ ƒ /auth/stepup
+├ ƒ /auth/verify
+├ ƒ /batches
+├ ƒ /batches/place
+├ ƒ /batches/place/save
+├ ƒ /batches/save
+├ ƒ /calls
+├ ƒ /calls/save
+├ ƒ /centres
+├ ƒ /centres/[id]
+├ ƒ /centres/[id]/save
+├ ƒ /centres/create
+├ ƒ /centres/geography
+├ ƒ /centres/geography/save
+├ ƒ /centres/new
+├ ƒ /enquiries
+├ ƒ /enquiries/[id]
+├ ƒ /enquiries/calendar
+├ ƒ /enquiries/new
+├ ƒ /enquiries/statuses
+├ ƒ /enquiries/statuses/save
+├ ƒ /export/[dataset]
+├ ƒ /fees/holds
+├ ƒ /ledger/day-book
+├ ƒ /login
+├ ƒ /login/enrol
+├ ƒ /login/verify
+├ ƒ /receipts/[id]
+├ ƒ /receipts/[id]/cancel
+├ ƒ /reset
+├ ƒ /reset/confirm
+├ ƒ /stepup
+├ ƒ /students
+├ ƒ /students/[personId]
+├ ƒ /students/[personId]/details
+├ ƒ /students/[personId]/dues
+├ ƒ /students/[personId]/holds
+├ ƒ /students/[personId]/receipts
+├ ƒ /students/new
+├ ƒ /tickets
+├ ƒ /tickets/[id]
+├ ƒ /tickets/[id]/act
+├ ƒ /tickets/[id]/documents/[docId]
+├ ƒ /tickets/[id]/reassign
+├ ƒ /tickets/approvals
+├ ƒ /tickets/approvals/bulk
+├ ƒ /tickets/create
+├ ƒ /tickets/new
+└ ƒ /tickets/uploads
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+== No secrets in the client bundle (T-SEC-017)
+scanned 18 client files against 12 secret values and 6 patterns
+no secrets found
+
+== Real server: first-admin journey and security checks on a fresh database
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Creating 
+ Network gems-omnix-dev_default Created 
+ Network gems-omnix-dev_default Created 
+ Container gems-omnix-dev-db-1 Creating 
+ Container gems-omnix-dev-db-1 Created 
+ Container gems-omnix-dev-pooler-1 Creating 
+ Container gems-omnix-dev-pooler-1 Created 
+ Container gems-omnix-dev-db-1 Starting 
+ Container gems-omnix-dev-db-1 Started 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-db-1 Healthy 
+ Container gems-omnix-dev-pooler-1 Starting 
+ Container gems-omnix-dev-pooler-1 Started 
+ Container gems-omnix-dev-pooler-1 Waiting 
+ Container gems-omnix-dev-db-1 Waiting 
+ Container gems-omnix-dev-pooler-1 Healthy 
+ Container gems-omnix-dev-db-1 Healthy 
+Loaded Prisma config from prisma7.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+1 set password via one-time link                           303 -> http://localhost:3101/login?reset=ok
+2 sign in (admin requires TOTP)                            303 -> http://localhost:3101/login/enrol
+3 confirm password to start enrolment                      303 -> http://localhost:3101/login/enrol
+4 enrolment page shows a key                               yes (32 chars)
+5 confirm code: recovery codes shown once                  10 codes
+6 home links to administration                             1 link(s)
+7 GET /admin/users                                         200
+8 create user (step-up fresh from sign-in)                 303 -> http://localhost:3101/admin/users/<id>?created=1
+9 GET /admin/users lists the new user                      1 match(es)
+10 GET /admin/users without a session                      307 -> http://localhost:3101/login
+PASS  CSP present with a nonce, strict script-src, no unsafe-inline  (default-src 'self'; script-src 'self' 'nonce-YWU2OGZmMjEtOTE5My00Y2JjLWJmYjUtOTg)
+PASS  nonce is fresh per request
+PASS  every <script> carries the request nonce  (11 scripts)
+PASS  frame-ancestors 'none' and X-Frame-Options DENY
+PASS  nosniff, referrer policy, HSTS, permissions policy
+PASS  no X-Powered-By
+PASS  T-SEC-001 own centre 200  (200)
+PASS  T-SEC-001 other centre 404 and identical to a missing one
+PASS  T-SEC-001 own-centre ticket 200  (200)
+PASS  T-SEC-001 hidden-centre ticket 404 and identical to a missing one
+PASS  T-TM the ticket view shows the tiles and only the viewer's centre in the picker  (200)
+PASS  T-TM bad filters, a bad cursor and repeated parameters give 200 with no tickets  (200,200,200)
+PASS  T-AW the approvals page renders its Total card  (200)
+PASS  T-AW a bad cursor or filter gives 200 with nothing waiting  (200,200)
+PASS  T-AW a bulk post from a foreign origin is refused  (403)
+PASS  T-SEC-005 crafted filters show only the in-scope centre
+PASS  T-SEC-005 search cannot find out-of-scope rows
+PASS  T-SEC-014 XSS payload escaped in HTML
+PASS  T-SEC-012 generic 500 with reference, no internals  (500 Something went wrong. Reference: 68ffcd83-b6ea-468d-8ee7-03f)
+PASS  T-SEC-006 export from a foreign origin is refused
+PASS  T-SEC-006 export holds only in-scope rows, as an uncached attachment  (200 1 data rows)
+PASS  T-AUD-001 response X-Request-Id equals the audit row's request_id  (39539a70-8535-4480-83fa-563596a623f4 vs 39539a70-8535-4480-83fa-563596a623f4)
+PASS  T-CM course list readable by any signed-in user  (200)
+PASS  T-CM-005 a non-manager's course page holds no share, in HTML or the RSC payload  (200)
+PASS  T-CM-005 a catalogue manager sees the share in the form
+PASS  T-CM an unknown course and the new-course page are 404 for a non-manager  (404 404)
+PASS  T-CM course create from a foreign origin is refused  (403)
+PASS  T-CC certifications readable by a non-manager, without forms  (200)
+PASS  T-CC certification create from a foreign origin is refused  (403)
+PASS  T-CC a non-manager's course page names the special-case centre in scope
+PASS  T-CO the centre view shows the new fields to a viewer, without forms  (200)
+PASS  T-CO the new-centre page is 404 for a non-manager  (404)
+PASS  T-CO regions and areas readable by a non-manager, without forms  (200)
+PASS  T-CO centre create from a foreign origin is refused  (403)
+PASS  T-FS fee plans readable by a non-manager, without the new-plan form  (200)
+PASS  T-FS an unknown or malformed plan is 404  (404,404)
+PASS  T-FS fee writes from a foreign origin are refused  (403,403,403,403)
+PASS  T-FS fee categories page readable
+PASS  T-MS /admin/catalogue/masters/categories readable by a non-manager, without forms  (200)
+PASS  T-MS /admin/catalogue/years readable by a non-manager, without forms  (200)
+PASS  T-MS /admin/catalogue/centres readable by a non-manager, without forms  (200)
+PASS  T-MS a catalogue manager gets the class forms
+PASS  T-MS unknown master slugs are 404  (404 404)
+PASS  T-MS a centre class change from a foreign origin is refused  (403)
+PASS  T-ADM-005 the rendered form carries the action fields and a form id  ($ACTION_REF_1,$ACTION_1:0,$ACTION_1:1,$ACTION_KEY,admissionId)
+PASS  T-ADM-005 foreign-Origin action post refused by Next, Origin-less refused by the app (404); nothing written  (500 404)
+PASS  T-ADM-005 same-origin post admits and answers 303 to the learner  (303 /students/ad743dda-a47c-41f0-a479-52ac66afa233)
+PASS  no personal data in the redirect
+PASS  T-ADM-006 the same form posted again (before hydration) admits nothing and says so  (200)
+PASS  T-ADM-002 duplicate list shown; the main Admit button comes before every candidate button  (17901 18243)
+PASS  T-ADM-004 own learner 200  (200)
+PASS  T-ADM-004 other centre's learner 404 and identical to a missing one; malformed id 404  (404)
+PASS  T-ADM-004 list shows the own learner only, and has no GET search form
+PASS  T-CB the place page lists the centre's learner, without forms for a viewer  (200)
+PASS  T-CB other centre, malformed or unknown parameters, and no student.view: 404  (404,404,404,404,404)
+PASS  T-CB the home page links Batches for a learner viewer
+PASS  T-CB batch save from a foreign origin is refused  (403)
+PASS  T-LD-001 the admit form defaults nationality to India
+PASS  T-LD-002 own learner's edit page 200 with a version  (200)
+PASS  T-LD-002 a view-only user sees the learner without an edit link, and the edit page is 404  (200 404)
+PASS  T-LD-002 other centre's edit page 404 and identical to a missing one
+PASS  T-LD-002 Origin-less details post refused (404), nothing written  (404)
+PASS  T-LD-002 same-origin details post saves and answers 303 to the learner  (303)
+PASS  T-LD-002 the learner's page shows the saved detail
+PASS  T-FD the learner page shows the Fees row (no plan yet) to a fee.dues holder
+PASS  T-FD a view-only user sees no Fees row and no dues form
+PASS  T-FD a dues post from a foreign origin is refused  (403)
+PASS  T-FR no Collect form while fee collection is switched off
+PASS  T-FR a malformed or unknown receipt is 404  (404,404)
+PASS  T-FR a receipt post from a foreign origin is refused  (403)
+PASS  T-RC a cancel post from a foreign origin is refused  (403)
+PASS  T-FL the Day Book is 404 without ledger.view
+PASS  T-FL the Day Book renders for a ledger.view holder  (200)
+PASS  T-FH the hold list is 404 without fee.hold
+PASS  T-FH the hold list renders for a fee.hold holder  (200)
+PASS  T-FH a hold post from a foreign origin is refused  (403)
+PASS  T-ENQ-005 another centre's enquiry is 404 and identical to a missing one; a malformed id is 404
+PASS  T-ENQ-004 the enrol page for a hidden enquiry is 404 and identical to a missing one  (404 404)
+PASS  T-ENQ-001 Origin-less enquiry post refused (404), nothing written  (404)
+PASS  T-ENQ-001 same-origin enquiry post saves and answers 303 to the record  (303 /enquiries/2?saved=1)
+PASS  T-ENQ-004 the record shows the enquirer and an Enroll link for a user who may admit
+PASS  T-CL the call list renders for an enquiry viewer, without a form  (200)
+PASS  T-CL the logger sees the log form
+PASS  T-CL another centre and a malformed centre are 404  (404,404)
+PASS  T-CL the home page links Calls
+PASS  T-CL a call save from a foreign origin is refused  (403)
+PASS  T-COR-001 the gender correction offers a select
+PASS  T-COR-001 an unknown Admission No shows the handler's own message  (http://localhost:3101/tickets/new?type=2&centre=1&error=ticket.invalid&detail=admission.unknown)
+PASS  T-COR-001 a valid correction is raised  (303)
+PASS  T-COR-004 the approver sees the request and the duplicate check, audited  (1)
+PASS  T-COR-006 a ticket viewer without student.view sees no values
+PASS  no session: scoped page redirects to /login  (307)
+all security smoke checks passed
