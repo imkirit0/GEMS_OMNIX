@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-30, fee schemes and concessions built (Stage 4 F5; S1–S4), fresh-clone CI green 226 tests (last evidence: E-057).
+**Last updated:** 2026-10-30, fee schemes and concessions built (Stage 4 F5; S1–S4), fresh-clone CI green 226 tests, GitHub run 41077529227 green (last evidence: E-057).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.

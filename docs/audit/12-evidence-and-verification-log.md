@@ -2336,6 +2336,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **226 passed + 3 skipped (timing) + 3 todo** (32 files);
   - the build and the bundle scan passed;
   - the admin journey and all security smoke checks passed.
+  - Confirmed on GitHub: run 41077529227 for `355a6bd` succeeded.
 - **Limits and next steps:**
   - PMC for Accounts: AMOUNT ("Constant Amount") as a total per fee type, taken from the latest instalments first (DD-2); targets by course and optional centres (DD-3); `fee.concession` not sensitive (DD-7); the 92-day register (DD-9).
   - Changing or removing a scheme after assignment needs a ticket (D-FEE-2); its shape is recorded, not built. Variable natures and category/region targeting are out of scope; the legacy import path is recorded and paused.
