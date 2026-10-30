@@ -2063,3 +2063,56 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/receipts/[id]/page.tsx | 32814a2880ed914351d42f245682bcecd2003697e47145d62fe233d2dbea3383 |
 | tests/fee-receipts.test.ts | 10379fbc8627f042b23d15a66deb38122cd16eb1106271155c59125bd05083a3 |
 | scripts/etl/reset.sql | 946e37b644be3546dfe55069a847c746d3d6de5f551f70db81652375f9c770c6 |
+
+## E-053 Receipt cancellation, same day, built (Stage 4, F4a; WF4; R-065) (2026-10-30)
+- **Request:** "DO THE NEXT STEP" (2026-10-30), after F3 (E-052). This is the next piece in order, because collection cannot go live without a way to cancel. DD-1…DD-7 and the build approval are the recommended options under the owner's standing instruction (2026-10-29), not an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel: zoom-out Z1–Z7, comprehension C1–C10, critic D1–D10 with 5 majors. Steps 8 (Z8-1…6) and 9 (R1–R10) followed. Every finding is resolved in `docs/designs/receipt-cancel/receipt-cancel.md`, and the reports are in the same folder. There were no owner items.
+  - **Found at review:**
+    - a collect form resubmitted after a cancel would have been shown as a payment (D1);
+    - only the app checked step-up (D2);
+    - an update that matched 0 rows would have been audited as done (D3);
+    - "today" was computed on two clocks (D5);
+    - F3's backfill gate did not cover cancellations (Z1).
+  - F3 DD-5 is amended: the backfill rule must cover cancellations.
+- **Built:**
+  - **Migration 0028.** `receipt` gains `cancelled_at`, `cancelled_by` and `cancel_reason`, with the check `receipt_cancel_check`. The new guard `receipt_cancel_guard` replaces the update half of `receipt_no_update_delete`. It:
+    - takes the registration lock;
+    - allows only ACTIVE → CANCELLED;
+    - allows it only on the receipt's own day, in IST, by the database clock;
+    - requires a fresh step-up whenever a session is set;
+    - stamps who and when;
+    - freezes every other column.
+
+    `receipt_no_delete` keeps deletes refused. The update policy is limited to `fee.receipt.cancel` at its centres. The migration adds the sensitive permission `fee.receipt.cancel`. It grants `update (status, cancel_reason)` only.
+  - **`cancelReceipt`.** The order is: gate, id, reason, a scoped pre-flight, then the update, which must touch exactly 1 row. The guard alone decides. The action is audited with before, after (lines, registration) and the reason. A late attempt is audited as FAILED.
+  - **`collectFee`.** A replay of a cancelled receipt's key is refused.
+  - **`getReceipt`.** It gains `cancelledAt`, `cancelReason` and `canCancel`, computed in SQL. The learner page marks cancelled receipts.
+  - **Pages and routes.** The receipt page has a banner and a Cancel form. The route `POST /receipts/[id]/cancel`: a resubmitted cancel lands on the receipt.
+  - Outstanding comes back through `fee_due_balance`, and no line changes. This revises audit 07 F6 "reversed allocations".
+- **Tests:** `tests/receipt-cancel.test.ts`, T-RC-001…003. They include a collection that waits on the cancel's lock and then uses the restored money. The fixtures gain role 31 `fee_cancel` (sensitive) and `tok-feeR`. T-FR-002's owner-update case and T-AUD-009 are updated. The real server has 1 new check.
+- **Mutation checks** (`evidence/mutation-receipt-cancel-2026-10-30.txt`): 34 in total (22 code, 12 database). 31 were CAUGHT and 3 are equivalent. 3 were MISSED at first; after the tests were tightened, all 3 are CAUGHT.
+- **Checks:** a fresh clone of `575b255`, with the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0:
+  - no drift and 0 type errors;
+  - **213 passed + 3 skipped (timing) + 3 todo** (29 files);
+  - the build and bundle scan passed;
+  - the admin journey and all security smoke checks passed (`evidence/ci-receipt-cancel-2026-10-30.txt`).
+- **Limits and next steps:**
+  - There is no reversing journal until F1 (F3 DD-5 keeps collection off).
+  - After-day cancellation goes by ticket: its own piece, with credit-note handling across GST periods.
+  - Holders of `fee.receipt.cancel` need TOTP.
+  - Not yet on Supabase (migrations 0012–0028).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0028_receipt_cancel/migration.sql | 1ec6974fe451367ac147a87066623b8b0d04231e451d60bf6075c9db7ece3234 |
+| prisma/schema.prisma | ff3a4cb785f23fa574ff68ce6d27ab3786d85b150ecd7f02d021741da5812e59 |
+| src/server/receipts.ts | 36c23fab5fe769c5120862d0dae39ec315732eadb677cc15a754186751fc939c |
+| src/server/dues.ts | 463d2a7f7617cfc33bf9ac26df78291a48c7d1f866f0ba091243cb223cb5829e |
+| src/server/admin-http.ts | 3602557ad343805ad019de98b5200193bcd5e4ffdd9fad85ff0c14707db3632a |
+| app/receipts/[id]/page.tsx | f50138c80712957549400975e1dd7c5246cff9927580334739f110776dff1f96 |
+| app/receipts/[id]/cancel/route.ts | d78c231a3a87ab1efa7e356bd21b0fc0b46ccda05781bf767215558ff9a5c069 |
+| app/students/[personId]/page.tsx | 734bc8086d2657a1b23e5cae43e8f73655f68f866f6192eae38f927f05502967 |
+| tests/receipt-cancel.test.ts | 54aa442288081ca2d57d054926168724f1b0e4502b9bc88b8bb83e696258e96f |
+| tests/fee-receipts.test.ts | 6024f11394bfe655191a373e670a449a9bbbe96eb194132985a7e7d411079531 |
