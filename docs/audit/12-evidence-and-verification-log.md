@@ -2306,3 +2306,61 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/page.tsx | 8689d1c06ce41c9dfabdb1f739507c0d6de0d76f77710e061c5ee728f10183df |
 | tests/fee-holds.test.ts | e61d0c52d3a5631900843636ad9c6648f3efb6ab6dbb76a725310a7f28f756eb |
 | scripts/etl/reset.sql | 6e7d2fb7e6f4b82f6f26e3c4e3b379283e8fd8d980bc8bb26fdc36b71d4e7fcf |
+
+## E-057 Fee schemes and concessions built (Stage 4, F5; WF5; R-053, R-054, R-060, R-012.07 part; D-SCH-1/2/3) (2026-10-30)
+- **Request:** the owner's standing instruction of 2026-10-30 ("keep working … agree on the recommended option … finish everything all steps"). DD-1…DD-12 and the build approval were taken as the recommended options under that instruction, not as an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel (zoom-out Z1–Z5, comprehension C1–C13, critic D1–D13; no blockers). Steps 8 (Z8-1…7) and 9 (R1–R13; one blocker) followed. Every finding is resolved in `docs/designs/fee-schemes/fee-schemes.md`, and the reports are in the same folder.
+  - **Found at review:**
+    - Under row security, `for share` on a scheme passes only the UPDATE policy, so every assignment by a `fee.concession` holder would have failed as "not live" (R1). Fixed with the definer `fee_scheme_lock`, as `ticket_type_lock`.
+    - The cap at owed depended on payment order, and AMOUNT applied per instalment (D1, D2). Now assignment needs nothing paid, and AMOUNT is a total per fee type taken from the latest dues first, capped at gross.
+    - Maker and checker were checked only by the app (D3, D4). Now the database checks the permission, the step-up and the persons on every transition; every edit, including a part edit, stamps the editor (Z8-1, R2).
+    - Concessions could be inserted later, outside the lock (D5). Now only in the assignment's transaction, under the lock, with the amount stamped by the database (D7).
+- **Built:**
+  - **Migration 0032.**
+    - Tables `fee_scheme`, `fee_scheme_rule`, `fee_scheme_course`, `fee_scheme_centre`, `fee_scheme_assignment` (one per registration, unique) and `fee_concession`, with named checks and restricting foreign keys.
+    - `fee_scheme_guard`: DRAFT on insert; draft edits by `scheme.manage` change only name and validity and stamp the editor; DRAFT→LIVE by `scheme.approve` with a fresh step-up, by someone who neither made nor last edited it, with a rule and a course, not expired; LIVE→RETIRED with a reason; nothing else. Each refusal has its own constraint name; a missing permission is 42501.
+    - `fee_scheme_part_guard` (rules, courses, centres): drafts only; stamps the editor through `fee_scheme_guard`.
+    - `fee_scheme_assignment_guard`: the `fee-dues:` lock; the registration ACTIVE at its centre; the scheme LIVE on `admitted_on`, for the course and centre; nothing paid on any plan due. A deferred check refuses an assignment that gives nothing.
+    - `fee_concession_guard`: the lock; the assignment's own transaction; a plan due of its registration with a rule; the amount stamped (PERCENT half up per due; AMOUNT latest first, capped); a zero share skipped.
+    - Assignments and concessions are append-only. `fee_due_balance` gains `concession` (last column); outstanding, owed and collectable subtract it.
+    - RLS: live schemes for everyone, drafts for scheme holders; parts written by `scheme.manage`; assignments and concessions read with `student.view` and written with `fee.concession`. Permissions `scheme.manage`, `scheme.approve` (both sensitive) and `fee.concession`.
+  - **`schemes.ts`**: list, detail, create, edit, rule, courses, centres, delete, approve, retire, each through `adminWrite` (step-up) and audited.
+  - **`concessions.ts`**: `assignScheme` (audited `fee.concession.assign` with the count and total), `schemesFor`, `concessionCentres`, `concessionRegister` (up to 92 days, by scheme, with the total).
+  - **`duesForPerson`**: `concession` per due; `scheme` and `canConcede` per registration (the guard's own "nothing paid" rule).
+  - **Pages and routes:** `/admin/fees/schemes` and `/admin/fees/schemes/[id]`; `POST /students/[personId]/scheme`; `/fees/concessions`; a Concession column and scheme picker on the learner page; home and fees-index links.
+  - **ETL reset** clears assignments and concessions.
+- **Tests:** `tests/fee-schemes.test.ts` (T-SC-001…004). Fixtures gain roles 34–36 and tokens `tok-schM`, `tok-schA`, `tok-feeK`. T-RLS-002, T-RLS-005, T-AUD-009 (catalogue and scans) and T-FD-001 are updated. The real server runs 4 new checks. Audit 09 lists T-SC-001…004; the matrix maps them to R-053, R-054, R-060 and R-012.07.
+- **Mutation checks** (`evidence/mutation-fee-schemes-2026-10-30.txt`): 77 in total (DB functions, view, policies and server code). 76 CAUGHT, 1 equivalent (insert without the manage check: row security refuses the same insert). 3 were MISSED at first and are now CAUGHT by added tests; 1 was aimed at the wrong test.
+- **Checks:** a fresh clone of `46f46c2`, using the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0 (`evidence/ci-fee-schemes-2026-10-30.txt`):
+  - no drift;
+  - **226 passed + 3 skipped (timing) + 3 todo** (32 files);
+  - the build and the bundle scan passed;
+  - the admin journey and all security smoke checks passed.
+- **Limits and next steps:**
+  - PMC for Accounts: AMOUNT ("Constant Amount") as a total per fee type, taken from the latest instalments first (DD-2); targets by course and optional centres (DD-3); `fee.concession` not sensitive (DD-7); the 92-day register (DD-9).
+  - Changing or removing a scheme after assignment needs a ticket (D-FEE-2); its shape is recorded, not built. Variable natures and category/region targeting are out of scope; the legacy import path is recorded and paused.
+  - The scheme page shows other users' names only to holders of `rbac.view` (others see ids), as the hold history does.
+  - Migrations 0012–0032 are not yet on Supabase.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0032_fee_schemes/migration.sql | 62a272b22f01fcd39535c824700ba1da88a590bc409e011e48ccb5a11f99d03b |
+| prisma/schema.prisma | 36c0ed84559b2486d44bf73e6ce4dfa39d6a687fe044c25cec3fc7dffea282e4 |
+| src/server/schemes.ts | 63210c5f76e8c86ff2646703e6c78227d3d487065896a84131990a9f7b51a930 |
+| src/server/concessions.ts | a8d8f36fe4abddc6d413726f9610818347b9719df702b81fe701e73361cfcb9f |
+| src/server/dues.ts | 92a977f54975d8f6b22a2ab6a2becba46dbcef71aa8d4d4ed94dec0445827071 |
+| src/server/admin-http.ts | e6f22d6f3cb8feee4ab4c304ae636edd6ccb31191a6b267dfacf1c383aec2083 |
+| app/admin/fees/schemes/page.tsx | 9068d9ab62a779a57591960fb51b6eb503a696db380ae38d769cccd8b6f934db |
+| app/admin/fees/schemes/[id]/page.tsx | c0383375187aa50718661de5e21a7a8a307c03bd70a73fee3d8fb7fdc6c72e8f |
+| app/admin/fees/schemes/[id]/save/route.ts | 487169c5b2b956ceeda96920841ca468ddde090846924de853c439077473c064 |
+| app/admin/fees/schemes/create/route.ts | 9d4f7a010494fa0148fe67d3f0d89987770e652bc3a96ffa509d2911a0d2dad4 |
+| app/fees/concessions/page.tsx | bd3a46c2d98c7552b74dab53805b8a3588eda2ed31887301c483b020d806bd48 |
+| app/students/[personId]/scheme/route.ts | ba366a13a064838a2ead996b3b74084ad6dffd141a1ef0525d55520cb0162030 |
+| app/students/[personId]/page.tsx | 895268cd00628145bf804052597ca6270d09dc5daf8ff7a0faff0bdd8a802683 |
+| app/page.tsx | 1b7de536094243d4ada78a29212af50d6e6dd43e3e48bc260ed5de58ad933994 |
+| tests/fee-schemes.test.ts | de311cebd7d6317df640126b997cf39f5773b29dee7a3bc7070253ff211ef65c |
+| scripts/etl/reset.sql | 6ce698f2590c75e598f25494dedebf3da00bea3e23d8d9c4dbb16e33cdbbcbd1 |
+| evidence/ci-fee-schemes-2026-10-30.txt | bfda20199e9cf24dd66b59e929d5277a1bf076e7b341ad87b9b37ae3f7d7bb7c |
+| evidence/mutation-fee-schemes-2026-10-30.txt | a263605375358b24578e9afd68cb0156f37b31fe453022b02c79268c4ec1284c |
