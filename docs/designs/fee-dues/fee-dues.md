@@ -1,90 +1,99 @@
 # Fee dues (Stage 4, F2; WF4)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below). DD-1…DD-7 are recommended options under the owner's instruction ("yes do the next step", 2026-10-30).
+*   **Status:** Approved. This is the recommended option, taken under the owner's standing instruction of 2026-10-29 and "yes do the next step" of 2026-10-30. It is not an owner signature.
+*   **Reviews:** EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md)), step 8 ([`zoom_out_step8_report.md`](zoom_out_step8_report.md)) and step 9 ([`readiness_report.md`](readiness_report.md)). Every finding is resolved below.
 *   **Date:** 2026-10-30
 
-Evidence classes follow `docs/audit/00-README.md`. Input: [`input-brief.md`](input-brief.md). Financial rules: `docs/audit/07-financial-invariants-and-transactions.md`. Fee plans: `docs/designs/fee-structure/fee-structure.md` (E-050).
+Evidence classes follow `docs/audit/00-README.md`. Input: [`input-brief.md`](input-brief.md). Financial rules: `docs/audit/07-financial-invariants-and-transactions.md`, as revised by `docs/audit/revisions/v1.6-fee-dues-model.md` (Z6, Z8-1). Fee plans: `docs/designs/fee-structure/fee-structure.md` (E-050).
 
 --------------------------------------------------------------------------------
 
 ## Overview
 
-A learner owes money only once dues exist. This piece copies one registration's dues from the published fee plan that prices its course at its centre in its year. There is one due per fee type and instalment, holding the amount, the due date and the currency.
+A learner owes money only once dues exist. This piece copies one registration's dues from the published fee plan that prices its course, at its centre, in its year. There is one due per fee type and instalment, holding the amount, the due date and the currency.
 
-A due is a gross-only, immutable row. Later pieces add their own append-only rows and never rewrite a due (DD-3):
-*   collection (F3): allocations;
-*   corrections (F4): holds and adjustments;
-*   schemes (F5): concessions.
+A due is an immutable row holding only the gross amount. Later pieces never rewrite a due (DD-3). Each adds its own append-only rows that reference `fee_due.id`:
+*   collection (F3) adds allocations;
+*   corrections (F4) add holds and adjustments;
+*   schemes (F5) add concessions.
 
-Outstanding is computed: gross − Σ concessions ± Σ adjustments − Σ active allocations (audit 07 F4/F17, now without columns on the due).
+Outstanding is computed: gross − Σ concessions ± Σ adjustments − Σ active allocations.
 
 ## Goals
 
-*   **G1:** a holder of `fee.dues` (and `student.view`) at the registration's centre creates the dues of an ACTIVE registration at an active centre. The dues come from the plan that `resolvePlan` returns. This happens once per registration, and the creation is audited [T-FD-001].
-*   **G2:** the database proves that each due belongs to its registration (G2 is restated after C1/D1):
+*   **G1:** A user holding `fee.dues` and `student.view` at the registration's centre can create dues for an ACTIVE registration at an active centre. The dues come from the plan that `resolvePlan` returns. This happens once per registration and is audited [T-FD-001].
+*   **G2:** The database proves that each due belongs to its registration. Every check fails closed, and a due never changes or disappears [T-FD-002]. The checks are:
     *   the plan is PUBLISHED;
-    *   the plan prices the registration's course at its centre, or at its centre's class, in the registration's year;
-    *   the amount and due date equal the plan line and its instalment, and the currency equals the plan's;
+    *   the plan prices the registration's course and year, at its centre or at its centre's class;
+    *   the amount and due date equal the plan line and its instalment;
+    *   the currency equals the plan's;
     *   the registration is ACTIVE;
-    *   the registration has no dues from another plan.
-
-    Every check fails closed. A due never changes or disappears [T-FD-002].
-*   **G3:** anyone with `student.view` at the centre sees the dues on the learner page, with a total per registration [T-FD-001, smoke].
-*   **G4:** the route checks the origin. A registration that does not belong to the person in the URL, or that the caller cannot see, gives 404 [T-FD-003].
+    *   the registration has no dues from another plan, enforced under a lock that the guard takes.
+*   **G3:** Anyone holding `student.view` at the centre sees the dues on the learner page, with a total per registration [T-FD-001, smoke].
+*   **G4:** The route checks the origin. A registration that does not belong to the person in the URL, or that is outside the caller's `student.view` scope, returns 404 [T-FD-003].
 
 ## Non-Goals
 
-*   Ad-hoc dues: F3 creates them with their receipt. The table already allows them (DD-7), but F2's guard refuses them.
-*   Concessions (F5); hold and adjustments (F4); fines (D-FEE-6); balance carry-forward (R-063); bulk creation; import (paused).
-*   Dues inside `admit()`, because admission must not depend on a plan.
-*   `centre.currency` (Z3). With every plan in INR, the check could never fail. It arrives with the D-CUR-1 piece that lets a currency be set.
+*   **Ad-hoc dues.** DD-7 records the table shape F3 will use.
+*   **Other fee changes:** concessions (F5), holds and adjustments (F4), fines (D-FEE-6) and carry-forward (R-063).
+*   **Bulk creation** and **import** (import is paused).
+*   **Dues created inside `admit()`.** Admission must not depend on a plan.
+*   **`centre.currency`.** Every plan is in INR, so a currency check could never fail. This arrives with D-CUR-1 (Z3).
 
 ## Technical Plan
 
 ### Data model (migration `0026_fee_dues`)
 
-The head comes from `prisma migrate diff`. The `schema.prisma` edits (C10) are:
-*   `Registration` gains `@@unique([id, centreId])` and `dues FeeDue[]`;
-*   `FeePlan`, `FeeType`, `FeeCaption` and `AppUser` gain back-relations;
-*   there is a new model `FeeDue`.
+The head comes from `prisma migrate diff`.
 
-The `app.registration` key `registration_id_centre_id_key` is new. It conflicts with nothing (C-confirmed).
+**`schema.prisma` edits:**
+*   `Registration` gains `@@unique([id, centreId])` and `dues FeeDue[]`.
+*   `FeePlan`, `FeeType`, `FeeCaption`, `FeePlanLine` and `AppUser` each gain a `dues FeeDue[]` back-relation. The one on `AppUser` is named.
+*   A new model `FeeDue`, mapped to `fee_due`:
+    *   `id BigInt @id @default(autoincrement())`;
+    *   `createdAt @default(now())`;
+    *   relation `registration`, fields `[registrationId, centreId]` → `[id, centreId]`;
+    *   relation `line`, fields `[planId, feeTypeId, captionId]` → `[planId, feeTypeId, captionId]`;
+    *   both of those use `onDelete: Restrict, onUpdate: Restrict` (R3);
+    *   plain relations to `plan`, `feeType`, `caption` and `creator`;
+    *   `@@unique([registrationId, feeTypeId, captionId])`.
 
-**`app.fee_due`:**
+The new key `registration_id_centre_id_key` on `app.registration` conflicts with nothing.
 
-| Column | Type | Null | Notes |
-|---|---|---|---|
-| `id` | bigserial | no | primary key; F3 allocations reference it |
-| `registration_id` | uuid | no | composite FK `(registration_id, centre_id)` → registration(id, centre_id), restrict |
-| `centre_id` | int | no | |
-| `source` | text | no | `PLAN` or `ADHOC`, default `'PLAN'` (DD-7) |
-| `plan_id` | int | yes | FK → fee_plan, restrict |
-| `fee_type_id` | int | no | FK → fee_type, restrict |
-| `caption_id` | int | yes | FK → fee_caption, restrict |
-| `due_on` | date | no | |
-| `gross` | numeric(14,2) | no | |
-| `currency` | char(3) | no | |
-| `created_at` | timestamptz | no | stamped by the guard |
-| `created_by` | uuid | no | FK → app_user; stamped by the guard |
+**`app.fee_due`.** Every column is NOT NULL (Z8-2).
 
-**Keys:**
-*   A composite FK `(plan_id, fee_type_id, caption_id)` → `fee_plan_line(plan_id, fee_type_id, caption_id)`, restrict. With MATCH SIMPLE it applies to PLAN rows only.
-*   Unique `(registration_id, fee_type_id, caption_id)`. NULL captions are distinct, so ADHOC rows may repeat.
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigserial | Primary key. F3 allocations reference it. |
+| `registration_id` | uuid | Composite FK `(registration_id, centre_id)` → registration(id, centre_id). |
+| `centre_id` | int | |
+| `plan_id` | int | FK → fee_plan. |
+| `fee_type_id` | int | FK → fee_type. |
+| `caption_id` | int | FK → fee_caption. |
+| `due_on` | date | |
+| `gross` | numeric(14,2) | Named check `fee_due_gross_check`: `gross >= 0`. |
+| `currency` | char(3) | Must equal the plan's currency (guard). The format is already checked by `fee_plan_currency_check` (Z8-6). |
+| `created_at` | timestamptz | Stamped by the guard. |
+| `created_by` | uuid | FK → app_user. Stamped by the guard. |
 
-**Named checks:**
-*   `fee_due_gross_check`: `gross >= 0`;
-*   `fee_due_currency_check`: `currency ~ '^[A-Z]{3}$'`;
-*   `fee_due_source_check`: `source in ('PLAN', 'ADHOC') and ((source = 'PLAN') = (plan_id is not null and caption_id is not null))`.
+**Keys.** Every FK is `restrict`.
+*   Composite FK `(plan_id, fee_type_id, caption_id)` → `fee_plan_line(plan_id, fee_type_id, caption_id)`.
+*   Unique key `(registration_id, fee_type_id, caption_id)`.
 
-**Guard `fee_due_guard`, BEFORE INSERT.** It has invoker rights and holds rules only, so it binds every role. The ifs are nested and every comparison is `is distinct from`, so a missing or hidden source row fails closed (D2, C3). Each message carries its constraint name.
+**Guard `fee_due_guard` (BEFORE INSERT).**
+*   It runs with invoker rights and holds rules only.
+*   Its ifs are nested, and every comparison uses `is distinct from`.
+*   When a source row is missing or hidden, it raises.
+*   Every raise uses `errcode = '23514'` with `constraint "<name>"` in the message, as in 0025.
 
-1.  `created_at := now()` and `created_by := coalesce(app.session_user_id(), new.created_by)`.
-2.  `if new.source <> 'PLAN'`: raise `fee_due_source_guard`. ADHOC rows wait for F3.
-3.  It reads the registration with its year and course, refusing with `fee_due_match_guard` when no row comes back:
+Its steps run in this order:
+1.  Take the lock: `perform pg_advisory_xact_lock(hashtext('fee-dues:' || new.registration_id::text))`. The app takes the same key (Z8-3).
+2.  Stamp the row: `created_at := now()` and `created_by := coalesce(app.session_user_id(), new.created_by)`.
+3.  Read the registration:
 
     ```sql
-    select r.status::text, co.id as course_id, a.academic_year, ce.centre_class_id
+    select r.status::text, co.id, a.academic_year, ce.centre_class_id
     from app.registration r
       join app.admission a on a.id = r.admission_id
       join app.course co on co.code = r.course_code
@@ -92,97 +101,101 @@ The `app.registration` key `registration_id_centre_id_key` is new. It conflicts 
     where r.id = new.registration_id and r.centre_id = new.centre_id
     ```
 
-    *   The year is the admission's. That holds while registrations are created only inside `admit()` (D11). If a course can later join an existing admission, `registration` needs its own year.
-    *   A status other than ACTIVE raises `fee_due_registration_guard` (D7).
-4.  It reads the plan, refusing when it is not found or not PUBLISHED (`fee_due_plan_guard`). Published plans are visible to every role:
+    No row raises `fee_due_match_guard`. A status other than ACTIVE raises `fee_due_registration_guard` (D7). The year is the admission's year, which holds while registrations are created only inside `admit()` (D11).
+4.  Read the plan. Every role can read published plans.
 
     ```sql
     select status, course_id, academic_year, centre_id, centre_class_id, currency
     from app.fee_plan where id = new.plan_id
     ```
 
-5.  **The plan is the registration's (C1, D1)**, otherwise `fee_due_match_guard`:
-    *   `plan.course_id` is not distinct from the registration's course;
-    *   `plan.academic_year` is not distinct from its year;
-    *   the plan matches its centre or its class: `plan.centre_id = new.centre_id or (plan.centre_id is null and plan.centre_class_id is not distinct from ce.centre_class_id and ce.centre_class_id is not null)`.
+    A plan that is not found, or not PUBLISHED, raises `fee_due_plan_guard`.
+5.  **The plan belongs to the registration (C1, D1).** The plan's course and year must not be distinct from the registration's. Its centre must also match: `plan.centre_id = new.centre_id or (plan.centre_id is null and ce.centre_class_id is not null and plan.centre_class_id = ce.centre_class_id)`. Otherwise it raises `fee_due_match_guard`. Choosing the current version stays in the app (`resolvePlan`).
+6.  **The copy is exact (R6).**
 
-    Choosing the current version stays in the app: `resolvePlan` picks it, and the database proves only that the plan is a valid one.
-6.  **The copy is exact**, otherwise `fee_due_match_guard`. Each of these must not be distinct:
-    *   `new.gross` and the line's amount;
-    *   `new.due_on` and the caption's `due_on`;
-    *   `new.currency` and `plan.currency`.
-7.  **One plan per registration (C11)**: `exists (select 1 from app.fee_due d where d.registration_id = new.registration_id and d.plan_id is distinct from new.plan_id and d.source = 'PLAN')` raises `fee_due_plan_guard`.
+    ```sql
+    select l.amount, c.due_on
+    from app.fee_plan_line l join app.fee_caption c on c.id = l.caption_id
+    where l.plan_id = new.plan_id and l.fee_type_id = new.fee_type_id and l.caption_id = new.caption_id
+    ```
 
-**Immutability:** `fee_due_no_update_delete` and `fee_due_no_truncate` execute `app.ticket_immutable()`, as `call_log` does. The test fixtures truncate under replica.
+    It raises `fee_due_match_guard` if no row comes back, or if `new.gross`, `new.due_on` or `new.currency` is distinct from the line's amount, the caption's due date or `plan.currency`.
+7.  **One plan per registration (C11).** If `exists (select 1 from app.fee_due d where d.registration_id = new.registration_id and d.plan_id <> new.plan_id)`, it raises `fee_due_plan_guard`. Under step 1's lock this check is safe against concurrent inserts. Together with the unique key, "once per registration" becomes a database invariant (D9).
 
-**Centre transfers (D6).** An admission's centre can move through `ON UPDATE CASCADE` into `registration.centre_id`. That move is aborted by this table's composite FK (restrict) once the registration has dues. This is intended: a centre transfer is a new registration (status `TRANSFER`), never an in-place move of money. T-FD-002 covers it.
+**Immutability.** `fee_due_no_update_delete` (a row trigger) and `fee_due_no_truncate` (a statement trigger) execute `app.ticket_immutable()`, as `call_log` does (0022).
 
-**RLS:** ENABLE and FORCE. T-RLS-002 applies, so the table has four commands:
-*   `select`: `centre_id = any ((select app.scoped_centre_ids('student.view'))::int[])`;
-*   `insert`: `centre_id = any ((select app.scoped_centre_ids('fee.dues'))::int[])`;
-*   `update` and `delete`: `using (false)`.
+**Centre transfers (D6).** Moving an admission's centre cascades into `registration.centre_id`. Once dues exist, this table's composite FK aborts that move. This is intended: a centre transfer is a new registration (`TRANSFER`), never an in-place move of money. T-FD-002 tests it as the owner, because gems_app cannot update admission.
 
-**Permission:** `('fee.dues', 'Create a learner''s fee dues from the fee plan', false)` plus the `system_admin` grant.
+**RLS.** ENABLE and FORCE, with policies for four commands (T-RLS-002):
 
-**Grants:**
-*   `select, insert (registration_id, centre_id, plan_id, fee_type_id, caption_id, due_on, gross, currency) on app.fee_due`. `source` keeps its default.
+| Command | Policy |
+|---|---|
+| `select` | `centre_id = any ((select app.scoped_centre_ids('student.view'))::int[])` |
+| `insert` | the same, with `fee.dues` |
+| `update`, `delete` | `using (false)` |
+
+**Permission.** `('fee.dues', 'Create a learner''s fee dues from the fee plan', false)`, plus the `system_admin` grant.
+
+**Grants.**
+*   `select, insert (registration_id, centre_id, plan_id, fee_type_id, caption_id, due_on, gross, currency)` on `app.fee_due`.
 *   `usage` on its sequence.
 
-**The lock contract for F3 (Z1).** `select … for update` on dues needs UPDATE privilege and an update policy, and dues have neither. Every writer of a registration's money therefore takes `pg_advisory_xact_lock(hashtext('fee-dues:' || registrationId))`, here and in F3/F4/F5. "Once per registration" is enforced by the app under that lock; the database enforces once per line and one plan per registration (D9).
+**Lock contract for F3, F4 and F5 (Z1).** gems_app cannot lock dues with `FOR UPDATE`. Instead, every writer of a registration's money first takes `pg_advisory_xact_lock(hashtext('fee-dues:' || registrationId))`. The guard takes the same lock.
 
-**Order (D5).** The dues are inserted `order by c.sort_order, c.due_on, t.sort_order, t.code`. F3 allocates oldest first by `(due_on, id)` (D-FEE-4).
+**Order (D5).** Dues are inserted `order by c.sort_order, c.due_on, t.sort_order, t.code`. F3 allocates oldest first by `(due_on, id)`.
 
 ### Server (`src/server/dues.ts`)
 
 ```ts
-type DueRow = { id: string; feeTypeCode: string; feeTypeName: string; captionName: string; dueOn: string; gross: string; currency: string };
-type RegistrationDues = { registrationId: string; centreId: number; courseCode: string; courseName: string; academicYear: string; status: string;
-  dues: DueRow[]; total: string | null;            // null when there are no dues
-  planId: number | null;                           // the dues' plan when dues exist; else the plan that would apply now; null when none
-  canCreate: boolean; noPlan: boolean };           // C8, Z4
-duesForPerson(session, personId): Promise<RegistrationDues[]>
-createDues(session, personId, registrationId): Promise<{ count: number; total: string }>   // audit action fee.dues.create
-createDuesTx(tx, registrationId, centreId): Promise<{ planId; version; count; total }>   // Z7: no auth; for F3 and bulk later
+type DueRow = { id: string; feeTypeName: string; captionName: string; dueOn: string; gross: string; currency: string };
+type RegistrationDues = { registrationId: string; dues: DueRow[]; total: string | null; canCreate: boolean; noPlan: boolean }; // Z8-5, R7
+export duesForPerson(session, personId): Promise<RegistrationDues[]>
+export createDues(session, personId, registrationId): Promise<{ count: number; total: string }>   // audit action fee.dues.create
+createDuesTx(tx, registrationId, centreId): Promise<{ planId; version; count; total }>   // not exported (Z8-4)
 ```
 
 **`createDues`:**
-1.  **Pre-flight (C2).** Both ids must be UUIDs. A `withScope` read must find the registration:
+
+1.  **Pre-flight (C2, R1, R2).** Both ids must be UUIDs. A `withScope` read must return the registration's centre:
 
     ```sql
     select r.centre_id from app.registration r join app.admission a on a.id = r.admission_id
     where r.id = $reg and a.person_id = $person
+      and r.centre_id = any ((select app.scoped_centre_ids('student.view'))::int[])
     ```
 
-    It runs under RLS. When there is no row, it throws `RbacError("notfound")`.
-2.  **The action.** `scopedAction({ action: "fee.dues.create", permission: "fee.dues", centreId, targetType: "registration", targetId })` runs the following, all inside `duesDb`:
-    1.  `authorize(tx, "student.view", centreId)`;
-    2.  the trading gate (`centreId: centre is not active`);
-    3.  `createDuesTx`.
-3.  **`createDuesTx`:**
-    1.  Take the advisory lock.
-    2.  Read the registration with `join app.course co on co.code = r.course_code` and `join app.admission a` (C4). A status other than ACTIVE throws `registrationId: not active`.
-    3.  If the registration already has dues, throw `RbacError("duplicate", …, "fee.dues.exists")`.
-    4.  `resolvePlan`. If it returns null, throw `RbacError("invalid", …, "fee.dues.noplan")`.
-    5.  Read the plan's version.
-    6.  Insert from the plan's lines in the D5 order.
-    7.  Return the count and `sum(gross)::text`.
-4.  **Audit.** `{ after: { planId, version, count, total } }`. Fee amounts tied to a learner are personal financial data, shown and audited like other learner data (D10; DD-5 is PMC).
-5.  **`duesDb` (C7)** maps errors as follows:
+    If no row comes back, it throws `PersonError("notfound")`.
+2.  **The scoped action.** It runs `scopedAction({ action: "fee.dues.create", permission: "fee.dues", centreId, targetType: "registration", targetId: registrationId })`. Inside `duesDb`, it does three things:
+    1.  Calls `authorize(tx, "student.view", centreId)`.
+    2.  Applies the trading gate (`centreId: centre is not active`).
+    3.  Calls `createDuesTx`.
+3.  **`createDuesTx`.** In order, it:
+    1.  Takes the advisory lock, with the key built in TS.
+    2.  Reads the registration, joining the course on its code and the admission for the year (C4).
+    3.  Throws `registrationId: not active` if the registration is not ACTIVE.
+    4.  Throws `RbacError("duplicate", …, "fee.dues.exists")` if any dues already exist.
+    5.  Calls `resolvePlan`. If it returns null, it throws `RbacError("invalid", …, "fee.dues.noplan")`.
+    6.  Reads the plan's version.
+    7.  Inserts one due per plan line, in the D5 order.
+    8.  Returns the count and `sum(gross)::text`.
+4.  **Audit detail.** `{ after: { planId, version, count, total } }`. DD-5 is PMC (D10).
+5.  **`duesDb` (C7).** It maps database errors as follows:
 
-    | Error | Becomes |
+    | SQLSTATE | Becomes |
     |---|---|
     | 23505 | `fee.dues.exists` |
-    | 23514 (guards) or 23503 (keys) | `fee.dues.mismatch` |
+    | 23514 or 23503 | `fee.dues.mismatch` |
     | 42501 | `Forbidden` |
 
-**`duesForPerson` (C6, C8).** It runs in one `withScope`. It reads the person's registrations visible under `student.view`, ordered `a.created_at, r.created_at`. For each registration:
-*   **its dues**, ordered `(due_on, id)`, with each amount as `gross::text` and the total as `sum(gross)::text`;
-*   **`canCreate`**: no dues, the registration is ACTIVE, the centre is ACTIVE, and `app.has_permission('fee.dues', r.centre_id)`;
-*   **`noPlan`**: computed only when `canCreate` is true, as `resolvePlan(...) is null`. The button is then shown, or "No fee plan for this course yet".
+**`duesForPerson`.** It runs one `withScope`, using the same `scoped_centre_ids('student.view')` filter on registrations as `getPerson` (R2). For each registration it returns:
+*   **`dues`**, ordered `(due_on, id)`, with `gross::text`.
+*   **`total`**, as `sum(gross)::text`.
+*   **`canCreate`**, which is true when all of these hold: there are no dues, the registration is ACTIVE, the centre is ACTIVE, and `app.has_permission('fee.dues', r.centre_id)`.
+*   **`noPlan`**, which is `resolvePlan(...) is null`. It is computed only when `canCreate` is true.
 
-`createDues` reports every other refusal itself (Z4).
+**`adminPost` (R1).** It gains `if (e instanceof PersonError && e.reason === "notfound") return 404`, next to the `TicketNotFound` branch.
 
-**`ADMIN_MESSAGES` (C7):**
+**`ADMIN_MESSAGES`.**
 
 | Key | Message |
 |---|---|
@@ -190,67 +203,78 @@ createDuesTx(tx, registrationId, centreId): Promise<{ planId; version; count; to
 | `fee.dues.noplan` | "No published fee plan prices this course at this centre for that year." |
 | `fee.dues.mismatch` | "The dues did not match the fee plan; nothing was saved." |
 
-Field errors (`registrationId: not active`, `centreId: centre is not active`) show through `AdminErrors` with the labels "Course registration" and "Centre". `forbidden` already has a message.
+Field errors render through `AdminErrors` with the labels "Course registration" and "Centre".
 
 ### Page and route
 
-*   **`/students/[personId]`.**
-    *   The page now reads `searchParams` (`error`, `detail`, `saved`) and renders `AdminErrors` (C6).
-    *   It calls `duesForPerson` in the same `pageRead` (`Promise.all`) and joins the dues to each registration by `registrationId`.
-    *   Under each registration it shows a "Fees" block:
-        *   the dues table (fee type, instalment, due date, amount via `inr()`) and the total;
-        *   the "Create dues" form when `canCreate && !noPlan`;
-        *   or "No fee plan for this course yet" when `canCreate && noPlan`;
-        *   or nothing.
-*   **`POST /students/[personId]/dues`.**
-    *   It runs through `adminPost` (same origin, session). The fields are `registrationId`.
-    *   On success it goes to `/students/<personId>?saved=1`; on an error it comes back with `error`/`detail`.
-    *   A personId that is not a UUID gives 404. The route catches `RbacError` `notfound` and returns a 404 Response, as tickets do (C2).
+**`/students/[personId]` page:**
+*   It reads `searchParams` (`error`, `detail`, `saved`) and renders `AdminErrors`.
+*   It runs `duesForPerson` together with `getPerson` (`Promise.all` in the same `pageRead`), then maps the result by `registrationId`.
+*   After each registration's `<tr>` it renders a full-width `<tr><td colSpan={5}>` "Fees" row (R8). The row shows the first that applies:
+    *   if there are dues: the dues table (fee type, instalment, due date, amount via `inr()`) and the total;
+    *   if `canCreate && !noPlan`: the "Create dues" form;
+    *   if `canCreate && noPlan`: "No fee plan for this course yet";
+    *   otherwise: nothing.
+
+**`app/students/[personId]/dues/route.ts`:**
+*   It exports `export const POST = safeRoute(handle)`.
+*   A UUID check runs first and returns 404 on failure.
+*   `adminPost` then handles the `registrationId` field. On success it redirects to `/students/<personId>?saved=1`.
 
 ### Tests (`tests/fee-dues.test.ts`)
 
-**Fixtures (C9):**
-*   Role 29 `fee_dues` holds `fee.dues` and `student.view`. Its user `…00f7` holds it at centre A, with token `tok-feeD`.
-*   The holder of `student.view` without `fee.dues` is `tok-stuA`.
-*   A shared `tests/fee-seed.ts` exports `seedFeePlan()`, moved out of the fee-structure test's local helpers. It places centre A in METRO with DCA offered there, creates the fee masters, and publishes a DCA class plan as `tok-feeS` after `setStepUp`.
-*   The test admits a learner at A for DCA 2026-27 as `tok-stuA`.
+**Fixture changes in `tests/fixtures.ts` (R5):**
+1.  The `fee.dues` permission row.
+2.  Role `(29, 'fee_dues', 'Fee dues')`.
+3.  Role grants `(29, 'fee.dues')` and `(29, 'student.view')`.
+4.  `export FD = { a: "…00f7" }`, plus its `app_user` row.
+5.  An assignment for that user at centre 1.
+6.  The session `tok-feeD`.
+7.  `app.fee_due` in the truncate list.
+
+The holder of `student.view` without `fee.dues` is `tok-stuA`.
+
+**Seed helpers (R4), in `tests/fee-seed.ts`:**
+*   `seedMasters()` combines today's fee-structure `beforeEach` body with `masters()`. It returns `{ catId, course, reg, i1, i2 }`. `tests/fee-structure.test.ts` switches to it.
+*   `seedFeePlan()` calls `seedMasters()`, then creates a DCA/METRO 2026-27 class plan with fixed lines: two fee types × two instalments. It publishes the plan as `tok-feeS` after `setStepUp`, and returns `{ planId, lines, total }`.
+
+The test admits a learner at centre A for DCA 2026-27 as `tok-stuA`.
 
 | ID | Goal | What it does |
 |---|---|---|
-| T-FD-001 | G1, G3 | Creating dues: one per line, in order, exact amounts, the plan's currency; the audit row has the count and total. Refusals: a second create, a course without a plan (`noplan`), an inactive centre, a DROP registration, `tok-stuA` (Forbidden), a registration of another person (`notfound`). A newer plan does not reprice. `duesForPerson`: `canCreate`, `noPlan`, totals; `tok-uA` sees nothing. |
-| T-FD-002 | G2 | By SQL as gems_app, the guard refuses each case by name: another course's plan, another centre's override, another year, a wrong amount, a wrong due date, a wrong currency, a draft plan, a DROP registration, a second plan, an ADHOC row. A viewer's insert is refused (42501 or 23514). As the owner: update, delete and truncate are refused, and the admission centre move cascades and is refused (D6). The database stamps who and when. RLS has four commands. |
-| T-FD-003 | G4 | The route: success and `saved=1`; an error shows on the page; a foreign Origin gives 403; another person's registration gives 404. |
+| T-FD-001 | G1, G3 | **Create:** one due per line, in order, with exact amounts and the plan's currency. The audit row has the count and total.<br>**Refusals:** a second create; a course with no plan (`noplan`); an inactive centre; a registration set to DROP as the owner; `tok-stuA` (Forbidden); another person's registration (`PersonError` notfound); `tok-uA` (notfound).<br>**No repricing:** a newer plan does not change existing dues.<br>**`duesForPerson`:** `canCreate`, `noPlan` and totals are right; `tok-uA` sees nothing. |
+| T-FD-002 | G2 | **Guard (raw SQL as gems_app):** it refuses each of these by name: another course's plan; another centre's override; another year; a wrong amount, due date or currency; a draft plan; a DROP registration; a second plan.<br>**Permission:** a viewer's insert is refused.<br>**Immutability (as owner):** update, delete and truncate are refused. Moving the admission's centre cascades, and is refused (D6).<br>**Stamps:** who and when are stamped by the database. |
+| T-FD-003 | G4 | **Route:** success with `saved=1`; an error shown on the page; a foreign Origin returns 403; another person's registration returns 404; a non-UUID person returns 404. |
 
-**Existing tests that change:**
-*   T-RLS-002 adds `fee_due`;
-*   T-AUD-009 gains the `dues.ts` scan and `fee.dues.create`;
-*   the fixtures change;
-*   `tests/fee-structure.test.ts` uses `tests/fee-seed.ts`.
+**Existing tests:** T-RLS-002 covers `fee_due` automatically. T-AUD-009 gains the `dues.ts` scan and `fee.dues.create`.
 
 **Smoke:**
-*   the learner page renders its "Fees" block for its viewer;
-*   a foreign-origin dues post gives 403.
+*   The learner page renders the "Fees" row for a viewer.
+*   A dues post from a foreign origin returns 403.
 
 ## Decisions
 
-All seven are recommended options.
+All of these are the recommended options.
 
-1.  **DD-1:** One due per registration, fee type and instalment, copied from the resolved published plan. A due is never repriced.
-2.  **DD-2:** Dues are created explicitly by `fee.dues` at the centre, once per registration. Admission never depends on a plan.
-3.  **DD-3:** A due is immutable and gross-only. Concessions, holds, adjustments and allocations are separate append-only rows, each referencing `fee_due.id`, and outstanding is computed (D4, Z6). Re-issuing dues would need a generation column.
-4.  **DD-4:** The currency is copied from the plan. The centre's own currency arrives with D-CUR-1 (Z3).
-5.  **DD-5 (PMC):** Dues are visible to anyone with `student.view` at the centre. A separate `fee.view` can come later (D10).
-6.  **DD-6:** Out of scope: ad-hoc dues, carry-forward, schemes, fines, bulk creation, import.
-7.  **DD-7:** Plan and ad-hoc dues share one table, with `source`. F3 opens ADHOC in the guard (Z2, D3), so allocations reference a single table.
+1.  **DD-1:** There is one due per registration, fee type and instalment, copied from the resolved published plan. A due is never repriced.
+2.  **DD-2:** A `fee.dues` holder at the centre creates the dues explicitly, once per registration. Admission never depends on a plan.
+3.  **DD-3:** A due is immutable and holds only the gross amount. Concessions, holds, adjustments and allocations are separate append-only rows that reference `fee_due.id`, and outstanding is computed from them (D4, Z6). Re-issuing dues would need a generation column.
+4.  **DD-4:** The currency is copied from the plan. A centre's own currency arrives with D-CUR-1.
+5.  **DD-5 (PMC):** Anyone holding `student.view` at the centre sees the dues. A separate `fee.view` permission can come later (D10).
+6.  **DD-6:** Out of scope: ad-hoc dues, carry-forward, schemes, fines, bulk creation and import.
+7.  **DD-7:** Plan dues and ad-hoc dues will share one table (Z2, D3, Z8-2), so allocations reference a single table. F3 will make these changes, each a cheap ALTER:
+    *   add `source text not null default 'PLAN'`, with a check;
+    *   make `plan_id` and `caption_id` nullable (the composite FK then matches PLAN rows only, under MATCH SIMPLE);
+    *   open ADHOC in the guard.
 
 ## Alternatives Considered
 
-*   **Dues inside `admit()`.** Rejected (DD-2).
-*   **Dues computed on the fly.** Rejected: allocations need rows to reference, and a newer plan would change what a learner owes.
-*   **A separate ad-hoc dues table.** Rejected (DD-7): two allocation targets would break the single oldest-first order and the single outstanding query.
+*   **Create dues inside `admit()`.** Rejected; see DD-2.
+*   **Compute dues on the fly.** Rejected. Allocations need rows to reference, and a newer plan would change what is owed.
+*   **A separate table for ad-hoc dues.** Rejected; see DD-7.
 
 ## Risks and Limits
 
-*   A registration admitted before its plan was published needs "Create dues" later. The page says so.
-*   A registration that leaves ACTIVE keeps its dues. Crediting them is F4.
-*   The current-version choice is app-only. The database proves only that the plan is a valid one for the registration.
+*   **Plan published after admission.** The registration needs "Create dues" later. The page says so.
+*   **Registration leaves ACTIVE.** It keeps its dues. Crediting them is F4's job.
+*   **Plan version choice.** Choosing the current version happens only in the app. The database proves only that the chosen plan is valid for the registration.

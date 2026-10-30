@@ -5,6 +5,8 @@ Status: **specification only; no posting code may be written for production unti
 Owner of every policy: **Accounts** (Certification co-owns numbering).
 
 ## 1. Entities (PRO)
+> **Revised by v1.6** (`revisions/v1.6-fee-dues-model.md`, 2026-10-30): `fee_due` is gross-only and immutable; concession, fine, hold and adjustment are separate rows; F4/F17 and the §3 dues lock use the `fee-dues:<registrationId>` advisory lock. The original text below is preserved.
+
 - **Fee structures and dues**
   - `fee_structure`: AY; centre class or centre; course; fee type; amounts per caption.
   - `fee_due`: registration, fee type, caption, due date, gross, concession, fine, currency, hold flag.
