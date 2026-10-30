@@ -3,12 +3,25 @@ import type { Tx } from "./db";
 
 // Allocate inside the caller's transaction. The row lock serialises allocators and a rollback
 // releases the increment, so the same code serves both gapless and unique-only policies.
-export async function allocate(tx: Tx, s: { centreId: number; docType: string; period: string }): Promise<bigint> {
-  const rows = await tx.$queryRaw<{ current: bigint }[]>`
+// With create "after-any-earlier" (fee-receipts DD-4), a missing row is created at 0, with the gap rule of the centre's
+// latest earlier row, only when the centre has any earlier row of that type: a legacy series that was never seeded is
+// refused, never restarted at 1; a year without receipts does not block. `current` is not granted, so it starts at 0.
+export async function allocate(tx: Tx, s: { centreId: number; docType: string; period: string },
+  opts: { create?: "after-any-earlier" } = {}): Promise<bigint> {
+  const bump = () => tx.$queryRaw<{ current: bigint }[]>`
     update app.number_series set current = current + 1
     where centre_id = ${s.centreId} and doc_type = ${s.docType} and period = ${s.period}
     returning current`;
-  if (!rows[0]) throw new Error(`no number series ${s.centreId}/${s.docType}/${s.period}`);
+  let rows = await bump();
+  if (!rows[0] && opts.create === "after-any-earlier") {
+    await tx.$executeRaw`insert into app.number_series (centre_id, doc_type, period, gap_rule)
+      select ${s.centreId}, ${s.docType}, ${s.period}, e.gap_rule from app.number_series e
+      where e.centre_id = ${s.centreId} and e.doc_type = ${s.docType} and e.period < ${s.period}
+      order by e.period desc limit 1
+      on conflict do nothing`;
+    rows = await bump();
+  }
+  if (!rows[0]) throw new SeriesMissing(`${s.centreId}/${s.docType}`, s.period);
   return rows[0].current;
 }
 

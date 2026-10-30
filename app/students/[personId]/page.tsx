@@ -1,7 +1,9 @@
 import { countryOptions, EMPLOYMENT_STATUSES, QUALIFICATIONS, type DetailKey } from "@/server/details";
 import { pageRead } from "@/server/page-read";
 import { getPerson } from "@/server/people";
+import { randomUUID } from "node:crypto";
 import { duesForPerson } from "@/server/dues";
+import { MODES } from "@/server/receipts";
 import { inr } from "@/lib/money";
 import { AdminErrors } from "../../admin/catalogue/admin-errors";
 
@@ -31,7 +33,8 @@ export default async function Student({ params, searchParams }: { params: Promis
       <p><a href="/students">All students</a> · <a href="/students/new">Admit a learner</a></p>
       <h1>{p.givenName} {p.familyName ?? ""}</h1>
       {saved && <p role="status">Saved.</p>}
-      <AdminErrors error={error} detail={detail} labels={{ registrationId: "Course registration", centreId: "Centre" }} />
+      <AdminErrors error={error} detail={detail} labels={{ registrationId: "Course registration", centreId: "Centre", amount: "Amount", mode: "Mode",
+        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)" }} />
       <p>Gender {p.gender ?? "not given"} · Born {p.dateOfBirth ?? "not given"} · Mobile {p.mobile ?? "not given"} · Email {p.email ?? "not given"}</p>
       <section>
         <h2>Contact and family</h2>
@@ -62,13 +65,30 @@ export default async function Student({ params, searchParams }: { params: Promis
                       <td colSpan={5}>
                         <strong>Fees</strong>
                         {f.dues.length > 0 ? (
-                          <table>
-                            <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th></tr></thead>
-                            <tbody>
-                              {f.dues.map((d) => <tr key={d.id}><td>{d.feeTypeName}</td><td>{d.captionName}</td><td>{d.dueOn}</td><td>{inr(d.gross)}</td></tr>)}
-                              <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td></tr>
-                            </tbody>
-                          </table>
+                          <>
+                            <table>
+                              <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Outstanding</th></tr></thead>
+                              <tbody>
+                                {f.dues.map((d) => <tr key={d.id}><td>{d.feeTypeName}</td><td>{d.captionName}</td><td>{d.dueOn}</td><td>{inr(d.gross)}</td>
+                                  <td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td></tr>)}
+                                <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td>{inr(f.outstanding!)}</td></tr>
+                              </tbody>
+                            </table>
+                            {f.receipts.length > 0 && (
+                              <p>Receipts: {f.receipts.map((x, i) => <span key={x.id}>{i > 0 && " · "}<a href={`/receipts/${x.id}`}>{x.receiptNo}</a> {x.receivedOn} {inr(x.total)} {x.mode}</span>)}</p>
+                            )}
+                            {f.canCollect && (
+                              <form method="post" action={`/students/${p.id}/receipts`}>
+                                <input type="hidden" name="registrationId" value={r.id} />
+                                <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                                <label>Amount <input name="amount" defaultValue={f.outstanding!} inputMode="decimal" required /></label>{" "}
+                                <label>Mode <select name="mode" defaultValue="CASH">{MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></label>{" "}
+                                <label>Reference <input name="reference" maxLength={50} /></label>{" "}
+                                <label>Instrument date <input name="instrumentDate" type="date" /></label>{" "}
+                                <button type="submit">Collect</button>
+                              </form>
+                            )}
+                          </>
                         ) : f.noPlan ? <p>No fee plan for this course yet.</p> : (
                           <form method="post" action={`/students/${p.id}/dues`}>
                             <input type="hidden" name="registrationId" value={r.id} />

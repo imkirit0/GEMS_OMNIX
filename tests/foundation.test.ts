@@ -49,7 +49,7 @@ describe("database isolation (T-RLS)", () => {
         and (c.relname = 'centre' or exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'centre_id' and not a.attisdropped))
       order by 1`).then((r) => r.rows));
     // course_centre: catalogue data, select using (true); centre names stay gated by app.centre (certifications D5)
-    expect(rows.map((r) => r.relname)).toEqual(["admission", "batch", "call_log", "centre", "course_centre", "enquiry", "enquiry_followup", "fee_due", "fee_plan", "number_series", "registration", "ticket", "ticket_document",
+    expect(rows.map((r) => r.relname)).toEqual(["admission", "batch", "call_log", "centre", "course_centre", "enquiry", "enquiry_followup", "fee_due", "fee_plan", "number_series", "receipt", "receipt_allocation", "registration", "ticket", "ticket_document",
       "ticket_event", "ticket_level", "ticket_upload"]); // not vacuous
     for (const r of rows) {
       expect(r.rls && r.force, r.relname).toBe(true);

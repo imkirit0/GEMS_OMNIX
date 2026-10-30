@@ -207,6 +207,11 @@ export async function setCentreActive(session: string | undefined, id: number, a
       throw new RbacError("invalid", "status: checklist", "org.centre.checklist");
     }
     await tx.$executeRaw`update app.centre set status = ${target}::app."CentreStatus" where id = ${id}`;
+    // a centre activated here gets its receipt series for this financial year, at 0 (fee-receipts DD-4 rule b);
+    // legacy centres are seeded at cutover by an upsert that never lowers a counter (NP-8)
+    if (active) await tx.$executeRaw`insert into app.number_series (centre_id, doc_type, period, gap_rule)
+      values (${id}, 'FEEREC', app.financial_year((now() at time zone 'Asia/Kolkata')::date), 'GAPLESS'::app."GapRule")
+      on conflict do nothing`;
     return { before: { status: row.status }, after: { status: target } };
   };
   return (active

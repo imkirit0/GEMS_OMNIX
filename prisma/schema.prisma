@@ -69,6 +69,7 @@ model Centre {
   centreClass     CentreClass?     @relation(fields: [centreClassId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   scopes          RoleAssignment[]
   numberSeries    NumberSeries[]
+  receipts        Receipt[]
   tickets         Ticket[]
   ticketLevels    TicketLevel[]
   ticketEvents    TicketEvent[]
@@ -134,6 +135,7 @@ model AppUser {
   callLogsLogged          CallLog[]          @relation("callLogBy")
   feePlansPublished       FeePlan[]          @relation("feePlanPublishedBy")
   feeDuesCreated          FeeDue[]           @relation("feeDueCreatedBy")
+  receiptsCreated         Receipt[]          @relation("receiptCreatedBy")
 
   @@map("app_user")
   @@schema("app")
@@ -667,6 +669,7 @@ model Registration {
   batch       Batch?             @relation(fields: [batchId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict, map: "registration_batch_fkey")
 
   dues        FeeDue[]
+  receipts    Receipt[]
 
   @@unique([id, centreId])
   @@index([admissionId])
@@ -786,9 +789,63 @@ model FeeDue {
   registration   Registration @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
   line           FeePlanLine  @relation(fields: [planId, feeTypeId, captionId], references: [planId, feeTypeId, captionId], onDelete: Restrict, onUpdate: Restrict)
   creator        AppUser      @relation("feeDueCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  allocations    ReceiptAllocation[]
 
   @@unique([registrationId, feeTypeId, captionId])
   @@map("fee_due")
+  @@schema("app")
+}
+
+// ---------- Fee receipts (docs/designs/fee-receipts; view fee_due_balance, guards, checks, RLS and grants in migration 0027) ----------
+// Never change (F4 opens only ACTIVE -> CANCELLED). The database stamps the date, the number text, the status and every line's tax.
+model Receipt {
+  id             BigInt              @id @default(autoincrement())
+  centreId       Int                 @map("centre_id")
+  registrationId String              @map("registration_id") @db.Uuid
+  period         String
+  number         BigInt
+  receiptNo      String              @map("receipt_no")
+  receivedOn     DateTime            @map("received_on") @db.Date
+  mode           String
+  reference      String?
+  instrumentDate DateTime?           @map("instrument_date") @db.Date
+  currency       String              @db.Char(3)
+  total          Decimal             @db.Decimal(14, 2)
+  idempotencyKey String              @unique @map("idempotency_key") @db.Uuid
+  status         String              @default("ACTIVE")
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  createdBy      String              @map("created_by") @db.Uuid
+  centre         Centre              @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  registration   Registration        @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  creator        AppUser             @relation("receiptCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines          ReceiptAllocation[]
+
+  @@unique([id, centreId])
+  @@unique([centreId, period, number])
+  @@unique([centreId, period, receiptNo])
+  @@index([registrationId])
+  @@map("receipt")
+  @@schema("app")
+}
+
+model ReceiptAllocation {
+  id        BigInt  @id @default(autoincrement())
+  receiptId BigInt  @map("receipt_id")
+  centreId  Int     @map("centre_id")
+  dueId     BigInt  @map("due_id")
+  amount    Decimal @db.Decimal(14, 2)
+  gstRate   Decimal @map("gst_rate") @db.Decimal(7, 4)
+  hsnSac    String  @map("hsn_sac")
+  taxable   Decimal @db.Decimal(14, 2)
+  cgst      Decimal @db.Decimal(14, 2)
+  sgst      Decimal @db.Decimal(14, 2)
+  igst      Decimal @db.Decimal(14, 2)
+  receipt   Receipt @relation(fields: [receiptId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  due       FeeDue  @relation(fields: [dueId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([receiptId, dueId])
+  @@index([dueId])
+  @@map("receipt_allocation")
   @@schema("app")
 }
 

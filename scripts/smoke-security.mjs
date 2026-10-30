@@ -368,6 +368,16 @@ try {
     body: new URLSearchParams({ registrationId: randomUUID() }) });
   check("T-FD a dues post from a foreign origin is refused", fdForeign.status === 403, String(fdForeign.status));
 
+  // ---------- fee receipts (T-FR: no Collect form while collection is switched off; bad ids 404; origin) ----------
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'fee.collect')`, [studentRole]);
+  check("T-FR no Collect form while fee collection is switched off", !(await (await get(`/students/${own}`, stu)).text()).includes(">Collect</button>"));
+  const frBad = [(await get("/receipts/abc", stu)).status, (await get("/receipts/987654321", stu)).status];
+  check("T-FR a malformed or unknown receipt is 404", frBad.every((x) => x === 404), frBad.join(","));
+  const frForeign = await fetch(`${BASE}/students/${own}/receipts`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ registrationId: randomUUID(), amount: "1", mode: "CASH", idempotencyKey: randomUUID() }) });
+  check("T-FR a receipt post from a foreign origin is refused", frForeign.status === 403, String(frForeign.status));
+
   // ---------- enquiry (T-ENQ: 404 parity, Origin-less action post, a real create, the Enroll link) ----------
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view'), ($1, 'enquiry.manage')`, [studentRole]);
   const hiddenEnq = (await db.query(`insert into app.enquiry (centre_id, given_name, date_of_birth, gender, mobile, path_id, type_id, status_id,

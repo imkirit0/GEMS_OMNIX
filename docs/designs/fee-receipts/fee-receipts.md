@@ -347,6 +347,7 @@ The field labels go in the learner page's inline `labels` map, `app/students/[pe
 
 ## Risks and Limits
 
+*   **Lock order (found at build):** every writer takes the registration's `fee-dues:` lock **before** the series row (`collectFee` does; the guards take the same lock again, which is free). A writer in the other order can deadlock with `collectFee`; Postgres then aborts one transaction, so it fails closed, never wrongly. T-FR-002's raw writer follows the contract.
 *   gems_app holds UPDATE on `number_series`, so a stray increment by other code could leave a gap. A gap report belongs in reconciliation.
 *   Rates follow the fee type at the time of receipt.
 *   An owner can still disable triggers until D-FIN-8 is built.

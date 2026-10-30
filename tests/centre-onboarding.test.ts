@@ -215,6 +215,9 @@ describe("T-CO centre onboarding", () => {
     expect((await audit("org.centre.activate"))[0]).toMatchObject({ target_id: String(id), reason: "agreement signed",
       before: { status: "INACTIVE" }, after: { status: "ACTIVE" } });
     expect(await msg(co.setCentreActive(M, id, true, "again"))).toBe("already active");
+    // activation opens the centre's receipt series for this financial year, at 0 (fee-receipts DD-4 rule b)
+    expect(await sql(`select current::int as n, gap_rule::text as g from app.number_series where centre_id = $1 and doc_type = 'FEEREC'
+      and period = app.financial_year((now() at time zone 'Asia/Kolkata')::date)`, [id])).toEqual([{ n: 0, g: "GAPLESS" }]);
     expect(await usable()).toBe(STAFF);
     expect(await msg(co.updateCentre(M, id, { gstin: null }))).toBe("gstin: required while active");
     expect(await msg(co.updateCentre(M, id, { gstSupply: null }))).toBe("gstSupply: required while active");

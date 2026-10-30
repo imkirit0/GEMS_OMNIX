@@ -48,8 +48,8 @@ describe("T-FD fee dues", () => {
     const L = await learner();
     // before: both can be created; TALLY has no plan; a viewer sees them but cannot create; out of scope sees nothing
     expect(await duesForPerson(D, L.personId)).toEqual([
-      { registrationId: L.dca, dues: [], total: null, canCreate: true, noPlan: false },
-      { registrationId: L.tally, dues: [], total: null, canCreate: true, noPlan: true }]);
+      { registrationId: L.dca, dues: [], total: null, canCreate: true, noPlan: false, outstanding: null, receipts: [], canCollect: false },
+      { registrationId: L.tally, dues: [], total: null, canCreate: true, noPlan: true, outstanding: null, receipts: [], canCollect: false }]);
     expect((await duesForPerson(V, L.personId)).map((r) => r.canCreate)).toEqual([false, false]);
     expect(await duesForPerson(T.uA, L.personId)).toEqual([]);
     expect(await duesForPerson(D, "not-a-uuid")).toEqual([]);

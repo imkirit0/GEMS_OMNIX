@@ -254,6 +254,14 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-FD-002 | Dues proven by the database | By SQL the guard refuses, by name, another course's, centre's or year's plan, a wrong amount, due date or currency, a draft plan, a non-ACTIVE registration and a second plan; dues never change or disappear (update, delete, truncate); a centre move with dues is refused; who and when are stamped |
 | T-FD-003 | Dues route | Same origin; success and errors return to the learner page; another person's registration or a bad id gives 404 |
 
+### T-FR: fee collection and receipts (`docs/designs/fee-receipts/fee-receipts.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-FR-001 | Collecting a receipt | A holder of `fee.collect` and `student.view` at an active centre, with collection switched on, records an offline receipt for one registration: oldest dues first, partial allowed, never more than outstanding; GST per line exactly (CGST/SGST, IGST, none when untaxed); gapless FEEREC numbers per centre and financial year; each refusal by message (gate closed, viewer, out of scope, inactive centre, incomplete GST, no series, field rules) uses no number; audited without instrument references |
+| T-FR-002 | Receipts proven by the database | By SQL the guards refuse, by name, a line for another registration or currency, over-allocation (also under two sessions), a line outside the receipt's transaction, a wrong total or no lines at commit, a number other than the series current, a wrong period, an over-length number and incomplete centre GST; tax, number text, date, status and who/when are stamped by the database; nothing changes or disappears; series rows start at 0 and are created only at rollover or activation |
+| T-FR-003 | Exactly once | The same idempotency key returns the original receipt, also under a concurrent double submit; a key reused for another registration is refused; concurrent receipts on one series get distinct, consecutive numbers |
+| T-FR-004 | Reading receipts and routes | The learner page shows paid, outstanding and receipts; a printable receipt with its GST lines; out of scope or bad ids give 404; same origin; success and replay land on the receipt, errors on the learner page |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|
