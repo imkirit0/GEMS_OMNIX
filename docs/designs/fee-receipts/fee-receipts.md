@@ -333,7 +333,7 @@ The field labels go in the learner page's inline `labels` map, `app/students/[pe
     *   Accounts' worked examples pass;
     *   the cutover year is seeded (NP-8) for every centre with legacy receipts, active or not, as an upsert of `greatest(current, legacy)`;
     *   every active centre's worst-case number fits in 16 characters (D6);
-    *   the F1 ledger posts in the receipt's transaction, or Accounts accepts a backfill rule (Z4).
+    *   the F1 ledger posts in the receipt's transaction, or Accounts accepts a backfill rule (Z4) that also covers cancellations (receipt-cancel Z1).
 6.  **DD-6:** The Non-Goals.
 7.  **DD-7 (PMC):** Receipts are visible to `student.view` at the centre.
 8.  **DD-8:** The audit keeps no instrument references.
