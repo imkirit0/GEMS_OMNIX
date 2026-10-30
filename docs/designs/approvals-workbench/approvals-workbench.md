@@ -1,7 +1,7 @@
 # Approvals workbench (Stage 5, second piece; R-094.04, R-144)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below). DD-1…DD-4 are recommended options under the owner's standing instruction (2026-10-29, re-confirmed 2026-10-30).
+*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below) and step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), I1–I9 applied). DD-1…DD-4 are recommended options under the owner's standing instruction (2026-10-29, re-confirmed 2026-10-30).
 *   **Date:** 2026-10-30
 
 Evidence classes follow `docs/audit/00-README.md`. Limits are PMC. Input: [`input-brief.md`](input-brief.md).
@@ -28,7 +28,7 @@ This piece adds:
     *   rejecting needs remarks;
     *   the result counts successes and refusals by reason.
     *   [T-AW-003]
-*   **G4:** the page and route check the origin; bad filters give an empty page and a bad submit `error=ticket.invalid` [T-AW-003, smoke].
+*   **G4:** the page and route check the origin; bad filters give an empty page and a bad submit `error=ticket.invalid` (plus `detail`) [T-AW-003, smoke].
 
 ## Non-Goals
 
@@ -89,7 +89,7 @@ bulkAct(session, b: { action: "approve" | "reject"; remarks?: string; items: Bul
 **`queueCards` (C6, C7, D8).** It works over the actable set with `from` and `to` applied:
 *   `byType` ignores the `type` filter, so every card stays visible.
 *   `byCentre` ignores the `centre` filter, so the centre select offers every centre that has something waiting.
-*   `total` counts under all four filters, so it matches the list.
+*   `total` is derived, not queried (I4): the sum of `byType`, or that type's count when a `type` filter is set (both apply centre, from and to).
 
 Counts are `::int`, ordered by code. An invalid filter gives zeros and empty lists.
 
@@ -108,16 +108,15 @@ Counts are `::int`, ordered by code. An invalid filter gives zeros and empty lis
 | `TicketError` `invalid` | `invalid` |
 | `TicketError` `inactive`, or `ApplyFailed` | `failed` |
 | `Forbidden` or `TicketNotFound` | `forbidden` |
+| `TicketError` `document` | cannot occur in `act()`; rethrown if it does (I6) |
 | anything else | **rethrown**, which stops the batch (C4, D3, Z8). This includes `ScopeError` (an expired session: `locate` → `withScope`), a lost connection, and a guard's P0001. |
 
 *A stopped batch.* The earlier approvals stay committed, and the counts are lost. The user sees the login page (expired session) or a generic error. Resubmitting the same form is safe: approved tickets have a new version, so they come back as `conflict` (T-AW-003 tests this).
 
 *Audit (D5).*
 *   Each `act()` writes its own row: OK, DENIED for `Forbidden`, or FAILED `ticket.apply_failed` for `ApplyFailed`.
-*   `conflict` and `invalid` outcomes, and a `TicketNotFound` from `locate`, leave no row. The redirect's counts are their only trace.
+*   `conflict`, `stale`, `invalid` and `inactive` outcomes, and a `TicketNotFound` from `locate`, leave no row (I5). So within `failed`, `inactive` leaves none while `ApplyFailed` leaves a FAILED row. The redirect's counts are their only trace.
 *   All rows of one batch share the request's `request_id`, which links them. There is no separate batch row.
-
-### Migration and set function: unchanged.
 
 ### Page and route
 
@@ -139,7 +138,7 @@ Counts are `::int`, ordered by code. An invalid filter gives zeros and empty lis
 *   Items come from `data.getAll("item")` (C1, D1). Each must match `^<uuid>:\d{1,9}$`, otherwise the whole batch is `ticket.invalid`. This covers a missing or blank version, which `Number("")` would have turned into 0 (C2, D6).
 *   The `back` path is `/tickets/approvals` plus the posted filters.
 *   On success the redirect is `back` plus the five counts.
-*   A validation `TicketError` gives `back` plus `error=ticket.invalid`.
+*   A validation `TicketError` gives `back` plus `error=ticket.invalid` (and `adminPost`'s `detail`, I9).
 
 **G4 restated (C8):**
 *   Bad filters or a bad cursor give an empty page.
@@ -153,10 +152,10 @@ Counts are `::int`, ordered by code. An invalid filter gives zeros and empty lis
 |---|---|---|---|
 | T-AW-001 | G1 | `actable_ticket_ids()` compared with `select t.id from app.ticket t where t.status = 'OPEN' and app.ticket_may_act(t.id)`, without `distinct` (D7), for every fixture user and test-local ones. Branches, each reached alone:<ul><li>named approver;</li><li>role approver at that centre only;</li><li>role approver whose `ticket.approve` comes from another role (included) or covers another centre (excluded);</li><li>assigned user (included), with the level's approvers then excluded;</li><li>raiser excluded;</li><li>earlier approver excluded at level 2;</li><li>no `ticket.approve` excluded;</li><li>closed tickets excluded;</li><li>an invisible centre excluded.</li></ul> | Equal sets; non-vacuous |
 | T-AW-002 | G2 | Queue filters by type, centre and IST dates. Cards: `byType` ignores `type`, `byCentre` ignores `centre`, `total` matches the list. Invalid filters, an extra key, arrays and a bad cursor give empty results | As listed |
-| T-AW-003 | G3, G4 | One bulk approve with one ticket per bucket: done, conflict (a stale version), forbidden (not the user's), invalid (via a handler `TicketError` invalid), failed (an `ApplyFailed` test handler, with `TICKET_TEST_HANDLER`). Audit outcomes: OK, DENIED, FAILED, and none for the conflict, all with one `request_id`. A resubmit gives conflicts. An expired session mid-batch rethrows `ScopeError`. A reject without remarks, or 51 items, touches nothing. The route: 3 posted items give counts summing to 3; a blank version gives `error=ticket.invalid`; a foreign origin gives 403 | As listed |
+| T-AW-003 | G3, G4 | One bulk approve with one ticket per bucket: done, conflict (a stale version), forbidden (a ticket the user may view but not act on, e.g. one they raised: DENIED row; and one they cannot view: `TicketNotFound`, no row) (I2), invalid (a test-local handler registered in the test whose `revalidate` throws `TicketError("invalid")`; test-handler.ts unchanged) (I1), failed (the test handler's `failApply` → `ApplyFailed`). Audit outcomes: OK, DENIED, FAILED, and none for the conflict, all with one non-null `request_id`: the engine case runs inside `withRequestContext`, as tests/audit.test.ts:41 (I7). A resubmit gives conflicts. An expired session mid-batch rethrows `ScopeError`. A reject without remarks, or 51 items, touches nothing. The route: 3 posted items give counts summing to 3; a blank version gives `error=ticket.invalid`; a foreign origin gives 403 | As listed |
 
 **Timing (D2).** In `tests/ticket-timing.test.ts`:
-*   The worst-case queue: 4.1 s before, budget 500 ms.
+*   The worst-case page reads, `Promise.all([approvalQueue, queueCards])`: 4.1 s before, budget 500 ms (I3).
 *   A 50-ticket bulk approve. Its time is recorded, and the cap is lowered if it takes more than 10 s.
 
 **Smoke.**
