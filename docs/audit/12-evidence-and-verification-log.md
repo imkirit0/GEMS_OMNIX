@@ -2214,6 +2214,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **219 passed + 3 skipped (timing) + 3 todo** (31 files);
   - build and bundle scan;
   - the admin journey and all security smoke checks passed (`evidence/ci-fee-ledger-2026-10-30.txt`).
+  - Confirmed on GitHub: run 41068005077 for `758a49e` succeeded.
 - **Limits and next steps:**
   - **Collection gate:** fee-receipts DD-5's ledger condition is met. The others still apply, and the rollout checklist adds one: every active fee type must be mapped to an account.
   - **PMC for Accounts:**
