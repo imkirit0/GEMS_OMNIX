@@ -212,6 +212,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-ENQ-005 | Scope and reads | Other centres' enquiries are invisible and unwritable, also by SQL; nothing can be deleted; every role that manages enquiries can view them; the counsellor and name functions answer only callers who may view the centre; list filters, POST-only search (number, mobile, name) and the follow-up calendar |
 | T-ENQ-006 | Enquiry setup | Paths and types through the shared masters with `enquiry.setup`; statuses keep their kind and code; the enrolled status is never duplicated or switched off; the last active status of a kind is kept, also under concurrent deactivation |
 
+### T-CL: phone call log (`docs/designs/call-log/call-log.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-CL-001 | Logging and listing calls | A holder of `enquiry.manage` and `enquiry.view` at an active centre logs a call; each field's message in order; defaults (today, the logger as tele-caller; an explicit none); a tele-caller who may not receive enquiries there is refused; refused at an inactive centre, without view (audited DENIED), and at other centres; the audit names fields only, never the phone or name; the list is newest first with date, type and due filters, invalid filters match nothing, and it is capped |
+| T-CL-002 | The log in the database | Append-only for every role (update, delete, truncate refused); who and when set by the database; row security with four commands; the insert grant; named checks refuse the same values |
+| T-CL-003 | Route | Saved; field details; foreign Origin 403; empty fields become null |
+
 ### T-CB: course batches (`docs/designs/course-batches/course-batches.md`)
 | ID | Test | Expected |
 |---|---|---|

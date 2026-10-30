@@ -20,7 +20,7 @@ export default async function Home() {
       <h1>GEMS OMNIX</h1>
       <p>Signed in as {user.displayName} ({user.login}).</p>
       {centres.length > 0 && <p><a href="/centres">Centres</a> ({centres.length})</p>}
-      {enquiries && <p><a href="/enquiries">Enquiries</a></p>}
+      {enquiries && <p><a href="/enquiries">Enquiries</a> · <a href="/calls">Calls</a></p>}
       {batches.length > 0 && <p><a href="/batches">Batches</a></p>}
       <p><a href="/students">Students</a> · <a href="/tickets">Tickets</a> · <a href="/tickets/approvals">My approvals</a></p>
       {admin && <p><a href="/admin/users">User and role administration</a></p>}

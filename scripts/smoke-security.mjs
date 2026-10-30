@@ -363,6 +363,23 @@ try {
   const recordHtml = await (await get(eLoc.replace(/^https?:\/\/[^/]+/, ""), stu)).text();
   check("T-ENQ-004 the record shows the enquirer and an Enroll link for a user who may admit", recordHtml.includes("Smoke") && recordHtml.includes("/students/new?enquiry="));
 
+  // ---------- phone call log (T-CL: enquiry.view reads without a form; manage logs; bad centres 404) ----------
+  const enqView = (await db.query(`insert into app.role (key, name) values ('smoke_enq_view', 'Smoke enquiry viewer') returning id`)).rows[0].id;
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view')`, [enqView]);
+  await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', $3)`, [viewerId, enqView, ids.A]);
+  const callView = await get(`/calls?centre=${ids.A}`, viewer);
+  const callViewHtml = await callView.text();
+  check("T-CL the call list renders for an enquiry viewer, without a form", callView.status === 200 && callViewHtml.includes("Calls:")
+    && !callViewHtml.includes('method="post"'), String(callView.status));
+  check("T-CL the logger sees the log form", (await (await get(`/calls?centre=${ids.A}`, stu)).text()).includes('action="/calls/save"'));
+  const callBad = [(await get(`/calls?centre=${ids.B}`, viewer)).status, (await get("/calls?centre=abc", viewer)).status];
+  check("T-CL another centre and a malformed centre are 404", callBad.every((x) => x === 404), callBad.join(","));
+  check("T-CL the home page links Calls", (await (await get("/", stu)).text()).includes('href="/calls"'));
+  const foreignCall = await fetch(`${BASE}/calls/save`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ centreId: String(ids.A), phone: "9847000001", callType: "CALL_IN" }) });
+  check("T-CL a call save from a foreign origin is refused", foreignCall.status === 403, String(foreignCall.status));
+
   // ---------- correction tickets (T-COR-001 raise page, DD-12 message, T-COR-004 review, T-COR-006 hidden) ----------
   // types inserted active by SQL (the go-live gates guard switching on through the app, not raising)
   const corCat = (await db.query(`insert into app.ticket_category (name) values ('Smoke corrections') returning id`)).rows[0].id;

@@ -56,7 +56,7 @@ The per-workflow detail (actors, fixtures, transitions, side effects, negative a
 | WF-X13 | User/role/permission administration | R-009, R-089 | T-E2E-X13, T-AUTH-010 | D-SEC-1, D-GAP-2 | IT |
 | WF-X14 | Credential issuance / reset | R-228, R-003 | T-AUTH-008 | PR-12, D-GAP-2 | IT |
 | WF-X15 | Bulk imports | R-062, R-116, R-140.02, R-182, R-183, R-218 | T-IMP-001…004 | D-GAP-2 | Owners per import |
-| WF-X16 | Front office & call log | R-080, R-084 | T-SEC-002 | D-GAP-2 | Admissions |
+| WF-X16 | Front office & call log | R-080, R-084 | T-SEC-002, T-CL-001…003 | D-GAP-2 | Admissions |
 | WF-X17 | Feedback / appraisal | R-088 | T-E2E-X17 | D-GAP-2 | Academics |
 | WF-X18 | Marketing targets | R-099 | T-E2E-X18 | D-SCH-3 | Marketing |
 | WF-X19 | Batch / class / semester assignment | R-021, R-155 | T-SEC-002 | — | Academics |

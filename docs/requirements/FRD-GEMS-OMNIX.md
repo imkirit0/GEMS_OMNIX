@@ -1219,7 +1219,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Admissions (2), Admissions/PRO (2), Marketing (1)
 - **Workflows (05):** WF-X1 BDO activity planning; WF-X16 Front office & call log; WF-X4 CRM lead pipeline; WF1 Enquiry to admission
 - **Open decisions (04):** D-ADM-1, D-ADM-4, D-GAP-1, D-GAP-2, PR-02
-- **Distinct acceptance tests (09):** 11
+- **Distinct acceptance tests (09):** 14
 
 #### FR-080: Set Up Front Office (4 masters)
 
@@ -1265,7 +1265,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-085 |
 | Business owner | Admissions |
 | Open decisions | D-ADM-1 |
-| Acceptance tests | T-SEC-002, T-ENQ-002 |
+| Acceptance tests | T-SEC-002, T-ENQ-002, T-CL-001, T-CL-002, T-CL-003 |
 | Workflows | WF-X16 Front office & call log |
 | Data migration | IMPORTED if used |
 | Delivery stage | 3 Centre, catalogue, enquiry, admission |

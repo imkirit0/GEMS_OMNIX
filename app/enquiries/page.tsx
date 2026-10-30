@@ -24,7 +24,7 @@ export default async function Enquiries({ searchParams }: { searchParams: Promis
   return (
     <main>
       <p><a href="/">Home</a>{options.centres.some((c) => c.manage && c.active) && <> · <a href="/enquiries/new">New enquiry</a></>}
-        {" · "}<a href="/enquiries/calendar">Follow-up calendar</a>
+        {" · "}<a href="/enquiries/calendar">Follow-up calendar</a> · <a href="/calls">Calls</a>
         {options.canSetup && <> · <a href="/enquiries/statuses">Statuses</a> · <a href="/admin/catalogue/masters/enquiry-paths">Paths</a> · <a href="/admin/catalogue/masters/enquiry-types">Types</a></>}</p>
       <h1>Enquiries</h1>
       {typeof p["done"] === "string" && <p role="status">Changed {p["done"]} enquiries.</p>}
