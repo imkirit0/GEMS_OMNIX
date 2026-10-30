@@ -1,0 +1,83 @@
+Approvals workbench mutation checks (implementation_readiness_report.md "Mutation checks"), 2026-10-30, local Docker database.
+Code mutations: applied, the named test run (vitest -t), restored. Database mutations of 0024: each condition of
+app.actable_ticket_ids changed in turn (create or replace), T-AW-001 run, restored.
+
+Code (first run):
+MISSED 11 base ignored
+CAUGHT 12 queue accepts extra keys
+MISSED 13 cursor accepts arrays
+CAUGHT 15 byType applies type
+CAUGHT 16 byCentre applies centre
+CAUGHT 17 total ignores type
+CAUGHT 19 invalid returns unfiltered
+CAUGHT 20 cap 51
+CAUGHT 21 reject without remarks
+CAUGHT 22 conflict as failed
+CAUGHT 23 not found as failed
+CAUGHT 24 apply failed as invalid
+CAUGHT 25 errors swallowed
+CAUGHT 25b invalid counted as conflict
+CAUGHT 25c bad action allowed
+CAUGHT 28 route reads one item
+CAUGHT 29 blank version allowed
+CAUGHT 29b malformed item skipped
+CAUGHT 29c filters dropped from redirect
+CAUGHT 30 no same-origin
+MISSED 32 version dropped
+MISSED 33 cursor direction
+
+11, 13, 32, 33 were MISSED: no visible-but-not-actable ticket, no array cursor, every row at version 1, no second page.
+T-AW-002 gained each. Paging then exposed a real defect in the existing cursor (milliseconds vs microseconds),
+fixed in the same commit. Rerun (33 after the cursor change; the scripted run reported MISSED, applied by hand it fails
+T-AW-002 with 49 rows repeated on page 2, recorded CAUGHT; 34 and 35 are the new cursor checks):
+CAUGHT 11 base ignored
+CAUGHT 13 cursor accepts arrays
+CAUGHT 32 version dropped
+MISSED 33 cursor direction
+Traceback (most recent call last):
+  File "C:\Users\DELL\AppData\Local\Temp\claude\D--GEMS-OMNIX\a5108cb1-d98f-45ff-9195-898f35de6fed\scratchpad\mutate_aw.py", line 36, in <module>
+    assert src.count(old) == 1, (name, old[:70], src.count(old))
+           ^^^^^^^^^^^^^^^^^^^
+AssertionError: ('33 cursor direction', 'Prisma.sql`and (t.created_at, t.id) > (${c.at}, ${c.id}::uuid)` : Pris', 0)
+Traceback (most recent call last):
+  File "C:\Users\DELL\AppData\Local\Temp\claude\D--GEMS-OMNIX\a5108cb1-d98f-45ff-9195-898f35de6fed\scratchpad\mutate_aw.py", line 36, in <module>
+    assert src.count(old) == 1, (name, old[:70], src.count(old))
+           ^^^^^^^^^^^^^^^^^^^
+AssertionError: ('33 cursor direction', 'Prisma.sql`and (t.created_at, t.id) > (${c.at}, ${c.id}::uuid)` : Pris', 0)
+C:\Users\DELL\AppData\Local\Temp\claude\D--GEMS-OMNIX\a5108cb1-d98f-45ff-9195-898f35de6fed\scratchpad\mutate_aw.py:33: SyntaxWarning: "\d" is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\d"? A raw string is also an option.
+  ("35 cursor format unchecked", E, '  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}(:\d{2})?$/.test(at ?? "") || !isUuid(id))', '  if (!isUuid(id))', T, "T-AW-002"),
+MISSED 33 cursor direction
+CAUGHT 34 cursor as a JS date again
+CAUGHT 35 cursor format unchecked
+CAUGHT 33 cursor direction (by hand)
+
+Database (first run, while T-AW-001's users each reached several branches):
+MISSED 1 raiser not excluded
+CAUGHT 2 earlier approver not excluded
+MISSED 3 approve scope as view
+MISSED 4 no visible-centre check
+CAUGHT 5 closed tickets
+CAUGHT 6 assignment ignored
+MISSED 7 role at any centre
+MISSED 8 level 1 instead of current
+CAUGHT 9 no named approver
+CAUGHT 10 public execute
+
+T-AW-001 was changed so each branch is reached alone (raiser also an approver, a named approver without
+ticket.approve, a role held only at another centre, a level 2 that differs from level 1, a same-role two-level type). Rerun:
+CAUGHT 1 raiser not excluded
+CAUGHT 2 earlier approver not excluded
+CAUGHT 3 approve scope as view
+MISSED 4 no visible-centre check
+CAUGHT 5 closed tickets
+CAUGHT 6 assignment ignored
+CAUGHT 7 role at any centre
+CAUGHT 8 level 1 instead of current
+CAUGHT 9 no named approver
+CAUGHT 10 public execute
+4 is equivalent: scoped_centre_ids('ticket.approve') is always within visible_centre_ids(); the line mirrors ticket_may_act.
+
+Timing (tests/ticket-timing.test.ts, TICKET_TIMING=1, 16,542 tickets, 2,412 open):
+  approval queue, per-row ticket_may_act, user who may act on almost nothing: 4,118 ms
+  approvals page reads (queue + cards) with app.actable_ticket_ids: active approver 21 ms, idle approver 12 ms
+  bulk approve of 50 tickets: 1,260 ms, done 50
