@@ -106,6 +106,18 @@ describe("T-TM ticket management view", () => {
     expect((await ticketSummary(tok("b"))).byType.map((t) => t.code)).toEqual(["GAMMA"]);
     expect((await ticketFilterOptions(tok("b"))).types.map((t) => t.code)).toEqual(["GAMMA"]);
     expect((await ticketSummary(tok("l1"))).kpi.total).toBe((await listTickets(tok("l1"))).rows.length);
+    // visibility, not row security: TK.viewer is a member at A and B (RLS shows both centres' tickets) but may view only
+    // BETA's ticket at A, as its named viewer; its list, counts and pickers say exactly that
+    await asAdmin((db) => db.query(`insert into app.ticket_type_viewer (type_id, user_id, role_id) values ($1, $2, null)`, [s.beta, TK.viewer]));
+    await grant(TK.viewer, TK_ROLE.member, C.B);
+    const W = tok("viewer");
+    expect((await listTickets(W)).rows.map((r) => r.id)).toEqual([s.b1]);
+    expect((await ticketSummary(W)).kpi.total).toBe(1);
+    const wo = await ticketFilterOptions(W);
+    expect([wo.centres.map((c) => c.code), wo.types.map((t) => t.code)]).toEqual([["KL2-25"], ["BETA"]]);
+    // the area filter is by area, not centre id (in the fixtures the ids coincide): move A into area 2
+    await asAdmin((db) => db.query(`update app.centre set area_id = 2 where id = 1`));
+    expect(await ids({ area: "2" })).toEqual([...s.a, s.a2, s.b1].sort());
     // a forward later approved no longer counts as forwarded (open only)
     await act(tok("fwd"), { ticketId: s.a[2]!, action: "approve", seenVersion: await version(s.a[2]!) });
     expect((await sum({})).kpi.forwarded).toBe(0);
@@ -134,25 +146,40 @@ describe("T-TM ticket management view", () => {
 
   test("T-TM-003 app.visible_ticket_ids() is exactly ticket_may_view, for every kind of viewer", async () => {
     const s = await seed();
-    // every branch present: a named-user and a role type viewer, a named approver, a forward target, a raiser
+    // every branch reached by a user WITHOUT ticket.view, so no branch hides behind another (TK.viewer: member, no
+    // permissions; TK.admin: type admin at ALL, no ticket.view; tmx: member at A, type admin at B only)
+    const TMX = "00000000-0000-0000-0000-0000000000fa";
     await asAdmin(async (db) => {
+      await db.query(`insert into app.app_user (id, login, display_name, status) values ($1, 'tmx', 'TM x', 'ACTIVE')`, [TMX]);
+      await db.query(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, $2, 'CENTRE', 1), ($1, $3, 'CENTRE', 3)`,
+        [TMX, TK_ROLE.member, TK_ROLE.typeAdmin]);
+      await db.query("set session_replication_role = replica"); // owner edits past the engine's guards
+      await db.query(`update app.ticket set raised_by = $1 where id = $2`, [TK.viewer, s.a[0]]); // raiser branch
+      await db.query(`update app.ticket_level set approver_role_id = null, approver_user_id = $1 where ticket_id = $2`, [TK.viewer, s.a[1]]); // named approver
+      await db.query(`insert into app.ticket_event (ticket_id, centre_id, actor_id, action, level, to_user_id)
+        select id, centre_id, $2, 'FORWARD', 1, $1 from app.ticket where id = $3`, [TK.viewer, TK.l1, s.a[2]]); // forward target
+      await db.query(`insert into app.ticket_event (ticket_id, centre_id, actor_id, action, level, to_user_id)
+        select id, centre_id, $2, 'FORWARD', 1, $1 from app.ticket where id = $3`, [TK.viewer, TK.l1, s.a2]); // at A2, which TK.viewer cannot see: excluded
+      await db.query(`update app.ticket_level set approver_role_id = $1 where ticket_id = $2`, [TK_ROLE.member, s.g]); // role approver at B
+      await db.query(`update app.ticket_level set approver_role_id = $1 where ticket_id = $2`, [TK_ROLE.typeAdmin, s.b1]); // tmx holds it at B, not A
+      await db.query("set session_replication_role = origin");
       await db.query(`insert into app.ticket_type_viewer (type_id, user_id, role_id) values ($1, $2, null), ($3, null, $4)`,
-        [s.beta, TK.viewer, s.gamma, TK_ROLE.member]);
-      await db.query(`update app.ticket_level set approver_role_id = null, approver_user_id = $1 where ticket_id = $2`, [TK.l2, s.a2]);
+        [s.beta, TK.viewer, s.gamma, TK_ROLE.typeAdmin]); // named and role type viewers
+      await db.query(`insert into app.app_session (token_hash, user_id, expires_at) values (sha256(convert_to('tok-tmx', 'UTF8')), $1, now() + interval '1 hour')`, [TMX]);
     });
-    await grant(TK.viewer, TK_ROLE.member, C.B); // member at B: the role viewer of GAMMA there
-    for (const name of Object.keys(TK) as (keyof typeof TK)[]) {
-      const [viaSet, viaRow] = await withScope(tok(name), async (tx) => [
+    await grant(TK.viewer, TK_ROLE.member, C.B); // member at B: the role approver of g
+    for (const t of [...(Object.keys(TK) as (keyof typeof TK)[]).map((n) => tok(n)), "tok-tmx"]) {
+      const [viaSet, viaRow] = await withScope(t, async (tx) => [
         (await tx.$queryRaw<{ id: string }[]>`select id::text from app.visible_ticket_ids() id order by 1`).map((r) => r.id),
         (await tx.$queryRaw<{ id: string }[]>`select id::text from app.ticket t where app.ticket_may_view(t.id) order by 1`).map((r) => r.id),
       ]);
-      expect(viaSet, name).toEqual(viaRow);
+      expect(viaSet, t).toEqual(viaRow);
     }
-    // not vacuous: the branches are hit
-    const seen = async (name: keyof typeof TK) => withScope(tok(name), async (tx) =>
+    // not vacuous: each branch alone gives these rows
+    const seen = async (t: string) => withScope(t, async (tx) =>
       (await tx.$queryRaw<{ id: string }[]>`select id::text from app.visible_ticket_ids() id`).map((r) => r.id).sort());
-    expect(await seen("viewer")).toEqual([s.b1, s.g].sort()); // a named viewer at A, a role viewer at B
-    expect(await seen("fwd")).toContain(s.a[2]!); // a forward target
-    expect(await seen("b")).toEqual([s.g]);
+    expect(await seen(tok("viewer"))).toEqual([s.a[0]!, s.a[1]!, s.a[2]!, s.b1, s.g].sort()); // raiser, named approver, forward target, named viewer, role approver
+    expect(await seen(tok("admin"))).toEqual([s.g, s.b1].sort()); // role type viewer of GAMMA and role approver of b1 (ALL scope)
+    expect(await seen("tok-tmx")).toEqual([s.g]); // role type viewer at B; not b1: its type-admin role is at B, b1 is at A
   });
 });
