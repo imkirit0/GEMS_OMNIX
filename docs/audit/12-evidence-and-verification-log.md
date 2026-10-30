@@ -1860,7 +1860,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - no drift; 0 type errors;
   - **203 passed + 3 skipped (timing) + 3 todo** (26 files);
   - build and bundle scan;
-  - the admin journey and all security smoke checks passed (`evidence/ci-fee-structure-2026-10-30.txt`).
+  - the admin journey and all security smoke checks passed (`evidence/ci-fee-structure-2026-10-30.txt`). Confirmed on GitHub: run 41020734324 for `a5a6bc9` succeeded.
 - **Limits and next steps:**
   - The GST rate list, the "amounts include GST" rule and the HSN/SAC codes are PMC: the tax advisor confirms them before go-live.
   - Currency per centre arrives with F2, which also refuses a plan whose currency differs from the centre's.

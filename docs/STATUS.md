@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-30, fee masters and fee structure built (Stage 4 F1; S1–S4), fresh-clone CI green 203 tests (last evidence: E-050).
+**Last updated:** 2026-10-30, fee masters and fee structure built (Stage 4 F1; S1–S4), fresh-clone CI green 203 tests, GitHub run 41020734324 green (last evidence: E-050).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.
