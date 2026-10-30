@@ -1,0 +1,46 @@
+Fee ledger mutation checks, 2026-10-30 (docs/designs/fee-ledger; scratchpad mutate_fl.py). Code mutations applied, the named test run, restored; database mutations of 0030 (posting trigger functions and the account guard by create or replace, policies, triggers, grants, checks) applied as SQL, the named test run, restored.
+36 distinct mutations (11 code, 25 database): 32 CAUGHT, 4 equivalent.
+Round 1:
+MISSED J1 posts for a non-active receipt
+CAUGHT J2 unmapped account passes
+MISSED J3 system account passes
+CAUGHT J4 cash for every mode
+CAUGHT J5 credits by gross not taxable
+MISSED J6 zero credit lines kept
+CAUGHT J7 credits unordered
+CAUGHT J8 no IGST line
+CAUGHT J9 balance unchecked
+CAUGHT J10 wrong date
+CAUGHT J11 currency INR always
+CAUGHT J12 narration
+MISSED R1 reversal without original
+CAUGHT R2 reversal not swapped
+CAUGHT R3 reversal unlinked date
+MISSED R4 reversal recomputed from mapping
+CAUGHT G1 any account mappable
+CAUGHT D1 journals readable by all
+CAUGHT D2 journal entries readable by all
+CAUGHT D3 lines updatable
+CAUGHT D4 entries truncatable
+CAUGHT D5 app may insert journals
+CAUGHT D6 post function callable
+CAUGHT D7 no cancel posting
+MISSED D8 line amount check dropped
+CAUGHT C1 day book any centre
+CAUGHT C2 no range cap
+CAUGHT C3 cap off by one
+CAUGHT C4 reversed range allowed
+CAUGHT C5 totals across currencies
+CAUGHT C6 source label
+CAUGHT C7 ledger centres any
+CAUGHT F1 app account check gone
+CAUGHT F2 system accounts mappable (app)
+CAUGHT F3 mapping not audited
+CAUGHT F4 noaccount unmapped
+Round 2: R4 rewritten (the round-1 R4 was a malformed mutation equal to the original); R1 run against T-AF-002, whose same-transaction cancel reaches it:
+CAUGHT R4 reversal recomputed from mapping
+CAUGHT R1b reversal without original (same-transaction cancel; T-AF-002)
+Equivalent:
+  J1 non-active receipt posted: receipt_guard stamps every new receipt ACTIVE, so the insert trigger never sees another status
+  J3 system account passes at posting: the fee type guard and the app refuse mapping a system account, so no line reaches posting with one
+  J6 zero credit lines kept / D8 line amount check dropped: a line amount is > 0, so its taxable is > 0 (taxable = amount*100/(100+rate) rounded); no zero credit arises
