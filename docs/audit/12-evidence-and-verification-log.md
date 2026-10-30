@@ -2173,3 +2173,70 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/students/[personId]/receipts/route.ts | 338b5be8ae61be9c5a0fa8979506832eee6133cb6e6a519f5480a878a03d68f5 |
 | tests/adhoc-fees.test.ts | 18ec22d3bb9d9aaa6fc54e791698817c7ce3637d8efc9a387d9ca70a9a1b3198 |
 | tests/fee-receipts.test.ts | 8ec0cab83f10a09d9171d17f49fc4cab8f8f3732c2ed199ac7b0efacc74eaf56 |
+
+## E-055 Fee ledger built (Stage 4, F1; WF4; R-040, R-042 part, R-044.01) (2026-10-30)
+- **Request:** the owner's standing instruction of 2026-10-30: "keep working … agree on the recommended option … finish everything all steps". DD-1…DD-10 and the build approval were taken as the recommended options under that instruction. They are not an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel: zoom-out Z1–Z7, comprehension C1–C12 (1 blocker), critic D1–D14 (2 blockers). Steps 8 (Z8-1…6) and 9 (R1–R15) followed. Every finding is resolved in `docs/designs/fee-ledger/fee-ledger.md`, and the reports are in the same folder. There were no owner items.
+  - **Found at review:**
+    - the posting function could be called directly, which would allow a forged reversal (Z1, D1, C2);
+    - the post sorted before the total check (Z2, C1, D4);
+    - FORCE RLS needs an owner that bypasses it (D2);
+    - a reversal recomputed from today's mapping is not a true mirror (D3);
+    - journals had no currency (D6, C7);
+    - the chart seed and the `accountId` contract were unspecified (C5, C6);
+    - the same-transaction cancel in T-AF-002 changes its error (R1);
+    - `schema.prisma` was missing (R2);
+    - the balance test was not buildable (Z8-3, R3).
+  - **Found at build:** the CGST, SGST and IGST accounts are liabilities, so a fee type could have been mapped to them. The guard, the app check and the posting check now refuse every system account.
+- **Built:**
+  - **Migration 0030** creates three tables:
+    - `account`, seeded with the 22 SPEC p. 15 heads that F1 can post to plus Cash in hand and Bank (clearing), with system keys for CASH, BANK, CGST, SGST and IGST;
+    - `journal_entry`, carrying a currency, the source (receipt or cancel), a link to the receipt, and `reversal_of`;
+    - `journal_line`, where each line is either a debit or a credit.
+  - It adds `fee_type.account_id` with `fee_type_account_guard`: a fee type maps to an active income or liability head, never to a system account.
+  - It adds two definer **trigger** functions. They cannot be called directly, and they are the only writers of journals:
+    - `receipt_post_journal`, run by the deferred `receipt_zpost` trigger, which sorts after `receipt_total_commit`. It refuses an unmapped fee type and checks that the entry balances to the receipt total.
+    - `receipt_post_reversal`, which runs on cancellation. It copies the original lines swapped, dates them on the IST cancellation date, and refuses when there is no original entry.
+  - Journals are immutable. RLS shows them to `ledger.view` at their centre and lets no one but the owner write. The migration adds the `ledger.view` permission.
+  - **Fees:** `fees.ts` adds `accountId` to create and update (audited) and to the fee type list. The fee type page gains an Account select.
+  - **Receipts:** `receiptDb` maps `journal_account_guard` to `fee.receipt.noaccount`.
+  - **Day Book:** `ledger.ts` adds `dayBook` (at most 92 days, totals per currency) and `ledgerCentres`. The `/ledger/day-book` page has a home link.
+  - **ETL reset:** clears the journals.
+- **Tests:** `tests/fee-ledger.test.ts`, T-FL-001…003. The balance guard is reached by an owner transaction that lifts `receipt_total_commit` and then rolls it back.
+  - The fixtures gain role 32 `ledger_viewer` and `tok-ledA`.
+  - `masters()` and the ad-hoc test map their fee types to accounts.
+  - T-AF-002 `voidInOne` now expects `journal_reversal_guard`.
+  - T-RLS-002 and T-RLS-005 are updated.
+  - The real server has 2 new checks.
+- **Mutation checks** (`evidence/mutation-fee-ledger-2026-10-30.txt`): 36 distinct mutations (11 code, 25 database). 32 are CAUGHT and 4 are equivalent.
+- **Checks:** a fresh clone of `394fe00`, with the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0:
+  - no drift; 0 type errors;
+  - **219 passed + 3 skipped (timing) + 3 todo** (31 files);
+  - build and bundle scan;
+  - the admin journey and all security smoke checks passed (`evidence/ci-fee-ledger-2026-10-30.txt`).
+- **Limits and next steps:**
+  - **Collection gate:** fee-receipts DD-5's ledger condition is met. The others still apply, and the rollout checklist adds one: every active fee type must be mapped to an account.
+  - **PMC for Accounts:**
+    - DD-3: Bank (clearing) for every non-cash mode;
+    - DD-7: income or liability mapping;
+    - DD-2: the G-codes;
+    - DD-6: the 92-day range.
+  - The hash chain (D-FIN-8) and periods (F12) are their own pieces.
+  - Not yet on Supabase (migrations 0012–0030).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0030_fee_ledger/migration.sql | 8942c941c21662322c44e4aaafa7525e2894a507a8abe85d7b504fd4ecead8a3 |
+| prisma/schema.prisma | f45354bfd48c4ecae6317ef34ead5371feac61ba96c18a5f8fab8ad686314025 |
+| src/server/ledger.ts | 486e059f77f4e26a09202de79573349eb120ed09d870dc63f135a5bde44ff721 |
+| src/server/fees.ts | 7181a03be84f6cb4e991da1ed7a9e4ce9b676ca1fc732642674f794a44a4dd9d |
+| src/server/receipts.ts | 98092b44072117354b7781463369bd31528e9828588b92f923f40b610abd4fcd |
+| src/server/admin-http.ts | 709e704cb0e59bc00109a0173a272eb3c808317dc37437479b47c12c1fc9e15a |
+| app/ledger/day-book/page.tsx | ee81541b6f5531eee362f26e6e9a73e328a910810eff740bddfb71d0d0a70106 |
+| app/admin/fees/types/page.tsx | 380b05df71dd0f5e5325a587e2099bcd52b669d557027044a94d46ef7539ed3c |
+| app/admin/fees/types/save/route.ts | 572433ba66e670847abdf11fb02ddab4db0be951256529e1f9389b3720b66871 |
+| app/page.tsx | 86cc258b914e81f38622ed45287a69cd655bcf2b0cce0e8cd4bcd4443fc6f5b3 |
+| tests/fee-ledger.test.ts | 3ffc26169fe379ecbde44fe832a6c98332097b7c2e4de62f4fdc99aba7ca294a |
+| scripts/etl/reset.sql | b3fcffda77e45eaca5294bcf9a93b8bf01825fbcf54edc8911c459c77b6213ed |
