@@ -171,3 +171,73 @@ export function holdHistory(session, centreId: number, from: string, to: string,
 ## Risks and Limits
 
 *   The hold check relies on matching RLS between `receipt` and `fee_hold_event` (D6). Any later change to either select policy must keep them aligned.
+
+## Revision after EGM steps 8 and 9 (approved)
+
+This revision resolves [`zoom_out_step8_report.md`](zoom_out_step8_report.md) and [`readiness_report.md`](readiness_report.md), and supersedes the text above wherever they differ. The build is approved as the recommended option under the owner's standing instruction; this is not an owner signature.
+
+1.  **One definition of "held" (Z8-1, Z8-2).**
+    *   `fee_due_balance` computes `held` once, through `left join lateral (select action from app.fee_hold_event … order by id desc limit 1) h on true`, grouped by `h.action`.
+    *   `owed` is computed once in an inner select, and `collectable` is derived from it.
+    *   The view repeats `with (security_invoker = true)` (R6).
+    *   `fee_hold_guard` (step 5) and the new step in `receipt_allocation_guard` both read `held`, `owed` and `outstanding` from `fee_due_balance`.
+2.  **Collection queries (R1, R2, Z8-3).**
+    *   The open-dues query keeps `where b.owed > 0` and selects four values:
+        *   `n` = `count(*)`;
+        *   `nc` = `count(*) filter (where b.collectable > 0)`;
+        *   `over` = `${amount} > Σ owed`;
+        *   `overc` = `${amount} > Σ collectable`.
+    *   The checks run in this order:
+
+        | Condition | Result |
+        |---|---|
+        | `!zero && n = 0` | `fee.receipt.nothing` |
+        | `over` | `fee.receipt.over` |
+        | `!zero && (nc = 0 or overc)` | `fee.receipt.held` |
+
+    *   Only the allocation window uses `collectable`.
+    *   A receipt carrying only ad-hoc items still works when every due is held. T-FH-001 covers this.
+3.  **Messages (R3).** All are fixed text:
+
+    | Key | Message |
+    |---|---|
+    | `fee.receipt.held` | "Some dues are on hold; only the amount shown as Collectable now can be collected." |
+    | `fee.hold.state` | "This due is already on hold, or is not on hold." |
+    | `fee.hold.paid` | "Nothing is owed on this due." |
+    | `fee.hold.mismatch` | "The due did not match; nothing was saved." |
+
+    The learner page labels add `reason: "Reason"`.
+4.  **T-AUD-009 (R4).** The scan list adds `["src/server/holds.ts", /"(fee\.[a-z0-9_.]+)"/g]`.
+5.  **ETL reset (R5).** `fee_hold_event` is truncated with `fee_due`. `fee_hold_event_no_truncate` is lifted before the truncate and restored after it.
+6.  **Guard conventions (R7).** The guard follows 0029: `language plpgsql security invoker set search_path = pg_catalog, app`; `created_by := coalesce(app.session_user_id(), new.created_by)`; every raise uses `errcode = '23514', constraint = '<name>'`; the lock key is `'fee-dues:' || registration_id::text`.
+7.  **Hold page (R8).** `holdCentres(session)` returns the centres in `scoped_centre_ids('fee.hold')` that are also in `student.view` scope. The page and the home link both use it. The page returns 404 when the list is empty or the centre is not in it, and otherwise defaults to the first centre (the Day Book pattern).
+8.  **Read functions (R9).**
+    *   **Row shapes.**
+        *   `HeldRow`: `{ dueId, personId, learner, courseCode, academicYear, feeTypeName, captionName, owed, since, by, reason }`, ordered by `since` descending.
+        *   `HoldEventRow`: `{ id, dueId, learner, feeTypeName, captionName, action, reason, at, by }`, ordered by id descending.
+        *   `by` is the holder's display name, read through a join to `app_user`. If that is not readable, the user id is shown instead.
+    *   **Authorization.** Both functions authorize `student.view` at the centre.
+    *   **History.** It filters on the IST date of `created_at`. The defaults are today, today and ALL. It uses the Day Book's error texts.
+    *   **Fee type filter.** The options come from `listFeeTypes`.
+9.  **`duesForPerson` (R10).**
+    *   The registrations query adds `(ce.status = 'ACTIVE' and app.has_permission('fee.hold', r.centre_id)) as "canHold"`.
+    *   The dues query adds `b.held`.
+    *   The totals query adds `sum(b.collectable)::text as collectable`.
+    *   T-FD-001's rows gain `collectable: null, canHold: false`.
+10. **`holdDb` (R11).** It reads the cause as `receiptDb` does, then maps:
+
+    | Raised | Mapped to |
+    |---|---|
+    | the state guard | `fee.hold.state` |
+    | the paid guard | `fee.hold.paid` |
+    | any other 23514, or 23503 | `fee.hold.mismatch` |
+    | 42501 | `Forbidden` |
+
+11. **Pre-flight (R12).** `select d.centre_id, d.registration_id::text from fee_due d join registration r … join admission a … where d.id = $due and a.person_id = $person and d.centre_id = any (scoped_centre_ids('student.view'))`.
+12. **Ad-hoc due (R13).** Holding an ad-hoc due fails with `fee.hold.mismatch`.
+13. **Prisma and RLS (R14).**
+    *   `creator AppUser @relation("feeHoldEventCreatedBy")`, with the back-relation `feeHoldEventsCreated`.
+    *   T-RLS-002 lists `fee_hold_event` between `fee_due` and `fee_plan`.
+    *   RLS is ENABLE + FORCE.
+14. **No app-side lock (Z8-4).** The guard takes the lock on insert. `owed` for the audit is read after the insert, still inside the same transaction.
+15. **Race test.** The race test follows the readiness report's two-client method.
