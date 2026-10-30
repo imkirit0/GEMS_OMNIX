@@ -1,0 +1,83 @@
+Fee receipts mutation checks, 2026-10-30 (docs/designs/fee-receipts; scratchpad mutate_fr.py). Code mutations: applied, the named test run, restored. Database mutations of 0027: guards by create or replace, policies, triggers, grants and the view, applied as SQL, the named test run, restored.
+70 mutations (38 code, 32 database): 62 CAUGHT, 8 equivalent.
+Round 1:
+MISSED G1 receipt guard: no lock
+CAUGHT G2 created_at not stamped
+CAUGHT G3 created_by not stamped
+CAUGHT G4 received_on not stamped
+CAUGHT G5 status not stamped
+CAUGHT G6 period unchecked
+CAUGHT G7 number unchecked
+CAUGHT G8 receipt_no not stamped
+CAUGHT G9 no length limit
+MISSED A1 receipt not-found passes
+CAUGHT A2 line in a later transaction
+MISSED A3 allocation guard: no lock
+CAUGHT A4 other registration's due
+CAUGHT A5 other currency
+MISSED A6 line centre unchecked
+CAUGHT A7 over-allocation
+CAUGHT A8 rate not stamped
+CAUGHT A9 hsn not stamped
+CAUGHT A10 incomplete GST passes
+CAUGHT A11 no IGST
+CAUGHT A12 taxable truncated
+CAUGHT A13 cgst truncated
+MISSED A14 GST outside INR too
+CAUGHT A15 untaxed centre taxed
+MISSED T1 receipt without lines
+CAUGHT T2 wrong total
+CAUGHT D1 select policy open
+CAUGHT D2 line select policy open
+CAUGHT D3 insert policy open
+CAUGHT D4 receipt updatable
+CAUGHT D5 lines truncatable
+CAUGHT D6 status granted
+CAUGHT D7 series current granted
+MISSED D8 balance counts any status
+CAUGHT C1 gate ignored
+CAUGHT C2 pre-flight ignores person
+CAUGHT C3 pre-flight ignores scope
+CAUGHT C4 key unchecked
+CAUGHT C5 zero amount allowed
+CAUGHT C6 any mode
+CAUGHT C7 cash with reference
+CAUGHT C8 reference optional
+CAUGHT C9 reference length
+CAUGHT C10 cheque date optional
+CAUGHT C11 date for any mode
+CAUGHT C12 post-dated allowed
+CAUGHT C13 no replay
+CAUGHT C14 replay for any registration
+CAUGHT C15 no trading gate
+CAUGHT C16 nothing unmapped
+CAUGHT C17 app over check gone
+CAUGHT C18 no rollover create
+CAUGHT C19 noseries unmapped
+CAUGHT C20 newest first
+CAUGHT C21 audit without detail
+CAUGHT C22 replay audit without original
+MISSED C23 over guard unmapped
+CAUGHT C24 tax guard unmapped
+CAUGHT C25 outer mapping gone
+MISSED C26 23505 not mismatch
+CAUGHT C27 receipt visible to all
+CAUGHT C28 bad id read
+CAUGHT N1 canCollect ignores gate
+CAUGHT N2 canCollect ignores owing
+CAUGHT N3 canCollect ignores permission
+CAUGHT N4 paid from all receipts
+CAUGHT N5 rollover from the latest row only
+CAUGHT N6 activation opens no series
+CAUGHT N7 replay lands as saved
+CAUGHT N8 catalogue gap
+Round 2 (after a USD plan made by the owner and a collector who sees only A2 were added to T-FR-001; mutation entries pointed at T-FR-001):
+CAUGHT A14 GST outside INR too
+CAUGHT C26 23505 not mismatch
+Equivalent (each still refused by another check):
+  G1, A3 guard locks: the FEEREC series row lock already serialises a centre's receipts, and each guard's fee-dues lock duplicates the other in one transaction; kept for F4/F5 writers that do not touch the series
+  A1 receipt not found: the later registration check refuses (and the composite FK)
+  A6 line centre: the composite FK (receipt_id, centre_id)
+  T1 no lines: total > 0 (receipt_total_check), so no lines sum to 0 <> total
+  D8 balance status filter: no CANCELLED receipt can exist until F4 (status stamped ACTIVE, no update)
+  C23 over guard mapping: the app's over check runs under the same lock first

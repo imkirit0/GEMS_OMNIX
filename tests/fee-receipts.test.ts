@@ -43,10 +43,11 @@ const gst = (supply: "STATE" | "INTERSTATE" | null, gstin: string | null = "32AB
 
 let app: pg.Client;
 let period = "";
+let seed: Awaited<ReturnType<typeof seedFeePlan>>;
 beforeAll(async () => { app = new pg.Client({ connectionString: process.env["APP_DATABASE_URL"] }); await app.connect(); });
 afterAll(async () => { await app.end(); await auth().close(); });
 beforeEach(async () => {
-  await reset(); await setStepUp(FEE_S, 0); await seedFeePlan();
+  await reset(); await setStepUp(FEE_S, 0); seed = await seedFeePlan();
   FEE_GATES.collectionLive = true;
   period = (await sql(`select app.financial_year((now() at time zone 'Asia/Kolkata')::date) as p`))[0].p;
   // this financial year's FEEREC rows, whatever today is (C8, R1)
@@ -119,11 +120,33 @@ describe("T-FR fee receipts", () => {
     expect(await thrown(pay(L.personId, L.dca))).toMatchObject({ key: "fee.receipt.nothing" });
     expect((await sql(`select receipt_no from app.receipt where centre_id = $1 order by number`, [C.A])).map((r) => r.receipt_no))
       .toEqual([no(1), no(2), no(3), no(4), no(5)]);
-    // an inactive centre (the session stays valid through the user's active centre A)
+    // centre A2: a USD plan made by the owner (the app makes INR plans only): no GST outside INR, even at a taxed centre (D-CUR-1)
     await sql(`update app.centre set centre_class_id = 1 where id = $1`, [C.A2]);
+    await asAdmin(async (db) => {
+      await db.query("begin");
+      await db.query("select set_config('app.session_id', $1, true)", [FEE_S]);
+      const pl = (await db.query(`insert into app.fee_plan (academic_year, course_id, centre_id, version, currency) values ('2026-27', 1, $1, 1, 'USD') returning id`, [C.A2])).rows[0].id;
+      await db.query(`insert into app.fee_plan_line (plan_id, academic_year, fee_type_id, caption_id, amount)
+        select $1, academic_year, fee_type_id, caption_id, amount from app.fee_plan_line where plan_id = $2`, [pl, seed.planId]);
+      await db.query(`update app.fee_plan set status = 'PUBLISHED' where id = $1`, [pl]);
+      await db.query("commit");
+    });
+    // a collector who sees only A2 (X), and fee dues there
+    const X = "00000000-0000-0000-0000-0000000000f9", XT = "tok-feeX";
+    await sql(`insert into app.app_user (id, login, display_name, status) values ($1, 'feex', 'Fee collection A2', 'ACTIVE')`, [X]);
     await sql(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, 30, 'CENTRE', $2), ($3, 29, 'CENTRE', $2)`,
-      [FC.a, C.A2, "00000000-0000-0000-0000-0000000000f7"]);
+      [X, C.A2, "00000000-0000-0000-0000-0000000000f7"]);
+    await sql(`insert into app.app_session (token_hash, user_id, expires_at) values (sha256(convert_to($1, 'UTF8')), $2, now() + interval '1 hour')`, [XT, X]);
     const atA2 = await learner(C.A2, ST_TOKEN.sr);
+    await gst("STATE", "32ABCDE1234F1Z5", C.A2);
+    const kx = key();
+    const usd = await pay(atA2.personId, atA2.dca, { amount: "118", idempotencyKey: kx }, XT);
+    expect(await linesOf(usd.receiptId)).toEqual([{ due: "2026-11-30", amount: "118.00", rate: "18.00", hsn: "999293", taxable: "118.00", cgst: "0.00", sgst: "0.00", igst: "0.00" }]);
+    expect(usd.receiptNo).toBe(no(1, "KL3-07"));
+    // the same key at A, by a collector who cannot see A2's receipt: refused (the key is unique), never answered with it
+    expect(await thrown(pay(other.personId, other.dca, { idempotencyKey: kx }))).toMatchObject({ key: "fee.receipt.mismatch" });
+    // an inactive centre (the session stays valid through the user's active centre A)
+    await sql(`insert into app.role_assignment (user_id, role_id, scope_kind, scope_centre_id) values ($1, 30, 'CENTRE', $2)`, [FC.a, C.A2]);
     await sql(`update app.centre set status = 'INACTIVE' where id = $1`, [C.A2]);
     expect(await msg(pay(atA2.personId, atA2.dca))).toBe("centreId: centre is not active");
   });
