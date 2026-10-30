@@ -6,15 +6,21 @@ import { authorize, Forbidden, scopedAction } from "./action";
 import { withScope } from "./db";
 import { bad } from "./catalogue";
 import { FEE_GATES, lockKey } from "./dues";
+import { resolvePlan } from "./fees";
 import { allocate, SeriesMissing } from "./numbering";
 import { isoDate, istToday, PersonError } from "./person-rules";
 import { RbacError, StepUpRequired } from "./rbac";
 
 export { FEE_GATES };
 export const MODES = ["CASH", "CHEQUE", "DD", "BANK_TRANSFER", "UPI", "CARD"] as const;
-export type CollectInput = { registrationId: string; amount: string; mode: string; reference?: string; instrumentDate?: string; idempotencyKey: string };
+export type Extra = { feeTypeId: number; amount: string };
+export type CollectInput = { registrationId: string; amount: string; mode: string; reference?: string; instrumentDate?: string; idempotencyKey: string;
+  extras?: Extra[] }; // ad-hoc items (docs/designs/adhoc-fees)
+/** Ad-hoc items per receipt (adhoc-fees DD-1). */
+export const MAX_EXTRAS = 3;
+const EXTRA_AMOUNT = /^\d{1,7}(\.\d{1,2})?$/;
 export type Collected = { receiptId: string; receiptNo: string; total: string; replay: boolean };
-export type ReceiptLine = { feeTypeName: string; captionName: string; hsnSac: string; gstRate: string; taxable: string; cgst: string;
+export type ReceiptLine = { feeTypeName: string; captionName: string; adhoc: boolean; hsnSac: string; gstRate: string; taxable: string; cgst: string;
   sgst: string; igst: string; amount: string };
 export type ReceiptView = { id: string; receiptNo: string; receivedOn: string; mode: string; reference: string | null; instrumentDate: string | null;
   currency: string; total: string; status: string; cancelledAt: string | null; cancelReason: string | null; canCancel: boolean; centreCode: string; centreName: string; gstin: string | null; learner: string;
@@ -37,6 +43,7 @@ async function receiptDb<T>(run: () => Promise<T>): Promise<T> {
     const c = cause?.originalCode;
     const name = /constraint "([^"]+)"/.exec(cause?.originalMessage ?? "")?.[1] ?? "";
     if (name === "receipt_over_guard") throw new RbacError("invalid", "the amount is more than what is outstanding", "fee.receipt.over");
+    if (name === "fee_due_adhoc_plan_guard") throw new RbacError("invalid", "that fee type is on the learner's plan", "fee.receipt.adhocplan");
     if (name === "receipt_tax_guard") throw new RbacError("invalid", "the centre's GST details are incomplete", "fee.receipt.gst");
     // cancellation (receipt-cancel): the guard alone decides the day, the status and the step-up
     if (name === "receipt_cancel_late_guard") throw new RbacError("invalid", "the receipt is not from today", "fee.receipt.late");
@@ -56,8 +63,18 @@ export async function collectFee(session: string | undefined, personId: string, 
   if (typeof personId !== "string" || !UUID.test(personId) || typeof regId !== "string" || !UUID.test(regId)) throw new PersonError("notfound");
   const key = input.idempotencyKey;
   if (typeof key !== "string" || !UUID.test(key)) throw bad("idempotencyKey: invalid");
-  const amount = typeof input.amount === "string" ? input.amount.trim() : "";
-  if (!AMOUNT.test(amount) || /^0+(\.0+)?$/.test(amount)) throw bad("amount: from 0.01, up to 2 decimals");
+  // ad-hoc items first: they decide whether a plan amount of 0 is allowed (adhoc-fees DD-4, R8)
+  const extras = input.extras ?? [];
+  if (!Array.isArray(extras) || extras.length > MAX_EXTRAS) throw bad(`extras: at most ${MAX_EXTRAS}`);
+  for (const x of extras) {
+    if (!Number.isSafeInteger(x?.feeTypeId) || x.feeTypeId < 1) throw bad("extras: fee type");
+    if (typeof x.amount !== "string" || !EXTRA_AMOUNT.test(x.amount.trim()) || /^0+(\.0+)?$/.test(x.amount.trim())) throw bad("extras: amount from 0.01, up to 99,99,999.99");
+  }
+  if (new Set(extras.map((x) => x.feeTypeId)).size !== extras.length) throw bad("extras: one line per fee type");
+  const extraTypes = extras.map((x) => x.feeTypeId), extraAmounts = extras.map((x) => x.amount.trim());
+  const amount = typeof input.amount === "string" && input.amount.trim() !== "" ? input.amount.trim() : extras.length > 0 ? "0" : "";
+  const zero = /^0+(\.0+)?$/.test(amount);
+  if (!AMOUNT.test(amount) || (zero && extras.length === 0)) throw bad("amount: from 0.01, up to 2 decimals");
   const mode = input.mode;
   if (!(MODES as readonly string[]).includes(mode)) throw bad("mode: one of the listed values");
   const ref = typeof input.reference === "string" && input.reference.trim() !== "" ? input.reference.trim() : null;
@@ -103,12 +120,29 @@ export async function collectFee(session: string | undefined, personId: string, 
       }
       const [st] = await tx.$queryRaw<{ s: string }[]>`select status::text as s from app.centre where id = ${centreId}`;
       if (st?.s !== "ACTIVE") throw bad("centreId: centre is not active");
+      if (extras.length > 0) {
+        const [ok] = await tx.$queryRaw<{ n: number }[]>`select count(*)::int as n from app.fee_type where id = any (${extraTypes}::int[]) and active`;
+        if (ok!.n !== extras.length) throw bad("extras: fee type");
+        // a plan fee is collected against its dues, never ad hoc: also before Create dues (adhoc-fees Z8-1, R4)
+        const [g] = await tx.$queryRaw<{ courseId: number; year: string }[]>`
+          select co.id as "courseId", a.academic_year as year from app.registration r join app.admission a on a.id = r.admission_id
+            join app.course co on co.code = r.course_code where r.id = ${regId}::uuid`;
+        const plan = await resolvePlan(tx, centreId, g!.courseId, g!.year);
+        if (plan) {
+          const [hit] = await tx.$queryRaw<{ x: boolean }[]>`
+            select exists (select 1 from app.fee_plan_line where plan_id = ${plan.planId} and fee_type_id = any (${extraTypes}::int[])) as x`;
+          if (hit!.x) throw new RbacError("invalid", "that fee type is on the learner's plan", "fee.receipt.adhocplan");
+        }
+      }
+      // what is owed: PLAN dues only (fee_due_balance.owed, adhoc-fees DD-6)
       const [owed] = await tx.$queryRaw<{ n: number; over: boolean; currency: string | null }[]>`
-        select count(*)::int as n, coalesce(${amount}::numeric > sum(b.outstanding), true) as over, min(d.currency::text) as currency
+        select count(*)::int as n, ${amount}::numeric > coalesce(sum(b.owed), 0) as over, min(d.currency::text) as currency
         from app.fee_due_balance b join app.fee_due d on d.id = b.due_id
-        where b.registration_id = ${regId}::uuid and b.outstanding > 0`;
-      if (owed!.n === 0) throw new RbacError("invalid", "nothing is outstanding", "fee.receipt.nothing");
+        where b.registration_id = ${regId}::uuid and b.owed > 0`;
+      if (!zero && owed!.n === 0) throw new RbacError("invalid", "nothing is outstanding", "fee.receipt.nothing");
       if (owed!.over) throw new RbacError("invalid", "the amount is more than what is outstanding", "fee.receipt.over");
+      const currency = owed!.currency ?? "INR";
+      if (extras.length > 0 && currency !== "INR") throw bad("extras: INR only");
       const period = (await tx.$queryRaw<{ period: string }[]>`select app.financial_year((now() at time zone 'Asia/Kolkata')::date) as period`)[0]!.period;
       let number: bigint;
       try {
@@ -119,25 +153,35 @@ export async function collectFee(session: string | undefined, personId: string, 
       }
       const [made] = await tx.$queryRaw<{ receiptNo: string; total: string }[]>`
         insert into app.receipt (id, centre_id, registration_id, period, number, mode, reference, instrument_date, currency, total, idempotency_key)
-        values (${id}::bigint, ${centreId}, ${regId}::uuid, ${period}, ${number}, ${mode}, ${ref}, ${instrumentDate}::date, ${owed!.currency},
-          ${amount}::numeric, ${key}::uuid)
+        values (${id}::bigint, ${centreId}, ${regId}::uuid, ${period}, ${number}, ${mode}, ${ref}, ${instrumentDate}::date, ${currency},
+          ${amount}::numeric + (select coalesce(sum(x), 0) from unnest(${extraAmounts}::numeric[]) x), ${key}::uuid)
         returning receipt_no as "receiptNo", total::text as total`;
+      // each ad-hoc item: its due, then its full line, as separate statements (the line's guard reads the due, C7)
+      for (const [i, t] of extraTypes.entries()) {
+        const [d] = await tx.$queryRaw<{ id: string }[]>`
+          insert into app.fee_due (registration_id, centre_id, source, fee_type_id, due_on, gross, currency)
+          values (${regId}::uuid, ${centreId}, 'ADHOC', ${t}, (now() at time zone 'Asia/Kolkata')::date, ${extraAmounts[i]}::numeric, 'INR')
+          returning id::text`;
+        await tx.$executeRaw`insert into app.receipt_allocation (receipt_id, centre_id, due_id, amount)
+          values (${id}::bigint, ${centreId}, ${d!.id}::bigint, ${extraAmounts[i]}::numeric)`;
+      }
       // oldest first (DD-1): each open due takes what is left of the amount, up to its outstanding
       lines = await tx.$executeRaw`
         insert into app.receipt_allocation (receipt_id, centre_id, due_id, amount)
         select ${id}::bigint, ${centreId}, x.due_id, x.take from (
           select b.due_id, d.due_on,
-            least(b.outstanding, ${amount}::numeric - coalesce(sum(b.outstanding) over (order by d.due_on, d.id
+            least(b.owed, ${amount}::numeric - coalesce(sum(b.owed) over (order by d.due_on, d.id
               rows between unbounded preceding and 1 preceding), 0)) as take
           from app.fee_due_balance b join app.fee_due d on d.id = b.due_id
-          where b.registration_id = ${regId}::uuid and b.outstanding > 0) x
+          where b.registration_id = ${regId}::uuid and b.owed > 0) x
         where x.take > 0
         order by x.due_on, x.due_id`;
+      lines += extras.length;
       done = { receiptId: id, receiptNo: made!.receiptNo, total: made!.total, replay: false };
       return done;
     }), () => (done?.replay
       ? { after: { replay: true, receiptId: done.receiptId, receiptNo: done.receiptNo } }
-      : { after: { receiptNo: done?.receiptNo, total: done?.total, mode, lines } })));
+      : { after: { receiptNo: done?.receiptNo, total: done?.total, mode, lines, extras: extras.map((x) => ({ feeTypeId: x.feeTypeId, amount: x.amount.trim() })) } })));
 }
 
 /** One receipt with its lines and totals (G4); invisible, missing or malformed: not found. */
@@ -157,10 +201,10 @@ export function getReceipt(session: string | undefined, receiptId: string): Prom
       where r.id = ${receiptId}::bigint`;
     if (!h) throw new RbacError("notfound", "receipt not found");
     const lines = await tx.$queryRaw<ReceiptLine[]>`
-      select t.name as "feeTypeName", k.name as "captionName", l.hsn_sac as "hsnSac", l.gst_rate::numeric(7,2)::text as "gstRate",
+      select t.name as "feeTypeName", coalesce(k.name, 'Ad-hoc') as "captionName", d.source = 'ADHOC' as adhoc, l.hsn_sac as "hsnSac", l.gst_rate::numeric(7,2)::text as "gstRate",
         l.taxable::text as taxable, l.cgst::text as cgst, l.sgst::text as sgst, l.igst::text as igst, l.amount::text as amount
       from app.receipt_allocation l join app.fee_due d on d.id = l.due_id join app.fee_type t on t.id = d.fee_type_id
-        join app.fee_caption k on k.id = d.caption_id
+        left join app.fee_caption k on k.id = d.caption_id
       where l.receipt_id = ${receiptId}::bigint order by d.due_on, d.id`;
     const [totals] = await tx.$queryRaw<ReceiptView["totals"][]>`
       select sum(taxable)::text as taxable, sum(cgst)::text as cgst, sum(sgst)::text as sgst, sum(igst)::text as igst

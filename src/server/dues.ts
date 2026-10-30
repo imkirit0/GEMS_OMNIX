@@ -45,7 +45,7 @@ async function createDuesTx(tx: Tx, registrationId: string, centreId: number) {
     from app.registration r join app.admission a on a.id = r.admission_id join app.course co on co.code = r.course_code
     where r.id = ${registrationId}::uuid and r.centre_id = ${centreId}`;
   if (r?.status !== "ACTIVE") throw bad("registrationId: not active");
-  const [has] = await tx.$queryRaw<{ n: number }[]>`select count(*)::int as n from app.fee_due where registration_id = ${registrationId}::uuid`;
+  const [has] = await tx.$queryRaw<{ n: number }[]>`select count(*)::int as n from app.fee_due where registration_id = ${registrationId}::uuid and source = 'PLAN'`; // ad-hoc dues never block (adhoc-fees D1)
   if (has!.n > 0) throw new RbacError("duplicate", "this course already has its dues", "fee.dues.exists");
   const plan = await resolvePlan(tx, centreId, r.courseId, r.year);
   if (!plan) throw new RbacError("invalid", "no published fee plan prices this course here", "fee.dues.noplan");
@@ -58,7 +58,7 @@ async function createDuesTx(tx: Tx, registrationId: string, centreId: number) {
       join app.fee_caption c on c.id = l.caption_id join app.fee_type t on t.id = l.fee_type_id
     where l.plan_id = ${plan.planId}
     order by c.sort_order, c.due_on, t.sort_order, t.code`;
-  const [t] = await tx.$queryRaw<{ total: string }[]>`select sum(gross)::text as total from app.fee_due where registration_id = ${registrationId}::uuid`;
+  const [t] = await tx.$queryRaw<{ total: string }[]>`select sum(gross)::text as total from app.fee_due where registration_id = ${registrationId}::uuid and source = 'PLAN'`;
   return { planId: plan.planId, version: v!.version, count, total: t!.total };
 }
 
@@ -87,7 +87,7 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
   return withScope(session, async (tx) => {
     const regs = await tx.$queryRaw<{ id: string; centreId: number; courseId: number; year: string; canCreate: boolean; canCollect: boolean }[]>`
       select r.id::text, r.centre_id as "centreId", co.id as "courseId", a.academic_year as year,
-        (not exists (select 1 from app.fee_due d where d.registration_id = r.id) and r.status = 'ACTIVE' and ce.status = 'ACTIVE'
+        (not exists (select 1 from app.fee_due d where d.registration_id = r.id and d.source = 'PLAN') and r.status = 'ACTIVE' and ce.status = 'ACTIVE'
           and app.has_permission('fee.dues', r.centre_id)) as "canCreate",
         (ce.status = 'ACTIVE' and app.has_permission('fee.collect', r.centre_id)) as "canCollect"
       from app.registration r join app.admission a on a.id = r.admission_id
@@ -102,12 +102,13 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
         d.due_on::text as "dueOn", d.gross::text as gross, d.currency::text as currency, b.paid::text as paid, b.outstanding::text as outstanding
       from app.fee_due d join app.fee_type t on t.id = d.fee_type_id join app.fee_caption c on c.id = d.caption_id
         join app.fee_due_balance b on b.due_id = d.id
-      where d.registration_id = any (${ids}::uuid[])
+      where d.registration_id = any (${ids}::uuid[]) and d.source = 'PLAN'
       order by d.due_on, d.id`;
-    const totals = new Map((await tx.$queryRaw<{ id: string; total: string; outstanding: string; owing: boolean }[]>`
-      select d.registration_id::text as id, sum(d.gross)::text as total, sum(b.outstanding)::text as outstanding, sum(b.outstanding) > 0 as owing
+    // what is owed: PLAN dues only, from the one definition (fee_due_balance.owed, adhoc-fees DD-6)
+    const totals = new Map((await tx.$queryRaw<{ id: string; total: string; outstanding: string }[]>`
+      select d.registration_id::text as id, sum(d.gross)::text as total, sum(b.owed)::text as outstanding
       from app.fee_due d join app.fee_due_balance b on b.due_id = d.id
-      where d.registration_id = any (${ids}::uuid[]) group by d.registration_id`).map((t) => [t.id, t]));
+      where d.registration_id = any (${ids}::uuid[]) and d.source = 'PLAN' group by d.registration_id`).map((t) => [t.id, t]));
     const receipts = await tx.$queryRaw<(ReceiptRow & { registrationId: string })[]>`
       select id::text, registration_id::text as "registrationId", receipt_no as "receiptNo", received_on::text as "receivedOn",
         total::text as total, mode, status
@@ -119,7 +120,7 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
       out.push({ registrationId: r.id, dues: dues.filter((d) => d.registrationId === r.id).map(({ registrationId: _, ...d }) => d),
         total: t?.total ?? null, canCreate: r.canCreate, noPlan, outstanding: t?.outstanding ?? null,
         receipts: receipts.filter((x) => x.registrationId === r.id).map(({ registrationId: _, ...x }) => x),
-        canCollect: FEE_GATES.collectionLive && r.canCollect && t?.owing === true });
+        canCollect: FEE_GATES.collectionLive && r.canCollect }); // ad-hoc items need no plan balance (adhoc-fees D6)
     }
     return out;
   });

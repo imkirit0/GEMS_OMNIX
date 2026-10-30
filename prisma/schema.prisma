@@ -706,6 +706,7 @@ model FeeType {
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
   category   FeeCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   lines      FeePlanLine[]
+  dues          FeeDue[]
 
   @@map("fee_type")
   @@schema("app")
@@ -774,21 +775,24 @@ model FeePlanLine {
 
 // ---------- Fee dues (docs/designs/fee-dues; checks, guard, immutability, RLS and grants in migration 0026) ----------
 // Immutable and gross-only (DD-3): concessions, holds, adjustments and allocations are later rows that reference the id.
-// The line key implies the plan, fee type and caption, so those need no separate relations.
+// PLAN dues: the line key implies the plan, fee type and caption. ADHOC dues (docs/designs/adhoc-fees, 0029): no plan or caption,
+// a fee type FK, paid in full with their receipt.
 model FeeDue {
   id             BigInt       @id @default(autoincrement())
   registrationId String       @map("registration_id") @db.Uuid
   centreId       Int          @map("centre_id")
-  planId         Int          @map("plan_id")
+  source         String       @default("PLAN")
+  planId         Int?         @map("plan_id")
   feeTypeId      Int          @map("fee_type_id")
-  captionId      Int          @map("caption_id")
+  captionId      Int?         @map("caption_id")
   dueOn          DateTime     @map("due_on") @db.Date
   gross          Decimal      @db.Decimal(14, 2)
   currency       String       @db.Char(3)
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
   createdBy      String       @map("created_by") @db.Uuid
   registration   Registration @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
-  line           FeePlanLine  @relation(fields: [planId, feeTypeId, captionId], references: [planId, feeTypeId, captionId], onDelete: Restrict, onUpdate: Restrict)
+  line           FeePlanLine? @relation(fields: [planId, feeTypeId, captionId], references: [planId, feeTypeId, captionId], onDelete: Restrict, onUpdate: Restrict)
+  feeType        FeeType      @relation(fields: [feeTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   creator        AppUser      @relation("feeDueCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   allocations    ReceiptAllocation[]
 

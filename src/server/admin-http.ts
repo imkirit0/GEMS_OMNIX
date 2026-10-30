@@ -62,6 +62,7 @@ export const ADMIN_MESSAGES: Record<string, string> = {
   "fee.receipt.mismatch": "The receipt did not match the dues; nothing was saved.",
   "fee.receipt.late": "This receipt is not from today; ask for a cancellation ticket.",
   "fee.receipt.cancelled": "This receipt is cancelled.",
+  "fee.receipt.adhocplan": "That fee type is on the learner's fee plan; collect it against the dues.",
   "rbac.forbidden": "You can only grant roles where you hold every one of their permissions.",
   "ticket.invalid": "Some values were missing or not allowed. Check the form and try again.",
   "ticket.document": "A document is missing, too large, of a type that is not allowed, or already used.",

@@ -323,7 +323,7 @@ describe("T-FR fee receipts", () => {
     expect(dca).toMatchObject({ registrationId: L.dca, total: "20500.60", outstanding: "19900.60", canCollect: true,
       receipts: [{ id: r.receiptId, receiptNo: no(1), receivedOn: expect.any(String), total: "600.00", mode: "CASH" }] });
     expect(dca!.dues.map((d) => [d.paid, d.outstanding])).toEqual([["500.00", "0.00"], ["100.00", "11900.50"], ["0.00", "0.10"], ["0.00", "8000.00"]]);
-    expect(tally).toMatchObject({ outstanding: null, receipts: [], canCollect: false });
+    expect(tally).toMatchObject({ outstanding: null, receipts: [], canCollect: true }); // no plan dues, yet ad-hoc items may be paid (adhoc-fees D6)
     expect((await duesForPerson(V, L.personId))[0]!.canCollect).toBe(false); // no fee.collect
     FEE_GATES.collectionLive = false;
     expect((await duesForPerson(K, L.personId))[0]!.canCollect).toBe(false);

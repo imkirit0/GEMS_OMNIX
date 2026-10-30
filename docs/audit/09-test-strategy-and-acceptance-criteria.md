@@ -269,6 +269,13 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-RC-002 | Cancellation proven by the database | By SQL the guard refuses, by name, any change but ACTIVE to CANCELLED, a past-day receipt, a stale step-up and any other column changed; who and when stamped; delete and truncate still refused; lines still immutable; a concurrent collection sees the restored outstanding only after commit |
 | T-RC-003 | Cancel route | Same origin; success and a resubmitted cancel land on the receipt; errors on the receipt page; a stale step-up goes to step-up; bad or out-of-scope ids give 404 |
 
+### T-AF: ad-hoc fees collected with the receipt (`docs/designs/adhoc-fees/adhoc-fees.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-AF-001 | Ad-hoc items on a receipt | Up to 3 items (fee type and amount, GST included) become dues dated today, paid in full by the receipt, with GST from their fee type; extras alone are allowed, also before any dues and for a fully paid learner, and Create dues still works afterwards; refused: too many, a repeated or inactive type, a type on the learner's plan, a zero or too large amount, extras outside INR; never owed, also after a cancel; audited |
+| T-AF-002 | Ad-hoc dues proven by the database | By SQL an ad-hoc due not paid in full at commit, with a plan, an inactive type, a plan type or another currency is refused by name; a void ad-hoc due is never paid later; only fee.collect creates them; the dues view keeps row security; plan dues unchanged |
+| T-AF-003 | Ad-hoc items through the form | Repeated fields, a half-filled row refused with its field, success on the receipt |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

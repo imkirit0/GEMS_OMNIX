@@ -1731,7 +1731,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 - **Owners:** Accounts (19), Marketing/Accounts (1)
 - **Workflows (05):** WF-X15 Bulk imports; WF-X5 Receipt transfer; WF14 Year closing & promotion; WF2 Catalogue & availability; WF4 Fee setup & collection; WF5 Schemes & concessions
 - **Open decisions (04):** D-CAT-3, D-FEE-1, D-FEE-2, D-FEE-4, D-FEE-5, D-FEE-6, D-FIN-1, D-FIN-2, D-FIN-3, D-FIN-4, D-FIN-7, D-MIG-1, D-ROY-2, D-SCH-1, D-SCH-2, D-SCH-3, D-STU-2, D-YEAR-2, NP-6, PR-03, PR-08
-- **Distinct acceptance tests (09):** 31
+- **Distinct acceptance tests (09):** 34
 
 #### FR-012.07: Student Concession Log (part of FR-012)
 
@@ -1922,7 +1922,7 @@ Each entry is one row of the traceability matrix. `FR-x` = matrix `R-x`. Accepta
 | Depends on | FR-051 |
 | Business owner | Accounts |
 | Open decisions | D-FEE-1 |
-| Acceptance tests | T-FEE-001 |
+| Acceptance tests | T-FEE-001, T-AF-001, T-AF-002, T-AF-003 |
 | Workflows | WF4 Fee setup & collection |
 | Data migration | dues IMPORTED |
 | Delivery stage | 4 Fees, receipts, payments, accounting |

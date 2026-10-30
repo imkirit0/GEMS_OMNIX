@@ -3,7 +3,8 @@ import { pageRead } from "@/server/page-read";
 import { getPerson } from "@/server/people";
 import { randomUUID } from "node:crypto";
 import { duesForPerson } from "@/server/dues";
-import { MODES } from "@/server/receipts";
+import { MAX_EXTRAS, MODES } from "@/server/receipts";
+import { listFeeTypes } from "@/server/fees";
 import { inr } from "@/lib/money";
 import { AdminErrors } from "../../admin/catalogue/admin-errors";
 
@@ -23,7 +24,9 @@ export default async function Student({ params, searchParams }: { params: Promis
   searchParams: Promise<{ error?: string; detail?: string; saved?: string }> }) {
   const { personId } = await params;
   const { error, detail, saved } = await searchParams;
-  const [{ person: p, admissions, details, editCentreId }, fees] = await pageRead((s) => Promise.all([getPerson(s, personId), duesForPerson(s, personId)]));
+  const [{ person: p, admissions, details, editCentreId }, fees, types] = await pageRead((s) =>
+    Promise.all([getPerson(s, personId), duesForPerson(s, personId), listFeeTypes(s)]));
+  const adhocTypes = types.rows.filter((t) => t.active); // the server refuses a type on the learner's plan (adhoc-fees D4)
   const feesOf = new Map(fees.map((f) => [f.registrationId, f]));
   const countries = new Map(countryOptions());
   const shown = (k: DetailKey, v: string) =>
@@ -34,7 +37,7 @@ export default async function Student({ params, searchParams }: { params: Promis
       <h1>{p.givenName} {p.familyName ?? ""}</h1>
       {saved && <p role="status">Saved.</p>}
       <AdminErrors error={error} detail={detail} labels={{ registrationId: "Course registration", centreId: "Centre", amount: "Amount", mode: "Mode",
-        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)" }} />
+        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)", extras: "Ad-hoc items" }} />
       <p>Gender {p.gender ?? "not given"} · Born {p.dateOfBirth ?? "not given"} · Mobile {p.mobile ?? "not given"} · Email {p.email ?? "not given"}</p>
       <section>
         <h2>Contact and family</h2>
@@ -60,39 +63,45 @@ export default async function Student({ params, searchParams }: { params: Promis
                   <tr key={r.id}>
                     <td>{r.courseCode} {r.courseName}</td><td>{r.registerNo}</td><td>{r.status}</td><td>{r.joinDate}</td><td>{r.endDate ?? ""}</td>
                   </tr>,
-                  f && (f.dues.length > 0 || f.canCreate) ? (
+                  f && (f.dues.length > 0 || f.canCreate || f.canCollect || f.receipts.length > 0) ? (
                     <tr key={`${r.id}-fees`}>
                       <td colSpan={5}>
                         <strong>Fees</strong>
                         {f.dues.length > 0 ? (
-                          <>
-                            <table>
-                              <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Outstanding</th></tr></thead>
-                              <tbody>
-                                {f.dues.map((d) => <tr key={d.id}><td>{d.feeTypeName}</td><td>{d.captionName}</td><td>{d.dueOn}</td><td>{inr(d.gross)}</td>
-                                  <td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td></tr>)}
-                                <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td>{inr(f.outstanding!)}</td></tr>
-                              </tbody>
-                            </table>
-                            {f.receipts.length > 0 && (
-                              <p>Receipts: {f.receipts.map((x, i) => <span key={x.id}>{i > 0 && " · "}<a href={`/receipts/${x.id}`}>{x.receiptNo}</a> {x.receivedOn} {inr(x.total)} {x.mode}{x.status === "CANCELLED" ? " (cancelled)" : ""}</span>)}</p>
-                            )}
-                            {f.canCollect && (
-                              <form method="post" action={`/students/${p.id}/receipts`}>
-                                <input type="hidden" name="registrationId" value={r.id} />
-                                <input type="hidden" name="idempotencyKey" value={randomUUID()} />
-                                <label>Amount <input name="amount" defaultValue={f.outstanding!} inputMode="decimal" required /></label>{" "}
-                                <label>Mode <select name="mode" defaultValue="CASH">{MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></label>{" "}
-                                <label>Reference <input name="reference" maxLength={50} /></label>{" "}
-                                <label>Instrument date <input name="instrumentDate" type="date" /></label>{" "}
-                                <button type="submit">Collect</button>
-                              </form>
-                            )}
-                          </>
-                        ) : f.noPlan ? <p>No fee plan for this course yet.</p> : (
+                          <table>
+                            <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Outstanding</th></tr></thead>
+                            <tbody>
+                              {f.dues.map((d) => <tr key={d.id}><td>{d.feeTypeName}</td><td>{d.captionName}</td><td>{d.dueOn}</td><td>{inr(d.gross)}</td>
+                                <td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td></tr>)}
+                              <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td>{inr(f.outstanding!)}</td></tr>
+                            </tbody>
+                          </table>
+                        ) : f.canCreate ? (f.noPlan ? <p>No fee plan for this course yet.</p> : (
                           <form method="post" action={`/students/${p.id}/dues`}>
                             <input type="hidden" name="registrationId" value={r.id} />
                             <button type="submit">Create dues</button>
+                          </form>
+                        )) : null}
+                        {f.receipts.length > 0 && (
+                          <p>Receipts: {f.receipts.map((x, i) => <span key={x.id}>{i > 0 && " · "}<a href={`/receipts/${x.id}`}>{x.receiptNo}</a> {x.receivedOn} {inr(x.total)} {x.mode}{x.status === "CANCELLED" ? " (cancelled)" : ""}</span>)}</p>
+                        )}
+                        {f.canCollect && (
+                          <form method="post" action={`/students/${p.id}/receipts`}>
+                            <input type="hidden" name="registrationId" value={r.id} />
+                            <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                            <label>Amount towards dues (includes GST) <input name="amount" defaultValue={f.outstanding ?? "0"} inputMode="decimal" required /></label>
+                            {(f.outstanding === null || f.outstanding === "0.00") && <> (nothing owed)</>}{" "}
+                            <label>Mode <select name="mode" defaultValue="CASH">{MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></label>{" "}
+                            <label>Reference <input name="reference" maxLength={50} /></label>{" "}
+                            <label>Instrument date <input name="instrumentDate" type="date" /></label>
+                            {Array.from({ length: MAX_EXTRAS }, (_, i) => (
+                              <p key={i}>
+                                <label>Ad-hoc item <select name="extraFeeType" defaultValue=""><option value="">(none)</option>
+                                  {adhocTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>{" "}
+                                <label>Amount (includes GST) <input name="extraAmount" inputMode="decimal" /></label>
+                              </p>
+                            ))}
+                            <button type="submit">Collect</button>
                           </form>
                         )}
                       </td>
