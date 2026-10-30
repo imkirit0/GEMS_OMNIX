@@ -1,7 +1,7 @@
 # Phone call log (Stage 3, tenth piece, WF-X16)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), run in parallel; every finding resolved below). DD-1…DD-5 are recommended options taken under the owner's standing instruction of 2026-10-29, re-confirmed 2026-10-30 ("keep going with everything planned").
+*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), run in parallel; every finding resolved below; Z5 superseded by D1, as `batches.ts` reserves the id), and step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), I1–I6 applied). DD-1…DD-5 are recommended options taken under the owner's standing instruction of 2026-10-29, re-confirmed 2026-10-30 ("keep going with everything planned").
 *   **Date:** 2026-10-30
 
 **Evidence classes** follow `docs/audit/00-README.md`:
@@ -29,7 +29,7 @@ It reuses:
 *   the enquiry permissions, `enquiryOptions()` and `canViewEnquiries()`;
 *   `enquiry_may_receive` for the tele-caller;
 *   `phoneDigits`, `ownText`, `isoDate`, `istToday`;
-*   the 0018 immutability triggers.
+*   `app.ticket_immutable()` (0009), as 0018 uses it.
 
 ## Goals
 
@@ -114,14 +114,15 @@ listCalls(session, centreId, f?: CallFilter): Promise<{ rows: CallRow[]; truncat
 1.  **Field rules,** before any database access, in the order of the table below.
 2.  **Reserve the id:** `nextval('app.call_log_id_seq')::text` in a pre-flight `withScope`. The id becomes the audit target.
 3.  **The action:** `scopedAction({ action: "call.create", permission: "enquiry.manage", centreId, targetType: "call", targetId: id })`. Inside its callback:
-    1.  The trading gate (centre status only, as `createEnquiry`): `centreId: centre is not active`.
-    2.  The tele-caller:
+    1.  `authorize(tx, "enquiry.view", centreId)`, as `batches.ts` `writeGate` does. It is audited as DENIED, naming `enquiry.view`. Nothing enforces that manage implies view (`0005:157` allows manage alone), so this line makes `enquiry_may_receive`'s precondition certain (I1).
+    2.  The trading gate (centre status only, as `createEnquiry`): `centreId: centre is not active`.
+    3.  The tele-caller:
         *   **Default** (`undefined`): the logger, when `enquiry_may_receive(centre, session user)`; otherwise null.
         *   **Given:** it must pass `enquiry_may_receive`, else `teleCaller: inactive or unknown`.
-        *   `enquiry.manage` implies view (T-ENQ-005), so a logger passes the function's view check (C9).
-    3.  The insert, wrapped in `callDb`:
+        *   Step 1 guarantees the caller holds view, so the function's own view check passes (C9).
+    4.  The insert, wrapped in `callDb`:
         *   23514 → `RbacError("invalid", "invalid value")`;
-        *   23503 → `teleCaller: inactive or unknown`;
+        *   23503 → `teleCaller: inactive or unknown` (the only foreign key that can fail: the centre is authorized first and `by_user` is set by the guard);
         *   42501 → `Forbidden`.
 4.  **Audit:** `{ after: { fields: [<names of the non-null input fields, including the applied defaults>] } }`. No values: the enquiry DD-14 rule (Z1, D2, C13).
 
@@ -155,8 +156,8 @@ listCalls(session, centreId, f?: CallFilter): Promise<{ rows: CallRow[]; truncat
 
 | Route | What |
 |---|---|
-| `/calls` | The centres of `enquiryOptions` with view. A 404 when there are none; one centre redirects to its list. |
-| `/calls?centre=<id>[&from][&to][&type][&due]` | The list: date, phone, name, call type, duration, next follow-up, description.<br>The GET filters are dates and type only, so no personal data goes in the URL.<br>With `manage && active`, the page also shows the log form. Its tele-caller select lists `enquiryCounsellors(centre)`, preselects the logger when they are listed, and has a "None" option.<br>An inactive centre shows "This centre is not active." with the list and no form (C15).<br>A link to "New enquiry". |
+| `/calls` | The centres of `enquiryOptions`. A 404 when there are none; one centre redirects to its list. |
+| `/calls?centre=<id>[&from][&to][&type][&due]` | The list: date, phone, name, call type, duration, next follow-up, description.<br>The GET filters are dates and type only, so no personal data goes in the URL. `type` maps to `callType` and `due` to `dueBy`.<br>With `manage && active`, the page also shows the log form. Its tele-caller select lists `enquiryCounsellors(centre)`, preselects the logger when they are listed, and has a "None" option.<br>An inactive centre shows "This centre is not active." with the list and no form (C15).<br>A link to "New enquiry". |
 | `POST /calls/save` | `adminPost`. The fields are the `CallInput` names. `""` becomes null first, then `durationMin` goes through `Number()` (C14). Back: `/calls?centre=<id>`. Success: `…&saved=1` ("Saved."). Errors use `adminPost`'s `error` and `detail=<field>`; typed values are not kept (C16). |
 
 *   The page parses `centre` with `^\d{1,9}$` and checks it against the centre list. Anything else gives `notFound()` (D9).
@@ -174,7 +175,7 @@ Fixtures in use:
 
 | ID | Goal | What it does | Expected |
 |---|---|---|---|
-| T-CL-001 | G1, G2 | Log a call with every field. The returned id is the reserved one, and the stored values are read back.<br>Defaults: today; the logger as tele-caller; an explicit null means none.<br>Each message in order. Refused: a tele-caller from another centre; an inactive centre (centre 2 deactivated as admin, with a manage holder there); view-only users and other centres.<br>The audit row holds field names only: no phone or name anywhere in it.<br>The list: order, each filter, invalid filters, truncation | As listed |
+| T-CL-001 | G1, G2 | Log a call with every field. The returned id is the reserved one, and the stored values are read back.<br>Defaults: today; the logger as tele-caller; an explicit null means none.<br>Each message in order. Refused: a tele-caller from another centre; a role with `enquiry.manage` only (DENIED, naming `enquiry.view`); an inactive centre (centre 2 deactivated as admin, with a manage holder there); view-only users and other centres.<br>The audit row holds field names only: no phone or name anywhere in it.<br>The list: order, each filter, invalid filters, truncation | As listed |
 | T-CL-002 | G2 | By SQL as `gems_app`:<br>a viewer's insert is refused (42501);<br>a manager's update or delete is refused (42501, no grant);<br>`by_user` and `at` are set by the database, even if forged.<br>By SQL as the owner:<br>update and delete are refused by the trigger;<br>each named check is refused (23514 by name).<br>RLS has ENABLE, FORCE and four commands | As listed |
 | T-CL-003 | G3 | The route: saved; field `detail`; foreign Origin 403; `""` becomes null | As listed |
 
