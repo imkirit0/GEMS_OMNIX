@@ -2118,3 +2118,57 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | app/students/[personId]/page.tsx | 734bc8086d2657a1b23e5cae43e8f73655f68f866f6192eae38f927f05502967 |
 | tests/receipt-cancel.test.ts | 54aa442288081ca2d57d054926168724f1b0e4502b9bc88b8bb83e696258e96f |
 | tests/fee-receipts.test.ts | 6024f11394bfe655191a373e670a449a9bbbe96eb194132985a7e7d411079531 |
+
+## E-054 Ad-hoc fees collected with the receipt built (Stage 4, F3b; WF4; D-FEE-1, R-061 part) (2026-10-30)
+- **Request:** "DO THE NEXT STEP" (2026-10-30), after F4a (E-053). DD-1…DD-8 and the build approval were taken as the recommended options under the owner's standing instruction (2026-10-29). They are not an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel: zoom-out (Z1–Z7), comprehension (C1–C8, 1 blocker) and critic (D1–D10, 1 blocker). Steps 8 (Z8-1…7) and 9 (R1–R10) followed. Every finding is resolved in `docs/designs/adhoc-fees/adhoc-fees.md`, and the reports sit in the same folder. There were no owner items.
+  - **Found at review:**
+    - A receipt of items only, taken before any dues existed, would have blocked Create dues for good (C1/D1; found by all three reviewers).
+    - The app filtered "owed" in each reader instead of in one definition (Z1/D3).
+    - Only the app stopped a void item from being paid later (Z3/D2).
+    - Cashiers could collect a plan fee as an item and charge it twice (D4, Z8-1).
+    - The form could not reach a receipt of items only (D6).
+    - The view SQL used its own alias, and its replacement would have dropped `security_invoker` (R1, R2).
+- **Built:**
+  - **Migration 0029:**
+    - Applies fee-dues DD-7's ALTERs: a `source` column (PLAN or ADHOC), nullable plan and instalment, `fee_due_source_check`, and a fee-type foreign key.
+    - `fee_due_guard` gains an ADHOC branch, run after the lock and the stamps. It stamps the date as today, then checks the registration, an active type, INR, an amount above 0, and that the type is not on the plan. The PLAN branch is unchanged.
+    - A deferred check, `fee_due_adhoc_paid`, requires each item to be paid in full by ACTIVE receipt lines at commit.
+    - `receipt_allocation_guard` allows an ADHOC due only in the transaction that made it.
+    - `fee_due_balance.owed` (PLAN only) is now the single definition of what is owed.
+    - RLS on `fee_due`: PLAN dues need `fee.dues`, ADHOC dues need `fee.collect`.
+  - **`collectFee`:**
+    - Takes up to 3 extras, which are validated first. A plan amount of 0 is allowed when extras are present.
+    - Refuses a fee type that is on the plan `resolvePlan` would use.
+    - Totals and allocation are done in SQL: each item gets its due and its full line, and the plan amount is spread oldest first over `owed`.
+    - The audit lists the extras.
+  - **`duesForPerson` and Create dues:** both count PLAN dues only. `canCollect` no longer needs anything owed.
+  - **Pages:** the receipt page labels items as "Ad-hoc". The Collect form gains three item rows ("includes GST"), and the receipts list and form now sit outside the dues table.
+- **Tests:** `tests/adhoc-fees.test.ts`, T-AF-001…003. T-FR-004's TALLY expectation changes (`canCollect` is now true).
+- **Mutation checks** (`evidence/mutation-adhoc-fees-2026-10-30.txt`): 35 in total (21 code, 14 database). 31 were CAUGHT and 4 are equivalent. 2 were MISSED at first; the tests were tightened, and both are now CAUGHT.
+- **Checks:** a fresh clone of `5cd8537`, using the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0:
+  - no drift and 0 type errors;
+  - **216 passed + 3 skipped (timing) + 3 todo** (30 files);
+  - the build and bundle scan passed;
+  - the admin journey and all security smoke checks passed (`evidence/ci-adhoc-fees-2026-10-30.txt`).
+- **Limits and next steps:**
+  - **DD-7 (PMC):** `fee.collect` can now create ADHOC dues, a change in separation of duties. The owner and Accounts must sign it.
+  - **DD-8 (PMC):** GST on items (goods such as kits, mixed documents) is added to the tax advisor's check.
+  - **DD-3 (PMC):** any active fee type not on the plan may be used, at the cashier's amount.
+  - **Known gap:** an item collected before any plan is published can be charged again once a plan prices that type.
+  - Collection stays switched off (F3 DD-5).
+  - Migrations 0012–0029 are not yet on Supabase.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0029_adhoc_fees/migration.sql | 391e38bcd54567162108f124adba9a2662357ac0840b8c84a8ed0c456f201e83 |
+| prisma/schema.prisma | d5957f41cce056814a19fbceb439e5e8ff52ae0b81d99e90e69b03fd8847312d |
+| src/server/receipts.ts | 7f551324d4a32342cc6694b647c8d328176d99a48cf2c94a27c69a06c9ebcd3a |
+| src/server/dues.ts | 053821483ba4431cf01ed84e183ecf8c4f87956e356e8db17b8074c76c6c78f0 |
+| src/server/admin-http.ts | ba3a8525d8bbc073c3b3e33ecbde9e990dd42277511fd5d282b2e7e9f8d07db7 |
+| app/students/[personId]/page.tsx | 9bc67419be18eea557aec21d2a08f609469edf28dddcf42b22024571eabfb41e |
+| app/students/[personId]/receipts/route.ts | 338b5be8ae61be9c5a0fa8979506832eee6133cb6e6a519f5480a878a03d68f5 |
+| tests/adhoc-fees.test.ts | 18ec22d3bb9d9aaa6fc54e791698817c7ce3637d8efc9a387d9ca70a9a1b3198 |
+| tests/fee-receipts.test.ts | 8ec0cab83f10a09d9171d17f49fc4cab8f8f3732c2ed199ac7b0efacc74eaf56 |
