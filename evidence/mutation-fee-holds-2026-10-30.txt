@@ -1,0 +1,47 @@
+Fee holds mutation checks, 2026-10-30 (docs/designs/fee-holds; scratchpad mutate_fh.py). Code mutations applied, the named test run, restored; database mutations of 0031 (guards and the view by create or replace, policies, triggers, checks) applied as SQL, the named test run, restored.
+37 mutations (22 code, 15 database): 34 CAUGHT, 3 equivalent.
+Round 1:
+MISSED G1 due not found passes
+CAUGHT G2 no lock
+CAUGHT G3 id not reassigned under the lock
+MISSED G4 who not stamped
+CAUGHT G5 any centre
+CAUGHT G6 ad-hoc holdable
+CAUGHT G7 no alternation
+CAUGHT G8 paid due holdable
+CAUGHT A1 held due allocatable
+CAUGHT V1 held ignores order
+CAUGHT V2 collectable ignores hold
+CAUGHT D1 events readable by all
+CAUGHT D2 any holder
+CAUGHT D3 events updatable
+MISSED D4 reason check dropped
+CAUGHT C1 person unchecked
+MISSED C2 scope unchecked
+CAUGHT C3 reason optional
+CAUGHT C4 reason length
+CAUGHT C5 inactive centre allowed
+CAUGHT C6 state unmapped
+CAUGHT C7 paid unmapped
+CAUGHT C8 audit payload
+CAUGHT C9 release audited as hold
+CAUGHT C10 held list shows released
+CAUGHT C11 fee type filter ignored
+CAUGHT C12 course filter ignored
+CAUGHT C13 year filter ignored
+CAUGHT C14 kind ignored
+CAUGHT C15 range unchecked
+CAUGHT C16 list of another centre
+CAUGHT R1 collect over collectable
+CAUGHT R2 held refuses items too
+MISSED R3 window takes held
+CAUGHT N1 collectable missing
+CAUGHT N2 canHold any user
+CAUGHT H1 home holds any
+Round 2 (owner-side tests added: who stamped despite a supplied value; the reason check binds the owner; D4 pointed at T-FH-002 where that assertion lives):
+CAUGHT G4 who not stamped
+CAUGHT D4 reason check dropped
+Equivalent:
+  G1 due not found passes: the centre check then refuses with the same name (null centre), and the FK backs it
+  C2 pre-flight scope unchecked: fee_due row security (student.view) already hides the due from an out-of-scope caller
+  R3 allocation window over owed: each line takes least(collectable, ...), so a held due takes 0 and is filtered out

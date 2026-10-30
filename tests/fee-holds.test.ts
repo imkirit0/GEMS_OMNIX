@@ -155,6 +155,16 @@ describe("T-FH fee holds", () => {
     } finally { await c1.end(); await c2.end(); }
     expect((await sql(`select action from app.fee_hold_event where due_id = $1 order by id`, [due])).map((r) => r.action)).toEqual(["HOLD", "RELEASE", "HOLD"]);
     expect((await sql(`select held from app.fee_due_balance where due_id = $1`, [due]))[0].held).toBe(true);
+    // as the owner: who is the database's, and the reason check binds every writer
+    const owner = (q: string, p: unknown[]) => asAdmin(async (db) => {
+      await db.query("begin");
+      try { await db.query("select set_config('app.session_id', $1, true)", [H]); return (await db.query(q, p)).rows[0] ?? null; }
+      catch (e) { return (e as Error).message; } finally { await db.query("rollback"); }
+    });
+    const N = await learner();
+    expect(await owner(`insert into app.fee_hold_event (due_id, centre_id, action, reason, created_by) values ($1, 1, 'HOLD', 'r', '00000000-0000-0000-0000-00000000000a') returning created_by::text as by`,
+      [N.dues[0]])).toEqual({ by: FH.a });
+    expect(await owner(`insert into app.fee_hold_event (due_id, centre_id, action, reason) values ($1, 1, 'HOLD', ' padded ')`, [N.dues[0]])).toContain("fee_hold_event_reason_check");
     // kept for good, even by the owner; out of scope sees nothing
     for (const q of [`update app.fee_hold_event set reason = 'x'`, `delete from app.fee_hold_event`, `truncate app.fee_hold_event`]) {
       const e = await asAdmin(async (db) => { await db.query("begin"); try { await db.query(q); return null; } catch (x) { return (x as Error).message; } finally { await db.query("rollback"); } });
