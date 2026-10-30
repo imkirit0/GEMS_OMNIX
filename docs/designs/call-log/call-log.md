@@ -141,7 +141,7 @@ callCentres(session): Promise<{ id: number; code: string; name: string; active: 
 |---|---|
 | `/calls` | Centre picker (`callCentres`). A 404 when the list is empty; one centre redirects straight to it. |
 | `/calls?centre=<id>[&from&to&type&due]` | The list with GET filters (dates and type only; no phone in the URL). Loggers at an active centre also get the log form and a tele-caller select (`enquiryCounsellors`). |
-| `POST /calls/search` | The phone search, by POST (as `/students`). It answers by rendering nothing itself: it redirects to the list with a one-time result. **Simpler: the phone filter is a form field in a POST to `/calls/save` with `op=search`?** No: **phone search is left out of the page** (DD-4 says a phone search counts against the rate limit; the server function supports it for a later page). |
+| (no phone search page) | The phone filter exists in `listCalls` (rate-limited) but not on the page yet: a phone in a GET URL is personal data (DD-4). |
 | `POST /calls/save` | `adminPost`; fields `centreId, phone, name, calledOn, callType, durationMin, description, note, nextFollowUpOn, teleCaller` (`""` → null; `Number()` for the duration). Back `/calls?centre=<id>`; success `…&saved=1`. |
 
 *   A malformed, unknown or out-of-scope centre gives `notFound()`.
