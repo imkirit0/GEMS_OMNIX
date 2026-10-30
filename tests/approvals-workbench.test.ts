@@ -65,13 +65,18 @@ describe("T-AW approvals workbench", () => {
     // a role approver whose ticket.approve comes from another role (fwd as member), raiser, closed, other centre
     await grant(TK.raiser, TK_ROLE.raiser, C.B);
     await grant(TK.fwd, TK_ROLE.member, C.A);
+    await grant(TK.raiser, TK_ROLE.level1, C.A); // the raiser also approves: its own tickets stay excluded (raised_by)
+    await grant(TK.both, TK_ROLE.member, C.B); // both has the member role only at B: the MEMBER ticket at A is not its
     const role = await makeType("ROLE");
     const named = await makeType("NAMED", [{ user: TK.l2 }]);
-    const two = await makeType("TWO", [{ role: TK_ROLE.level1 }, { role: TK_ROLE.level1 }]);
+    const two = await makeType("TWO", [{ role: TK_ROLE.level1 }, { user: TK.l2 }]); // level 2 differs from level 1
+    const rev = await makeType("REV", [{ user: TK.reviewer }]);
+    const same = await makeType("SAME", [{ role: TK_ROLE.level1 }, { role: TK_ROLE.level1 }]); // both levels by one role // a named approver without ticket.approve
     const member = await makeType("MEMBER", [{ role: TK_ROLE.member }]);
     const t = { role: await raiseAt(role), named: await raiseAt(named), two: await raiseAt(two), member: await raiseAt(member),
-      assigned: await raiseAt(role), closed: await raiseAt(role), atB: await raiseAt(role, C.B) };
+      assigned: await raiseAt(role), closed: await raiseAt(role), atB: await raiseAt(role, C.B), rev: await raiseAt(rev), same: await raiseAt(same) };
     await act(tok("both"), { ticketId: t.two, action: "approve", seenVersion: await version(t.two) }); // both approved level 1
+    await act(tok("both"), { ticketId: t.same, action: "approve", seenVersion: await version(t.same) }); // only "already approved" excludes it now
     await act(L1, { ticketId: t.assigned, action: "forward", seenVersion: await version(t.assigned), forwardTo: TK.fwd });
     await act(L1, { ticketId: t.closed, action: "reject", seenVersion: await version(t.closed), remarks: "no" });
     const users = [...(Object.keys(TK) as (keyof typeof TK)[]).map((n) => tok(n))];
@@ -84,9 +89,9 @@ describe("T-AW approvals workbench", () => {
     }
     const set = async (u: string) => withScope(u, async (tx) =>
       (await tx.$queryRaw<{ id: string }[]>`select id::text from app.actable_ticket_ids() id`).map((r) => r.id).sort());
-    expect(await set(L1)).toEqual([t.role, t.two].sort()); // not named, not assigned away, not closed, not B
-    expect(await set(tok("l2"))).toEqual([t.named]);
-    expect(await set(tok("both"))).toEqual([t.role].sort()); // two: approved level 1 itself
+    expect(await set(L1)).toEqual([t.role, t.same].sort()); // not named, not at level 2, not assigned away, not closed, not B
+    expect(await set(tok("l2"))).toEqual([t.named, t.two].sort()); // two is at level 2 now
+    expect(await set(tok("both"))).toEqual([t.role]); // not MEMBER (its member role is at B)
     expect(await set(tok("fwd"))).toEqual([t.assigned, t.member].sort());
     expect(await set(tok("raiser"))).toEqual([]);
     expect(await set(tok("reviewer"))).toEqual([]); // no ticket.approve
@@ -119,6 +124,24 @@ describe("T-AW approvals workbench", () => {
       expect(await queueCards(L1, f), JSON.stringify(f)).toEqual({ total: 0, byType: [], byCentre: [] });
     }
     expect(await approvalQueue(L1, { cursor: "junk" })).toEqual({ rows: [], next: null });
+    expect(await approvalQueue(L1, { cursor: ["a", "b"] })).toEqual({ rows: [], next: null });
+    expect(await approvalQueue(L1, { cursor: Buffer.from(`1|${ids.xa}`).toString("base64url") })).toEqual({ rows: [], next: null }); // JS-parseable, not a timestamptz
+    // the queue is what the user may ACT on, not all they may see: a ticket only TK.l2 may approve is absent for l1
+    const onlyL2 = await raiseAt(await makeType("ONLYL2", [{ user: TK.l2 }]));
+    expect(await q()).not.toContain(onlyL2);
+    expect((await queueCards(L1)).byType.map((t) => t.code)).not.toContain("ONLYL2");
+    // the row's version is the ticket's: a forwarded ticket is at version 2 in the receiver's queue
+    await act(L1, { ticketId: ids.ya, action: "forward", seenVersion: await version(ids.ya), forwardTo: TK.fwd });
+    expect((await approvalQueue(tok("fwd"))).rows.find((r) => r.id === ids.ya)!.version).toBe(2);
+    // paging: oldest first, the second page continues after the first (51 tickets, pages of 50)
+    for (let i = 0; i < 49; i++) await raiseAt(x);
+    const p1 = await approvalQueue(L1);
+    expect([p1.rows.length, typeof p1.next]).toEqual([50, "string"]);
+    const p2 = await approvalQueue(L1, { cursor: p1.next! });
+    expect(p2.rows).toHaveLength((await queueCards(L1)).total - 50);
+    expect(p2.rows.length).toBeGreaterThan(0);
+    expect(p1.rows.map((r) => r.id)).not.toContain(p2.rows[0]!.id);
+    expect(p2.rows[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(p1.rows.at(-1)!.createdAt.getTime());
   });
 
   test("T-AW-003 bulk approve and reject: per ticket, counted by reason, audited per ticket; the route", async () => {

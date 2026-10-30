@@ -272,21 +272,25 @@ export async function reassign(session: string | undefined, r: { ticketId: strin
 export type TicketListRow = {
   id: string; number: string; status: string; currentLevel: number; levelCount: number; typeName: string;
   priority: string; centreId: number; centreCode: string; raisedBy: string; createdAt: Date;
+  /** created_at to the microsecond, as Postgres prints it: the page cursor (a JS Date keeps only milliseconds) */
+  createdAtExact: string;
 };
 
-// Keyset cursor, opaque to the browser: base64url of "<created_at ISO>|<id>" of the last row shown.
-const encodeCursor = (r: { createdAt: Date; id: string }) => Buffer.from(`${r.createdAt.toISOString()}|${r.id}`).toString("base64url");
-function decodeCursor(c?: string): { at: Date; id: string } | null {
+// Keyset cursor, opaque to the browser: base64url of "<created_at as Postgres prints it>|<id>" of the last row shown.
+// The exact timestamp, not a Date: rows raised within one millisecond of a page's last row would otherwise repeat on the
+// next page (oldest first) or be skipped (newest first). Found by T-AW-002 paging; compared as ::timestamptz.
+const encodeCursor = (r: { createdAtExact: string; id: string }) => Buffer.from(`${r.createdAtExact}|${r.id}`).toString("base64url");
+function decodeCursor(c?: string): { at: string; id: string } | null {
   if (!c) return null;
   const [at, id] = Buffer.from(c, "base64url").toString("utf8").split("|");
-  const d = new Date(at ?? "");
-  if (Number.isNaN(d.getTime()) || !isUuid(id)) throw new TicketError("invalid", "bad page cursor");
-  return { at: d, id };
+  // Postgres's own timestamptz text only: anything else could fail the ::timestamptz cast (a 500, not an empty page)
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}(:\d{2})?$/.test(at ?? "") || !isUuid(id)) throw new TicketError("invalid", "bad page cursor");
+  return { at: at!, id };
 }
 
 const listColumns = Prisma.sql`t.id::text, t.number, t.status::text, t.current_level as "currentLevel", t.level_count as "levelCount",
   ty.name as "typeName", ty.priority::text, t.centre_id as "centreId", c.code as "centreCode", t.raised_by::text as "raisedBy",
-  t.created_at as "createdAt"`; // constant SQL, no input
+  t.created_at as "createdAt", t.created_at::text as "createdAtExact"`; // constant SQL, no input
 const page = <R extends TicketListRow>(rows: R[]) => ({ rows, next: rows.length === PAGE ? encodeCursor(rows[rows.length - 1]!) : null });
 
 // ---------- Approvals workbench (docs/designs/approvals-workbench): the queue, its cards, bulk approve and reject ----------
@@ -307,7 +311,7 @@ export async function approvalQueue(session: string | undefined, f: QueueFilter 
     if (p === "invalid" || c === "invalid") return { rows: [], next: null }; // a bad cursor no longer throws (R8)
     return page(await tx.$queryRaw<QueueRow[]>`
       select ${listColumns}, t.version ${manageFrom} ${manageWhere(p, ACTABLE)}
-        ${c ? Prisma.sql`and (t.created_at, t.id) > (${c.at}, ${c.id}::uuid)` : Prisma.empty}
+        ${c ? Prisma.sql`and (t.created_at, t.id) > (${c.at}::timestamptz, ${c.id}::uuid)` : Prisma.empty}
       order by t.created_at, t.id limit ${PAGE}`);
   });
 }
@@ -411,7 +415,7 @@ const manageWhere = (p: Parsed, base = VISIBLE) => Prisma.sql`where ${base}
   ${p.like ? Prisma.sql`and t.number ilike ${p.like}` : Prisma.empty}`;
 
 /** The page cursor, or "invalid" for an array or a string decodeCursor refuses: a bad cursor matches nothing (Z1, Z5). */
-function cursorOf(cursor: unknown): { at: Date; id: string } | null | "invalid" {
+function cursorOf(cursor: unknown): { at: string; id: string } | null | "invalid" {
   if (cursor === undefined || cursor === "") return null;
   if (typeof cursor !== "string") return "invalid";
   try { return decodeCursor(cursor); } catch (e) { if (e instanceof TicketError) return "invalid"; throw e; }
@@ -427,7 +431,7 @@ export async function listTickets(session: string | undefined, f: TicketFilter &
     return page(await tx.$queryRaw<TicketManageRow[]>`
       select ${listColumns}, a.name as "areaName", r.code as "regionCode"
       ${manageFrom} ${manageWhere(p)}
-        ${c ? Prisma.sql`and (t.created_at, t.id) < (${c.at}, ${c.id}::uuid)` : Prisma.empty}
+        ${c ? Prisma.sql`and (t.created_at, t.id) < (${c.at}::timestamptz, ${c.id}::uuid)` : Prisma.empty}
       order by t.created_at desc, t.id desc limit ${PAGE}`);
   });
 }
