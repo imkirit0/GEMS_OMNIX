@@ -1,7 +1,7 @@
 # Ticket management view (Stage 5, first piece; R-094.03, R-094.05)
 
 *   **Author:** gtm
-*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below). DD-1…DD-4 are recommended options under the owner's standing instruction (2026-10-29, re-confirmed 2026-10-30).
+*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below) and step 8 ([`intermediate_zoom_out_report.md`](intermediate_zoom_out_report.md), I1–I4 applied). DD-1…DD-4 are recommended options under the owner's standing instruction (2026-10-29, re-confirmed 2026-10-30).
 *   **Date:** 2026-10-30
 
 Evidence classes follow `docs/audit/00-README.md`. Limits are PMC. Input: [`input-brief.md`](input-brief.md).
@@ -120,16 +120,16 @@ A selected id that is not among the options is still applied, and shown by its r
 * Copy the small helpers from `tests/tickets.test.ts:25-53` (`makeType`, raise, grant).
 * Run `ticket-test-handler.sql` and open `TICKET_GATES` as that file does.
 * Set each type's priority by SQL.
-* Raise tickets at A, at A2 (`TK.raiser`, after granting the raiser role at A2) and at B (after a grant at B).
+* Raise tickets at A, at A2 (`TK.raiser`, after granting the raiser role at A2) and at B (after granting `TK.raiser` role 10 at B).
 
 **Users:**
 * viewer: `TK.reviewer` (`ticket.view` at A);
-* in-scope approver: `TK.l1` (level 1 at A);
+* a second viewer: `TK.l1` (level-1 role at A, which carries `ticket.view`; it checks that counts agree for a second user, not the approver path, which T-TKT covers);
 * negative case: `TK.b`, who sees nothing at A.
 
 | ID | Goal | What it does | Expected |
 |---|---|---|---|
-| T-TM-001 | G1, G2 | Each filter alone and combined: status, priority, type, centre, area, region, from/to in IST across midnight, and the number prefix ignoring case. KPIs and per-type counts agree with the list. An approver forward counts; an admin reassign does not. The viewer at A sees only A's tickets, counts and pickers (centre, types). The in-scope approver sees the ticket they act on; `TK.b` sees none of A's | Counts and ids |
+| T-TM-001 | G1, G2 | Each filter alone and combined: status, priority, type, centre, area, region, from/to in IST across midnight, and the number prefix ignoring case. KPIs and per-type counts agree with the list. An approver forward counts; an admin reassign does not. The viewer at A sees only A's tickets, counts and pickers (centre, types). `TK.l1`'s counts agree with its list; `TK.b` sees none of A's | Counts and ids |
 | T-TM-002 | G3 | Bad status or priority; ids `abc`, `1e3` and `""` for a set value; 2026-02-30; a 41-character number; `cursor=junk`: each gives empty results and zero counts, never a throw. `from > to` gives empty. `%` and `_` in the number are literal | As listed |
 
 **Smoke (C13).** The smoke viewer raised `TK-26/SMK/1` at SMK-A, so it sees that ticket.
