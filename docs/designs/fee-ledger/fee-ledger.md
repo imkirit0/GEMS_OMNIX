@@ -234,3 +234,51 @@ gems_app gets `select` only.
 *   **Balance check placement.** F1's balance is checked inside the posting functions, not by a separate deferred trigger on `journal_line` (D9). Only these functions write lines, and an owner's direct write already bypasses everything.
 *   **`receipt_id` is required.** Contra, opening and closing entries will need it to become nullable, with a matching check. That is a one-line change when they come (Z3).
 *   **Placeholder codes.** "Bank (clearing)" and the `G…` codes are placeholders for Accounts (PMC).
+
+## Revision after EGM steps 8 and 9 (approved)
+
+This revision resolves [`zoom_out_step8_report.md`](zoom_out_step8_report.md) and [`readiness_report.md`](readiness_report.md), and supersedes the text above wherever they differ. The build is approved as the recommended option under the owner's standing instruction. This is not an owner signature.
+
+1.  **No early account check (Z8-1; R4 moot).** `collectFee` does not pre-check accounts. `journal_account_guard` refuses the receipt at commit, which rolls back the number, and `receiptDb` (outer wrapper) maps it to `fee.receipt.noaccount`. The "Early account check" in Server is withdrawn.
+2.  **Trimmed seed (Z8-2).** The migration seeds only the INCOME and LIABILITY heads from the table above, plus `G001 Cash in hand (CASH)` and `G002 Bank (clearing) (BANK)`. 3903, G301–G304, BNK, P001 and G107 Round Off arrive with R-042, R-035 and the reports.
+3.  **Balance test (Z8-3, R3).** T-FL-002 runs as the owner in one transaction:
+    1.  Set `set_config('app.session_id', 'tok-feeR')` and bump the FEEREC series.
+    2.  Run `alter table app.receipt disable trigger receipt_total_commit`.
+    3.  Insert a receipt with total 11.00 and one 10.00 line.
+    4.  Commit, and expect `journal_balance_guard`.
+
+    The failed commit rolls back the ALTER, and `fileParallelism` is false. Every entry the suite creates is also checked to balance (T-FL-001). The commit-time `journal_account_guard` gets its own case: an unmapped fee type.
+4.  **No `fy` column (Z8-4).** The Day Book filters by date, and F12 adds periods.
+5.  **One rule, one check (Z8-5).** The unique key `(receipt_id, source)` replaces the "no existing RECEIPT entry" check. The reversal copy is not re-asserted, because the original entry was proven balanced.
+6.  **Guard messages (Z8-6, R9).** Every new guard message carries `constraint "<name>"` (the 0027 convention). The `receiptDb` branches for `journal_account_guard` → `fee.receipt.noaccount` and `journal_reversal_guard` → `fee.receipt.mismatch` go before the generic 23514 branch.
+7.  **T-AF-002 `voidInOne` (R1).** A cancel in the receipt's own transaction now raises `journal_reversal_guard` (G2) before the deferred paid check. The test expects that, and says so.
+8.  **Prisma (R2).** `schema.prisma` gains:
+    *   `Account` (`code @unique`, `systemKey @unique`);
+    *   `JournalEntry`, with a `reversalOf` self-relation, `@@unique([id, centreId])`, `@@unique([receiptId, source])`, `@@index([centreId, entryDate])` and `currency @db.Char(3)`;
+    *   `JournalLine`, with `Decimal(14,2)` amounts and `@@index([entryId])`;
+    *   `FeeType.accountId Int?`, with its relation.
+
+    Every FK is Restrict/Restrict. The migration head comes from `migrate diff`.
+9.  **Fixtures (R5, R6).** `reset()` lists `app.journal_line, app.journal_entry` in its truncate, and runs `update app.account set active = true`. These lists gain rows:
+
+    | List | Row |
+    |---|---|
+    | permission | `ledger.view` |
+    | role | `(32, 'ledger_viewer', 'Ledger viewer')` |
+    | role_permission | `(32, 'ledger.view')` |
+    | app_user | `LV = { a: "…00fc" }` |
+    | role_assignment | CENTRE 1 |
+    | session | `tok-ledA` |
+
+10. **Fee type wiring (R7, R12).**
+    *   `app/admin/fees/types/save/route.ts` reads `accountId` (empty → `null`).
+    *   `app/admin/fees/types/page.tsx` loads `listAccounts` (session only).
+    *   `updateFeeType` accepts `accountId: number | null`.
+    *   `GUARD_KEY` gains `fee_type_account_guard: ["fee.account", "this account cannot take fees"]`.
+    *   The app's field check gives `"accountId: an active income or liability account"`.
+11. **Home link (R8).** `ledgerCentres(session)` in `ledger.ts` returns the `ledger.view` centres. It feeds the Day Book picker and the home link.
+12. **Order (R10).** The RECEIPT narration is `Receipt {receipt_no}`. Lines are written in this order: the debit line, then the credits by account code, then CGST, SGST and IGST.
+13. **Direct call (R11).** Calling a trigger function directly gives 42501.
+14. **Range (R13).** `to - from <= 91`, so at most 92 days counting both ends.
+15. **Rollout (R14).** "Every active fee type is mapped" is a rollout checklist item. The gate comment in `dues.ts` says so.
+16. **`created_at` (R15).** `default now()`.
