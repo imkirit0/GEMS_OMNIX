@@ -52,7 +52,7 @@ describe("T-CL phone call log", () => {
 
     // each message, in order
     const bad: [Partial<cl.CallInput>, string][] = [
-      [{ centreId: 0, phone: "" }, "centreId: unknown"], [{ phone: " ", name: "\u0001" }, "phone: required"], [{ phone: "123" }, "phone: 10 digits"],
+      [{ centreId: 0, phone: "" }, "centreId: unknown"], [{ phone: " ", name: "\u0001" }, "phone: required"], [{ phone: "123", name: "a" }, "phone: 10 digits"],
       [{ name: "a\u0001", calledOn: "x" }, "name: invalid characters"], [{ name: "x".repeat(101) }, "name: 1-100 characters"],
       [{ calledOn: "28/10/2026" }, "calledOn: YYYY-MM-DD"], [{ calledOn: "2026-02-30" }, "calledOn: not a date"],
       [{ calledOn: "2999-01-01" }, "calledOn: not in the future"], [{ callType: "VISIT" as never }, "callType: one of the listed values"],
