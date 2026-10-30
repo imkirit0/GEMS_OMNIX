@@ -2096,6 +2096,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **213 passed + 3 skipped (timing) + 3 todo** (29 files);
   - the build and bundle scan passed;
   - the admin journey and all security smoke checks passed (`evidence/ci-receipt-cancel-2026-10-30.txt`).
+  - **GitHub run 41058723075 for `33873fa` failed.** It hit a flaky T-FD-001 that dates from F2 (E-051), not this piece. The two registrations of one admission share `created_at`, so `duesForPerson` returned them in an undefined order. The fix (`ba50364`) orders registrations by register number, which is allocated in course order, in `duesForPerson` and `getPerson`, and the test now finds the registration by id. The local full CI is green after the fix.
 - **Limits and next steps:**
   - There is no reversing journal until F1 (F3 DD-5 keeps collection off).
   - After-day cancellation goes by ticket: its own piece, with credit-note handling across GST periods.
