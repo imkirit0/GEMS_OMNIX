@@ -1,6 +1,6 @@
 # GEMS OMNIX: project status tracker
 
-**Last updated:** 2026-10-30, ticket management view built (Stage 5 first piece; T1–T4), fresh-clone CI green 197 tests (last evidence: E-047).
+**Last updated:** 2026-10-30, ticket management view built (Stage 5 first piece; T1–T4), fresh-clone CI green 197 tests, GitHub run 41009361006 green (last evidence: E-047).
 
 **Rule:**
 - This file is updated with **every** change to the project, in the same commit.

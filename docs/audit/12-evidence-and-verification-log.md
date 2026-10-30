@@ -1672,7 +1672,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - 32 in total (24 code, 8 database): 31 CAUGHT, 1 equivalent (24, the number length bound).
   - 4 code mutations were MISSED at first, because row security hid the same rows and the fixture area and centre ids coincide. All 8 database mutations were first run while the test users all held `ticket.view`. The tests were tightened, and all are now CAUGHT.
   - There was no real-server mutation for this piece: the page only passes raw parameters through.
-- **Checks.** A fresh clone of `df771e6` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0: no drift; 0 type errors; **197 passed + 2 skipped (timing) + 3 todo** (24 files); build and bundle scan; admin journey and all security smoke checks passed (`evidence/ci-ticket-management-2026-10-30.txt`).
+- **Checks.** A fresh clone of `df771e6` with the `ci.yml` environment ran `bash scripts/ci.sh` to exit 0: no drift; 0 type errors; **197 passed + 2 skipped (timing) + 3 todo** (24 files); build and bundle scan; admin journey and all security smoke checks passed (`evidence/ci-ticket-management-2026-10-30.txt`). Confirmed on GitHub: run 41009361006 for `9f1c8d7` succeeded.
 - **Limits and next steps.**
   - Exports and the per-handler columns (title, remarks, student) come later.
   - `approvalQueue` still uses the per-row `ticket_may_act` (OPEN tickets only); measure it when queues grow.
