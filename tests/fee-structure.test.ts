@@ -68,6 +68,9 @@ describe("T-FS fee masters and structure", () => {
     ];
     for (const [t, want] of bad) expect(await msg(fee.createFeeType(S, t as never)), JSON.stringify(t)).toBe(want);
     expect(await thrown(fee.createFeeType(S, { code: "CF", name: "x", categoryId: m.catId, sortOrder: 1, hsnSac: "9992", gstRate: "5" }))).toMatchObject({ key: "fee.duplicate" });
+    const { id: oldCat } = await cat.createMaster(S, "fee_category", { code: "OLD", name: "Old" });
+    await cat.setMasterActive(S, "fee_category", oldCat, false, "unused");
+    expect(await msg(fee.createFeeType(S, { code: "X", name: "N", categoryId: oldCat, sortOrder: 1, hsnSac: "9992", gstRate: "5" }))).toBe("categoryId: inactive or unknown");
     // update: changed fields audited; nothing to change; the rate normalised
     await fee.updateFeeType(S, m.course, { gstRate: "5.0", sortOrder: 11 });
     expect((await audit("fee.type.update"))[0]).toMatchObject({ before: { gstRate: "18", sortOrder: 10 }, after: { gstRate: "5", sortOrder: 11 } });
@@ -142,10 +145,13 @@ describe("T-FS fee masters and structure", () => {
     expect(await msg(fee.setPlanLine(S, p1, { feeTypeId: m.course, captionId: other, amount: "1" }))).toBe("captionId: inactive, unknown or another year");
     expect(await sqlErr(`insert into app.fee_plan_line (plan_id, academic_year, fee_type_id, caption_id, amount) values ($1, '2026-27', $2, $3, 1)`, [p1, m.course, other]))
       .toMatchObject({ code: "23503" }); // the composite key
+    // while only a draft uses an instalment, its due date may still change
+    await fee.updateCaption(S, m.i2, { dueOn: "2027-01-30" });
     // publish: empty refused; inactive refused; audited; then immutable
     expect(await thrown(fee.publishPlan(S, ccnaB, "go"))).toMatchObject({ key: "fee.plan.empty" });
     await fee.setFeeTypeActive(S, m.reg, false, "x");
     expect(await thrown(fee.publishPlan(S, p1, "go"))).toMatchObject({ key: "fee.plan.inactive" });
+    expect(await msg(fee.setPlanLine(S, p1, { feeTypeId: m.reg, captionId: m.i2, amount: "1" }))).toBe("feeTypeId: inactive or unknown");
     await fee.setFeeTypeActive(S, m.reg, true, "x");
     expect(await msg(fee.publishPlan(S, p1, " "))).toBe("reason: required");
     await fee.publishPlan(S, p1, "approved by accounts");
