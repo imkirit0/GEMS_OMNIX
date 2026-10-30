@@ -179,7 +179,7 @@ export async function getPerson(session: string | undefined, id: string): Promis
              a.admission_no as "admissionNo", a.admitted_on::text as "admittedOn",
              (select json_agg(json_build_object('id', r.id, 'courseCode', r.course_code, 'courseName', co.name,
                 'registerNo', r.register_no, 'status', r.status, 'joinDate', r.join_date::text, 'endDate', r.end_date::text)
-                order by r.created_at)
+                order by r.created_at, length(r.register_no), r.register_no)
               from app.registration r join app.course co on co.code = r.course_code where r.admission_id = a.id) as registrations
       from app.admission a join app.centre c on c.id = a.centre_id
       where a.person_id = ${id}::uuid and a.centre_id = any (app.scoped_centre_ids('student.view'))

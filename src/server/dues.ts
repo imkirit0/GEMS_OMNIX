@@ -93,7 +93,7 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
       from app.registration r join app.admission a on a.id = r.admission_id
         join app.course co on co.code = r.course_code join app.centre ce on ce.id = r.centre_id
       where a.person_id = ${personId}::uuid and r.centre_id = any ((select app.scoped_centre_ids('student.view'))::int[])
-      order by a.created_at, r.created_at`;
+      order by a.created_at, r.created_at, length(r.register_no), r.register_no`; // one admission's courses share created_at: register order
     if (regs.length === 0) return [];
     const ids = regs.map((r) => r.id);
     // paid and outstanding from the one definition (fee_due_balance, fee-receipts Z1)

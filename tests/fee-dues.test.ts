@@ -79,7 +79,7 @@ describe("T-FD fee dues", () => {
     expect((await duesForPerson(D, atA2.personId))[0]!.canCreate).toBe(false);
     await sql(`update app.registration set status = 'DROP' where id = $1`, [other.dca]);
     expect(await thrown(createDues(D, other.personId, other.dca))).toMatchObject({ message: "registrationId: not active" });
-    expect((await duesForPerson(D, other.personId))[0]!.canCreate).toBe(false);
+    expect((await duesForPerson(D, other.personId)).find((r) => r.registrationId === other.dca)!.canCreate).toBe(false);
     // a newer plan never reprices existing dues, and is the one new dues come from
     const { id: v2 } = await fee.createPlan(FEE_S, { academicYear: "2026-27", courseId: DCA, centreClassId: METRO });
     await fee.setPlanLine(FEE_S, v2, { feeTypeId: seed.course, captionId: seed.i2, amount: "9000" });
