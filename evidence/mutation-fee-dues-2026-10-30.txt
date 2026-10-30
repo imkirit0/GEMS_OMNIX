@@ -1,0 +1,52 @@
+Fee dues mutation checks, 2026-10-30 (docs/designs/fee-dues; scratchpad mutate_fd.py). 43 mutations: 40 CAUGHT, 3 equivalent.
+Round 1 (all):
+CAUGHT G1 no lock in guard
+CAUGHT G2 created_at not stamped
+CAUGHT G3 created_by not stamped
+CAUGHT G4 registration not-found passes
+CAUGHT G5 any registration status
+MISSED G6 draft plan allowed
+CAUGHT G7 course unchecked
+CAUGHT G8 year unchecked
+CAUGHT G9 override centre unchecked
+CAUGHT G10 class unchecked
+MISSED G10b classless centre passes
+MISSED G11 line not found passes
+CAUGHT G12 gross unchecked
+CAUGHT G13 due date unchecked
+CAUGHT G14 currency unchecked
+CAUGHT G15 second plan allowed
+CAUGHT D1 select policy open
+CAUGHT D2 insert policy open
+CAUGHT D3 updatable
+CAUGHT D4 truncatable
+MISSED D5 gross check dropped
+CAUGHT D6 no FORCE RLS
+Round 2 (after G6 test added; C1-H3 and A1 first run; C1 had stopped round 1 on a line-ending mismatch in the script, not a survivor):
+CAUGHT G6 draft plan allowed
+CAUGHT C1 pre-flight ignores person
+CAUGHT C2 pre-flight ignores scope
+CAUGHT C3 no trading gate
+CAUGHT C4 app status check gone
+CAUGHT C5 no-plan unmapped
+CAUGHT C6 no creation order
+CAUGHT C6b fee type order first
+CAUGHT C7 audit without detail
+CAUGHT C8 total as float
+MISSED C9 canCreate ignores dues
+CAUGHT C10 canCreate ignores status
+CAUGHT C11 canCreate ignores centre
+CAUGHT C12 canCreate ignores permission
+CAUGHT C13 noPlan always false
+CAUGHT C14 list ignores scope
+CAUGHT C15 dues unordered by date
+CAUGHT C16 duplicate unmapped
+CAUGHT H1 no PersonError 404
+CAUGHT H2 no same-origin
+CAUGHT H3 wrong success path
+CAUGHT A1 action not catalogued
+Round 3 (after the creator's canCreate check):
+CAUGHT C9 canCreate ignores dues
+MISSED G10b classless centre passes  -- equivalent: the plan's class is never null when its centre is null (fee_plan_key_check), so 'p_class is distinct from null' still refuses
+MISSED G11 line not found passes      -- equivalent: no line leaves l_amount null, so 'gross is distinct from null' still refuses (and the composite FK)
+MISSED D5 gross check dropped         -- equivalent: the guard forces gross = the line amount, which fee_plan_line_amount_check keeps >= 0

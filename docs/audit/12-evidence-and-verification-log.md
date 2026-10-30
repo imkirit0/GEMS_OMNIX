@@ -1879,3 +1879,82 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | src/server/catalogue.ts | a2069205e46679da70ac9c6f9a91ed2a4b57f0702a1a272161042b4f6bf74b61 |
 | src/lib/money.ts | e817359191067fc9b9c36e02281e55522368018c480ea1c10ee555e6d8b8e739 |
 | tests/fee-structure.test.ts | 6e7d216219458c90a636ab64b4b370f0cbe36c511b447b2e354680d852a09bd3 |
+
+## E-051 Fee dues built (Stage 4, second piece F2; WF4; R-059) (2026-10-30)
+- **Request:** "yes do the next step" (2026-10-30), continuing Stage 4 after F1 (E-050). DD-1…DD-7 and the build approval were taken as the recommended options under the owner's standing instruction (2026-10-29); this is not an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel (zoom-out Z1–Z8, comprehension C1–C11 with 2 blockers, critic D1–D11), then step 8 (Z8-1…6) and step 9 (R1–R8). Every finding was resolved in `docs/designs/fee-dues/fee-dues.md`; the reports are in the same folder. There were no owner items.
+  - **Found at review:**
+    - the first draft's guard proved a due against *some* published line, not this registration's plan (C1, D1);
+    - the guard's checks were not NULL-safe (D2);
+    - the one-plan-per-registration check was unsafe without a lock (Z8-3);
+    - `adminPost` could never return 404 for a foreign registration (R1);
+    - a centre admin could see registrations outside `student.view` (R2).
+  - **Revision v1.6 of audit 07** (`docs/audit/revisions/v1.6-fee-dues-model.md`; the original text is preserved and a pointer was added): a due holds only the gross amount and never changes; concessions, fines, holds, adjustments and allocations are separate rows; outstanding is computed; the dues lock is the `fee-dues:<registrationId>` advisory lock (gems_app cannot lock with `FOR UPDATE`).
+- **Built:**
+  - **Migration 0026 `fee_due`:**
+    - The table: registration, centre, plan, fee type, instalment, due date, gross `numeric(14,2)`, currency, who and when.
+    - Keys: composite FKs to the registration (new unique key `(id, centre_id)`) and to the plan line; unique (registration, fee type, instalment).
+    - **Guard `fee_due_guard`** (rules only, so it binds every role):
+      - it takes the registration's money lock;
+      - it stamps who and when;
+      - it refuses, each by name:
+        - a missing registration, or one that is not ACTIVE;
+        - a plan that is not PUBLISHED;
+        - a plan for another course, year, centre or centre class;
+        - any difference from the plan line's amount, the instalment's due date or the plan's currency;
+        - a second plan for the same registration.
+    - **Immutability:** no update, delete or truncate, even for the owner.
+    - **Access:** RLS (read with `student.view`, create with `fee.dues`, never update or delete); the permission `fee.dues` with its `system_admin` grant; column grants.
+  - **`src/server/dues.ts`:**
+    - `createDues`, in this order:
+      1. the registration must belong to the person and be within `student.view` scope, otherwise 404;
+      2. `fee.dues` and `student.view` are checked;
+      3. the trading gate;
+      4. the advisory lock;
+      5. the registration must be ACTIVE;
+      6. it runs once;
+      7. `resolvePlan`;
+      8. one insert in the order instalment, then fee type;
+      9. it is audited with plan, version, count and total.
+    - `duesForPerson` returns dues, totals, `canCreate` and `noPlan` for each registration.
+  - **`adminPost`** maps a `PersonError` notfound to 404.
+  - **Learner page and route:**
+    - the learner page gains a Fees row under each registration (the dues table and total, "Create dues", or "No fee plan for this course yet") and shows saved/error messages;
+    - the route `POST /students/[personId]/dues`.
+  - **ETL `reset.sql`** clears dues along with registrations.
+  - **Not built:** `centre.currency` was dropped, because a check on it could never fail while every plan is INR (Z3); it comes with D-CUR-1.
+- **Tests:** `tests/fee-dues.test.ts`, T-FD-001…003. They include a two-session race in which the guard's lock makes the second plan's insert wait and then refuse.
+  - The shared seed `tests/fee-seed.ts` is now also used by fee-structure.
+  - The fixtures gain role 29 `fee_dues`, user `…00f7` and `tok-feeD`.
+  - T-RLS-002 and T-AUD-009 are updated.
+  - Real server: 3 new checks.
+- **Mutation checks** (`evidence/mutation-fee-dues-2026-10-30.txt`): 43 in total (21 code, 22 database), with 40 CAUGHT and 3 equivalent, each kept refusing by another check.
+  - 2 survived at first: a draft was refused only because gems_app cannot see it, and the creator's `canCreate` after creation was untested. Both tests were tightened, and both mutations are now CAUGHT.
+  - The seed now enters lines in reverse, so the creation order is proven.
+- **Checks:** a fresh clone of `fc47b68`, with the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0:
+  - no drift; 0 type errors;
+  - **206 passed + 3 skipped (timing) + 3 todo** (27 files);
+  - build and bundle scan;
+  - the admin journey and all security smoke checks passed (`evidence/ci-fee-dues-2026-10-30.txt`).
+  - A first fresh-clone attempt collided with a second run on the shared Docker database ("tuple concurrently updated" in ETL setup). Both were stopped and the single clean run is the one recorded.
+- **Limits and next steps:**
+  - DD-5 (dues visible to `student.view`) is PMC.
+  - Choosing the current plan version happens only in the app; the database proves only that the plan is a valid one.
+  - Ad-hoc dues arrive with F3 (DD-7: same table, `source` column).
+  - An owner can still `DISABLE TRIGGER` until the hash-chained finance audit exists (D-FIN-8).
+  - Next is F3, collection and receipts.
+  - Not yet on Supabase (migrations 0012–0026).
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0026_fee_dues/migration.sql | bb78cabe395e7a1241c4759f6d865b3f397623ce9d302a4a2f1adbf4b4adc86e |
+| prisma/schema.prisma | 3bb2dd7b9410270062bbee7d970349b2db54214fb62a4a46b0421df67b7e1476 |
+| src/server/dues.ts | 0492f025186e6d4fbc8a8b0277b636e9c65f56694c4173e1f3c482772ac4083a |
+| src/server/admin-http.ts | c631a180a0da7781c6157b719f1e11b4ec306854b6f27d60fc6725b85995f488 |
+| app/students/[personId]/page.tsx | fd5cf14f3b09e8d1ec8eb2982c81787b1e6114b9eefbebc404b1ab6d21b8f5f0 |
+| app/students/[personId]/dues/route.ts | 744022747d038e38b9c48b4c2b7430ffa49407beb50b7762e8558510b1866207 |
+| tests/fee-dues.test.ts | 0df2cc42923daa4ad3cf0f8d0f60287490680021aff2c34e80e82aa5b5d945db |
+| tests/fee-seed.ts | 8c7c25f58833e5df3f9ffe87d4d7f5cbe0f197ca77980b6da854e7477a9e3073 |
+| scripts/etl/reset.sql | 665bebbe669444ededd4df2195866e52969f78e85b58078d67411c09c8c62db8 |
