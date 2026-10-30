@@ -1,7 +1,7 @@
 # Ticket management view (Stage 5, first piece; R-094.03, R-094.05)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-4 are recommended options taken under the owner's standing instruction of 2026-10-29, re-confirmed 2026-10-30. EGM review (steps 5–9) next.
+*   **Status:** Proposed, revised after EGM steps 5–7 ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md), in parallel; every finding resolved below). DD-1…DD-4 are recommended options under the owner's standing instruction (2026-10-29, re-confirmed 2026-10-30).
 *   **Date:** 2026-10-30
 
 Evidence classes follow `docs/audit/00-README.md`. Limits are PMC. Input: [`input-brief.md`](input-brief.md).
@@ -26,7 +26,7 @@ This piece adds two read functions and rewrites the `/tickets` page. It needs no
 *   **G1:** one filter set (`TicketFilter`) drives the KPIs, the per-type summary and the list. Every count and row is limited to tickets the user may view [T-TM-001].
 *   **G2:** the pickers offer only the centres, areas, regions and types of tickets the user may view. They never reveal a centre or type the user cannot see [T-TM-001].
 *   **G3:** an invalid filter matches nothing. It never errors and never widens the result [T-TM-002].
-*   **G4:** the page renders the view. Paging keeps the filters. Bad parameters give an empty result, not a 500 [smoke].
+*   **G4:** the page renders the view. Paging keeps the filters. Bad parameters, a bad cursor included, give an empty result, not a 500 [smoke].
 
 ## Non-Goals
 
@@ -40,70 +40,103 @@ This piece adds two read functions and rewrites the `/tickets` page. It needs no
 ### Server (`src/server/tickets/engine.ts`)
 
 ```ts
-type TicketFilter = { status?: string; priority?: string; typeId?: number; centreId?: number; areaId?: number; regionId?: number;
-  from?: string; to?: string; number?: string; cursor?: string };
-listTickets(session, f?: TicketFilter): Promise<{ rows: TicketListRow[]; next: string | null }>;   // existing, filters extended
+/** Raw GET strings; the engine validates them once (Z2, C2). "" or undefined means not given. */
+type TicketFilter = { status?: string; priority?: string; type?: string; centre?: string; area?: string; region?: string;
+  from?: string; to?: string; number?: string };
+type TicketManageRow = TicketListRow & { areaName: string; regionCode: string };   // listTickets only (Z3, C3)
+listTickets(session, f?: TicketFilter & { cursor?: string }): Promise<{ rows: TicketManageRow[]; next: string | null }>;
 ticketSummary(session, f?: TicketFilter): Promise<{ kpi: { total: number; open: number; approved: number; rejected: number; forwarded: number };
-  byType: { typeId: number; code: string; name: string; open: number; approved: number; rejected: number }[] }>;
-ticketFilterOptions(session): Promise<{ regions: { id: number; code: string }[]; areas: { id: number; regionId: number; name: string }[];
-  centres: { id: number; areaId: number; code: string; name: string }[]; types: { id: number; code: string; name: string }[] }>;
+  byType: { typeId: number; code: string; name: string; open: number; approved: number; rejected: number; total: number; forwarded: number }[] }>;
+ticketFilterOptions(session): Promise<{ regions: { id: number; code: string }[]; areas: { id: number; label: string }[];
+  centres: { id: number; code: string; name: string }[]; types: { id: number; code: string; name: string }[] }>;
 ```
 
-**One shared filter fragment** builds the where-clause for `listTickets` and `ticketSummary`. Each condition is added only when its value is given and valid:
-*   `status = $s`;
-*   `ty.priority = $p`;
-*   `t.type_id = $t`;
-*   `t.centre_id = $c`;
-*   `c.area_id = $a`;
-*   `a.region_id = $r` (the query joins `app.area a`);
-*   `t.created_at >= $from::date`, and `t.created_at < $to::date + 1`, both in IST: `(t.created_at at time zone 'Asia/Kolkata')::date between $from and $to`;
-*   `t.number ilike $n || '%'`, with `%`, `_` and `\` escaped, as `listEnquiries` does.
+**Validation.** One `parseFilter(f)` runs before any query. It returns the typed values or `"invalid"`. An invalid filter gives the empty result: `{ rows: [], next: null }`, or zero KPIs with `byType: []` (G3).
 
-**Invalid filters (G3):**
-*   A status or priority outside its list, a non-integer id, a date that is not `YYYY-MM-DD`, or a number longer than 40 characters makes the function return an empty result (`rows: []` and zero counts) without querying.
-*   **This changes the existing behaviour.** Today `listTickets` throws `TicketError("invalid", "bad filter")`, which the page turns into a 500. No test asserts the throw (`tests/tickets.test.ts:214` lists without filters). The throw goes.
-*   The cursor keeps its existing rule: a bad cursor is ignored (`decodeCursor`).
+| Field | Valid when | SQL |
+|---|---|---|
+| `status` | OPEN, APPROVED or REJECTED | `t.status = $s::app."TicketStatus"` (C6) |
+| `priority` | LOW, MEDIUM or HIGH | `ty.priority = $p::app."TicketPriority"` |
+| `type`, `centre`, `area`, `region` | `^\d{1,9}$` (D5) | `t.type_id`, `t.centre_id`, `c.area_id`, `a.region_id` |
+| `from`, `to` | `YYYY-MM-DD` that round-trips through `Date` (C5, D2) | `t.created_at >= ($from::date)::timestamp at time zone 'Asia/Kolkata'` and `t.created_at < (($to::date) + 1)::timestamp at time zone 'Asia/Kolkata'`. This is IST and can use the index. `from > to` gives nothing. |
+| `number` | 1–40 characters | `t.number ilike $n \|\| '%'`, with `%`, `_` and `\` escaped as in `listEnquiries`. The match ignores case (C14). |
+| `cursor` (list only) | `decodeCursor` accepts it | A bad cursor gives the empty result. `listTickets` catches the `TicketError` itself, and `approvalQueue` is unchanged (Z1, C1, D1). |
 
-**`ticketSummary`:**
-*   One query over `app.ticket t join app.ticket_type ty join app.centre c join app.area a`, with `where app.ticket_may_view(t.id) and <filters>`.
-*   It groups by type, with `count(*) filter (where t.status = …)`.
-*   It computes the KPIs from the same rows.
-*   `forwarded` = OPEN tickets having at least one `ticket_event` with `action = 'FORWARD'`.
-*   It returns `::int` counts. Types are ordered by code.
+**Shared FROM clause (C11):**
 
-**`ticketFilterOptions`:**
-*   The distinct centres, areas, regions and types of `ticket_may_view` tickets.
-*   Area and region names come by join. The area and region tables are readable by everyone (0020 `geo_select`), and centre codes come only from visible tickets.
-*   The result is ordered by code or name.
+```sql
+from app.ticket t
+  join app.ticket_type ty on ty.id = t.type_id
+  join app.centre c on c.id = t.centre_id
+  join app.area a on a.id = c.area_id
+  join app.region r on r.id = a.region_id
+where app.ticket_may_view(t.id) and <conditions>
+```
 
-**Cost (ponytail):** `ticket_may_view` runs once per ticket row in each of the three reads. That is acceptable at today's volume (legacy: 16,542 tickets). If it gets slow, a set-returning `visible_ticket_ids()` replaces the per-row calls.
+**`listTickets`** selects `${listColumns}, a.name as "areaName", r.code as "regionCode"`. The cursor and the order stay as today. `listColumns` itself does not change, so `approvalQueue` and `getTicket` are untouched.
+
+**`ticketSummary`** groups by type and ignores the cursor (C8). Per type:
+* `open`, `approved`, `rejected`: `count(*) filter (where t.status = …)`;
+* `total`: `count(*)`;
+* `forwarded`: `count(*) filter (where t.status = 'OPEN' and exists (select 1 from app.ticket_event e where e.ticket_id = t.id and e.action = 'FORWARD' and coalesce(e.detail->>'admin', '') <> 'true'))`. Only approver forwards count; admin reassigns are excluded (C7). Event RLS allows this read for visible tickets.
+
+The KPIs are the sums of `byType`. Counts are cast `::int`, and types are ordered by code, then id. The tiles follow every filter, status included (D6): with `status=OPEN`, the Approved tile shows 0.
+
+**`ticketFilterOptions`** returns the distinct values among `ticket_may_view` tickets. It ignores the current filters (C10). Order:
+* regions by code;
+* areas labelled `R1 / A1`, ordered by region code, then name, then id;
+* centres by code;
+* types by code.
+
+Regions, areas and types are readable by everyone anyway (0020 `geo_select`, 0009:293). Centres come only from visible tickets. So nothing new is revealed (step 7).
+
+**Cost (D3, Z5).** Each read calls `ticket_may_view` once per ticket row. It is a security definer, so it is not inlined.
+
+Before acceptance, a one-off timing run seeds about 16.5k tickets at three centres. It records `EXPLAIN ANALYZE` of `ticketSummary` and `ticketFilterOptions` for an ALL-scope user in the evidence entry. The budget is 500 ms each (PMC).
+* Over budget: a later piece adds a set-returning `visible_ticket_ids()`. That needs a migration and a T-RLS-005 entry.
+* Within budget: `ponytail: per-row definer; set-returning ids when volume grows`.
 
 ### Page (`app/tickets/page.tsx`)
 
-*   **GET parameters:** `status`, `priority`, `type`, `region`, `area`, `centre`, `from`, `to`, `number`, `cursor`. These are ids, dates and ticket numbers, with no personal data.
-*   **Data:** `pageRead` with `Promise.all([listTickets, ticketSummary, ticketFilterOptions])`.
-*   **Tiles:** Total, Open, Approved, Rejected, Forwarded.
-*   **Pickers:**
-    *   Region, Area and Centre are three plain selects. A chosen region narrows nothing client-side: there is no JavaScript, and the server applies all three.
-    *   Type, Status and Priority are selects.
-    *   From and To are date inputs; Number is a text input.
-*   **The summary table:** Type, Open, Approved, Rejected, Total.
-*   **The list:** as today, plus Area and Region columns.
-*   **Paging:** "Next page" keeps every filter.
-*   **Links:** Raise a ticket, My approvals.
+**Parameters:** the raw GET strings go to all three reads, and `num()` is deleted. The parameters are `status`, `priority`, `type`, `region`, `area`, `centre`, `from`, `to`, `number` and `cursor`. They are ids, dates and ticket numbers only, with no personal data.
+
+**Layout, top to bottom (C12):**
+1. Links: Home, Raise a ticket, My approvals.
+2. Tiles: Total, Open, Approved, Rejected, Forwarded.
+3. The filter form:
+   * every option list is a select;
+   * the dates are date inputs, labelled "Raised from" and "Raised to" (IST);
+   * the number is a text input;
+   * submitting the form drops the cursor.
+4. Summary table: Type, Open, Approved, Rejected, Forwarded, Total.
+5. The list as today, plus Area and Region columns.
+6. "Next page", which keeps every filter.
+
+A selected id that is not among the options is still applied, and shown by its raw id.
 
 ### Tests (`tests/ticket-management.test.ts`)
 
+**Setup (C9, D7).**
+* Copy the small helpers from `tests/tickets.test.ts:25-53` (`makeType`, raise, grant).
+* Run `ticket-test-handler.sql` and open `TICKET_GATES` as that file does.
+* Set each type's priority by SQL.
+* Raise tickets at A, at A2 (`TK.raiser`, after granting the raiser role at A2) and at B (after a grant at B).
+
+**Users:**
+* viewer: `TK.reviewer` (`ticket.view` at A);
+* in-scope approver: `TK.l1` (level 1 at A);
+* negative case: `TK.b`, who sees nothing at A.
+
 | ID | Goal | What it does | Expected |
 |---|---|---|---|
-| T-TM-001 | G1, G2 | Tickets at centres A, A2 and B for two types. Checks: each filter alone and combined; KPIs and per-type counts agree with the list; a forwarded ticket counts in Forwarded; a viewer at A sees only A's tickets, counts and pickers (B's centre, area, region and B-only type are absent); a named approver sees the ticket they act on | Counts and ids |
-| T-TM-002 | G3 | Bad status, priority, ids, dates and over-long number: empty results and zero counts, no throw; `%` and `_` in the number are literal | As listed |
+| T-TM-001 | G1, G2 | Each filter alone and combined: status, priority, type, centre, area, region, from/to in IST across midnight, and the number prefix ignoring case. KPIs and per-type counts agree with the list. An approver forward counts; an admin reassign does not. The viewer at A sees only A's tickets, counts and pickers (centre, types). The in-scope approver sees the ticket they act on; `TK.b` sees none of A's | Counts and ids |
+| T-TM-002 | G3 | Bad status or priority; ids `abc`, `1e3` and `""` for a set value; 2026-02-30; a 41-character number; `cursor=junk`: each gives empty results and zero counts, never a throw. `from > to` gives empty. `%` and `_` in the number are literal | As listed |
 
-**Real-server smoke:**
-*   `/tickets?status=NOPE` returns 200 with no rows;
-*   the viewer's page shows the tiles and only its own centre in the centre picker.
+**Smoke (C13).** The smoke viewer raised `TK-26/SMK/1` at SMK-A, so it sees that ticket.
+* `/tickets` shows the tiles and only SMK-A in the centre picker.
+* `/tickets?status=NOPE` and `/tickets?cursor=junk` both return 200 with "No tickets."
 
-T-AUD is unchanged: these are reads, not actions.
+T-AUD is unchanged, because these are reads.
 
 ## Decisions
 
@@ -121,6 +154,6 @@ All four are recommended options under the standing instruction.
 
 ## Risks and Limits
 
-*   The per-row definer call has a cost (see above).
-*   **"Forwarded" is a count of OPEN tickets with a forward event.** The SPEC's count may have meant something else (PRO).
+*   The per-row definer call has a cost; it is measured before acceptance (see Cost).
+*   **"Forwarded" counts OPEN tickets an approver forwarded; admin reassigns are excluded.** The SPEC's count may have meant something else (PRO).
 *   The pickers list only the centres and types that have tickets.
