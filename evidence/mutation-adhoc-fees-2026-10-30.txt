@@ -1,0 +1,46 @@
+Ad-hoc fees mutation checks, 2026-10-30 (docs/designs/adhoc-fees; scratchpad mutate_af.py). Code mutations applied, the named test run, restored; database mutations of 0029 (guards, paid trigger, view, policy, check) applied as SQL, the named test run, restored.
+35 mutations (21 code, 14 database): 31 CAUGHT, 4 equivalent.
+Round 1:
+CAUGHT G1 due date not stamped
+MISSED G2 registration unchecked
+CAUGHT G3 inactive type allowed
+CAUGHT G4 any currency
+CAUGHT G5 zero gross
+CAUGHT G6 plan type allowed
+CAUGHT G7 ADHOC runs the plan checks
+CAUGHT P1 not paid in full passes
+MISSED P2 cancelled lines count
+CAUGHT A1 void ad-hoc paid later
+CAUGHT V1 owed counts ad-hoc
+CAUGHT D1 ad-hoc by fee.dues
+CAUGHT D2 source check dropped
+CAUGHT D3 paid trigger dropped
+CAUGHT C1 too many extras
+MISSED C2 type unchecked
+CAUGHT C3 extra amount unchecked
+CAUGHT C4 duplicate types
+CAUGHT C5 zero plan without extras
+CAUGHT C6 inactive type unchecked
+CAUGHT C7 plan type before dues
+CAUGHT C8 nothing with extras
+MISSED C9 collection takes void ad-hoc
+CAUGHT C10 total without extras
+CAUGHT C11 audit without extras
+CAUGHT C12 lines miss extras
+MISSED C13 plan-type guard unmapped
+CAUGHT C14 receipt hides ad-hoc lines
+CAUGHT N1 Create dues blocked by ad-hoc
+CAUGHT N2 dues total counts ad-hoc
+MISSED N3 canCreate blocked by ad-hoc
+CAUGHT N4 outstanding counts ad-hoc
+CAUGHT N5 canCollect needs owing
+CAUGHT R1 half row accepted
+CAUGHT R2 type-less row accepted
+Round 2 (tests tightened: canCreate after an item; an item cancelled with its receipt in one transaction, as the owner):
+CAUGHT P2 cancelled lines count
+CAUGHT N3 canCreate blocked by ad-hoc
+Equivalent:
+  G2 registration unchecked: the composite FK (registration_id, centre_id) requires the registration at that centre
+  C2 type id unchecked: a non-positive id fails the active-type count with the same message
+  C9 collection window over outstanding: each line takes least(owed, ...), and a void item's owed is 0, so it is filtered out
+  C13 plan-type guard unmapped: the app's plan-type check refuses first with the same key

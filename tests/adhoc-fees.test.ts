@@ -94,6 +94,7 @@ describe("T-AF ad-hoc fees", () => {
     const m1 = await pay(M.personId, M.dca, { extras: [{ feeTypeId: EXAM, amount: "50" }] });
     expect(m1.total).toBe("50.00");
     expect((await duesForPerson(K, M.personId))[0]).toMatchObject({ dues: [], outstanding: null, canCollect: true });
+    expect((await duesForPerson(D, M.personId))[0]!.canCreate).toBe(true); // the item does not hide Create dues
     expect(await createDues(D, M.personId, M.dca)).toEqual({ count: 4, total: "20500.60" });
     expect((await pay(M.personId, M.dca, { amount: "1" })).total).toBe("1.00"); // and the plan dues are collected as usual
     // a fully paid learner may still pay items
@@ -156,6 +157,24 @@ describe("T-AF ad-hoc fees", () => {
       await c.query(`insert into app.receipt_allocation (receipt_id, centre_id, due_id, amount) values ($1, 1, $2, 30)`, [id, voidDue.id]);
     });
     expect(later.err?.message).toContain("paid with its own receipt");
+    // an item whose receipt is cancelled before commit is not paid: refused at commit (as the owner, the only one who can do both in one go)
+    const voidInOne = await asAdmin(async (db) => {
+      await db.query("begin");
+      try {
+        await db.query("select set_config('app.session_id', $1, true)", [R]);
+        const [{ p }] = (await db.query(`select app.financial_year((now() at time zone 'Asia/Kolkata')::date) as p`)).rows;
+        const cur = (await db.query(`update app.number_series set current = current + 1 where centre_id = 1 and doc_type = 'FEEREC' and period = $1 returning current`, [p])).rows[0].current;
+        const id = (await db.query(`insert into app.receipt (centre_id, registration_id, period, number, mode, currency, total, idempotency_key)
+          values (1, $1, $2, $3, 'CASH', 'INR', 10, gen_random_uuid()) returning id`, [L.dca, p, cur])).rows[0].id;
+        const d = (await db.query(`insert into app.fee_due (registration_id, centre_id, source, fee_type_id, gross, currency, due_on)
+          values ($1, 1, 'ADHOC', $2, 10, 'INR', current_date) returning id`, [L.dca, EXAM])).rows[0].id;
+        await db.query(`insert into app.receipt_allocation (receipt_id, centre_id, due_id, amount) values ($1, 1, $2, 10)`, [id, d]);
+        await db.query(`update app.receipt set status = 'CANCELLED', cancel_reason = 'x' where id = $1`, [id]);
+        await db.query("set constraints all immediate");
+        return null;
+      } catch (e) { return (e as Error).message; } finally { await db.query("rollback"); }
+    });
+    expect(voidInOne).toContain("fee_due_adhoc_paid_guard");
     // the view still applies the caller's row security; the fee type is a real key
     const [{ o }] = await sql(`select array_to_string(reloptions, ',') as o from pg_class where relname = 'fee_due_balance'`);
     expect(o).toContain("security_invoker=true");
