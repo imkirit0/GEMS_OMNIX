@@ -1,148 +1,318 @@
 # Fee masters and fee structure (Stage 4, F1; WF4; R-050, R-051, R-057, R-059, R-073)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-5 are recommended options under the owner's instruction (2026-10-30: "yes do the next step"); E-049 approved the Stage 4 decisions. EGM review (steps 5–9) next.
+*   **Status:** Proposed, revised after EGM steps 5–7, which ran in parallel ([`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md), [`critic_report.md`](critic_report.md)). Every finding is resolved below.
+*   **Decisions:** DD-1…DD-7 are recommended options under the owner's instruction ("yes do the next step", 2026-10-30). E-049 approved the Stage 4 decisions.
 *   **Date:** 2026-10-30
 
-Evidence classes follow `docs/audit/00-README.md`. Limits, lists and rates marked PMC are parameters. Input: [`input-brief.md`](input-brief.md). Financial rules: `docs/audit/07-financial-invariants-and-transactions.md`.
+Evidence classes follow `docs/audit/00-README.md`. Values marked PMC are parameters. Input: [`input-brief.md`](input-brief.md). Financial rules: `docs/audit/07-financial-invariants-and-transactions.md`.
 
 --------------------------------------------------------------------------------
 
 ## Overview
 
-Before any money moves, the ERP needs to know three things:
-*   which fees exist (categories and types, with their GST and SAC/HSN);
-*   when fees fall due (captions, that is, instalments per academic year);
-*   how much each course costs where (fee plans).
+Before any money moves, the system needs to know three things:
+*   which fees exist: categories and types, with SAC/HSN and GST rate;
+*   when fees fall due: captions, that is, instalments per academic year;
+*   what each course costs, and where: fee plans.
 
-This piece adds those masters and versioned fee plans. Later pieces build on it: dues (F2) copy from a published plan, receipts (F3) allocate against dues, and schemes (F5) discount them. No receipt, due or journal is written here.
+This piece adds those masters and versioned, immutable fee plans. Later pieces build on them:
+*   **F2:** dues are copied from a published plan.
+*   **F3:** receipts copy the GST rate and SAC onto each allocation, as of the receipt date.
+*   **F5:** schemes discount dues.
+
+Nothing here writes a receipt, a due or a journal.
 
 ## Goals
 
-*   **G1:** a holder of `fee.setup` (ALL scope, step-up) maintains fee categories, fee types and captions. Every change is audited with values, and named checks enforce the rules in the database [T-FS-001].
+*   **G1:** a holder of `fee.setup` maintains fee categories, fee types and captions.
+    *   `fee.setup` is sensitive, ALL scope, and needs step-up.
+    *   Each change is audited with its values.
+    *   Named checks enforce the rules in the database [T-FS-001].
 *   **G2:** fee plans.
-    *   A plan is per academic year × course × centre class, or, as an override, per academic year × course × centre.
-    *   Its lines are fee type × caption × amount (`numeric(14,2)`, ≥ 0).
-    *   A plan is edited as a draft, then published.
-    *   A published plan is immutable in the database. Publishing a new version supersedes the old one, in one transaction [T-FS-002].
-*   **G3:** `resolvePlan(centre, course, year)` returns the published centre override if there is one, otherwise the published class plan, otherwise none. F2 will use it [T-FS-002].
-*   **G4:** any signed-in user reads the masters and the published plans. Drafts are for `fee.setup` only, and nobody else can write them, also not by SQL. The pages and routes check the origin and step-up [T-FS-003].
+    *   A plan is per academic year × course × centre class, or per academic year × course × centre as an override.
+    *   A plan has lines: fee type × caption × amount.
+    *   A plan is a DRAFT until published, then PUBLISHED. A published plan is immutable in the database, also under concurrent edits.
+    *   The current plan for a key is its highest published version [T-FS-002].
+*   **G3:** `resolvePlan` returns a learner's plan. A published centre override replaces the class plan whole; otherwise it returns the published class plan, otherwise null. Existing dues are never repriced [T-FS-002].
+*   **G4:** any signed-in user reads the masters and the published plans. Only `fee.setup` sees drafts or writes, also when going direct by SQL. The routes check origin and step-up [T-FS-003].
 
 ## Non-Goals
 
-*   Dues, receipts, schemes and fines. Fines are not built (D-FEE-6).
+*   Dues, receipts, journals, schemes.
+*   Fines (D-FEE-6: not built).
 *   Bank accounts per plan (F3 posting).
 *   The legacy term, monthly and yearly layout fields: captions replace them.
-*   School-ERP groupings (R-056, empty in the legacy data).
+*   School-ERP groupings (R-056).
+*   Fee particulars as a master (R-073). Their caption, HSN and receipt type become each fee type's `hsn_sac`.
+*   These legacy fee-type flags, which nothing uses yet (Z1, Z2). A later piece adds each as a column when it reads it:
+    *   royalty, which is blocked by D-ROY-2;
+    *   course fee, down payment, misc, and add admission fee.
+*   The legacy "Previous Year Fee" field.
 *   Imports (paused).
 
 ## Technical Plan
 
 ### Data model (migration `0025_fee_structure`)
 
-The head of the migration is generated by `prisma migrate diff`. The rest is hand-written.
+The head is generated by `prisma migrate diff`; the rest is hand-written.
 
-| Table | Columns | Checks and keys |
-|---|---|---|
-| `fee_category` | `id serial`, `code` (unique), `name`, `sort_order int`, `active` | code rule; name 1–100; order 0–9999 |
-| `fee_type` | `id serial`, `code` (unique), `name`, `category_id` → fee_category, `sort_order`, `sac_code`, `gst_rate numeric(5,2)`, `gst_inclusive bool default true`, `royalty bool`, `course_fee bool`, `down_payment bool`, `active` | code rule; name 1–100; `sac_code ~ '^[0-9]{4,8}$'`; `gst_rate in (0, 5, 12, 18, 28)` (PMC) |
-| `fee_caption` | `id serial`, `academic_year` → academic_year(code), `name`, `due_on date`, `sort_order`, `down_payment bool`, `active` | unique (academic_year, name); name 1–100; unique (id, academic_year) |
-| `fee_plan` | `id serial`, `academic_year`, `course_code` → course, `centre_class_id` → centre_class (nullable), `centre_id` → centre (nullable), `version int`, `status` (`DRAFT`, `PUBLISHED`, `SUPERSEDED`), `published_at`, `published_by`, `created_at` | exactly one of class or centre; partial unique: one PUBLISHED per (year, course, class) and per (year, course, centre); unique (year, course, class or centre, version) |
-| `fee_plan_line` | `plan_id`, `fee_type_id`, `caption_id`, `academic_year`, `amount numeric(14,2)` | `amount >= 0`; unique (plan_id, fee_type_id, caption_id); composite FK (caption_id, academic_year) → fee_caption(id, academic_year); (plan_id, academic_year) → fee_plan(id, academic_year), so a line's caption is in its plan's year |
+**Fee category: one more catalogue master (Z6).**
+*   It has the generic shape `app.fee_category (id serial, code text unique, name text, active boolean default true, created_at timestamptz default now())`.
+*   It joins `MasterKind` in `catalogue.ts` with `fee.setup` as its permission. `listMasters` and `createMaster`/`updateMaster`/`setMasterActive` are reused unchanged, as are the masters page (`/admin/catalogue/masters/fee-categories`) and the 0012 RLS loop shape.
+*   It has no sort order; categories list by code.
 
-**Guards (triggers, invoker rights):**
-*   **`fee_plan_line_guard`** refuses an insert, update or delete when the plan is not DRAFT (23514, with the name in the message, as course-batches R1).
-*   **`fee_plan_guard`** allows only these status moves:
-    *   `DRAFT → PUBLISHED`. This needs at least one line. `published_at` and `published_by` are set by the database.
-    *   `PUBLISHED → SUPERSEDED`.
+**`app.fee_type`:**
 
-    Every other change to a non-DRAFT plan is refused: keys, amounts, and the reverse moves.
-*   **Deletes:** a DRAFT plan may be deleted, together with its lines. A PUBLISHED or SUPERSEDED plan never.
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | serial | no | — |
+| `code` | text, unique | no | — |
+| `name` | text | no | — |
+| `category_id` | int, FK → fee_category, restrict | no | — |
+| `sort_order` | int | no | — |
+| `hsn_sac` | text | no | — |
+| `gst_rate` | numeric(7,4) | no | — |
+| `active` | boolean | no | true |
+| `created_at` | timestamptz | no | now() |
 
-**RLS:**
-*   **Masters** (no centre): select `using (true)`; insert and update need `fee.setup` at ALL scope. There are no deletes: masters are deactivated instead.
-*   **`fee_plan`** has a centre column, so T-RLS-002 applies:
-    *   select: `status <> 'DRAFT' or app.has_permission('fee.setup', null)`;
-    *   insert and update: `fee.setup`;
-    *   delete: `fee.setup` and `status = 'DRAFT'`.
-*   **`fee_plan_line`:** select follows its plan's visibility (via an exists clause); writes need `fee.setup`.
+*   `sort_order` drives the D-FEE-4 allocation order.
+*   Named checks:
+    *   code: the catalogue code rule;
+    *   name: the catalogue name rule, 1–200;
+    *   `fee_type_hsn_sac_check`: `^[0-9]{4,8}$`;
+    *   `fee_type_gst_rate_check`: `between 0 and 100`;
+    *   `fee_type_sort_order_check`: 0–9999.
+*   The allowed rate list is an app parameter, not a CHECK (D3). It is `[0, 5, 18, 40]`, PMC, to be confirmed by the tax advisor.
+*   The meaning of a rate on a receipt date is F3's concern: F3 copies the rate and `hsn_sac` onto each allocation. A rate change therefore never rewrites history (D3).
+
+**`app.fee_caption`:**
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | serial | no | — |
+| `academic_year` | text, FK → academic_year(code), restrict | no | — |
+| `name` | text | no | — |
+| `due_on` | date | no | — |
+| `sort_order` | int | no | — |
+| `active` | boolean | no | true |
+| `created_at` | timestamptz | no | now() |
+
+*   Unique keys: `unique (academic_year, name)` and `unique (id, academic_year)`.
+*   Checks: name 1–200; order 0–9999.
+*   There is no down-payment flag: F2 decides how down payments work (Z2).
+*   `due_on` must lie within the year's `starts_on`..`ends_on`. This is checked in the app, which reads the year, and is PMC (C5).
+*   `academic_year` is never updated: no grant.
+*   **`fee_caption_guard`** refuses a change to `due_on` once any published plan line uses the caption (D2).
+
+**`app.fee_plan`:**
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | serial | no | — |
+| `academic_year` | text, FK, restrict | no | — |
+| `course_id` | int, FK → course, restrict (D12) | no | — |
+| `centre_class_id` | int, FK | yes | — |
+| `centre_id` | int, FK | yes | — |
+| `version` | int | no | — |
+| `status` | text: `DRAFT` / `PUBLISHED` | no | `'DRAFT'` |
+| `currency` | char(3) | no | `'INR'` |
+| `published_at` | timestamptz | yes | — |
+| `published_by` | uuid, FK → app_user | yes | — |
+| `created_at` | timestamptz | no | now() |
+
+*   Unique key: `unique (id, academic_year)`.
+*   Named checks:
+    *   `fee_plan_key_check`: `num_nonnulls(centre_class_id, centre_id) = 1` (D5);
+    *   `fee_plan_status_check`;
+    *   `fee_plan_published_check`: `published_at` and `published_by` are not null exactly when the plan is PUBLISHED;
+    *   `fee_plan_currency_check`: `currency ~ '^[A-Z]{3}$'`;
+    *   `fee_plan_class_currency_check`: `centre_class_id is null or currency = 'INR'`. Class plans are INR; a non-INR centre is priced only by its own override (Z7, D4).
+*   **Uniqueness (D5)** is enforced by four partial unique indexes:
+    *   `(academic_year, course_id, centre_class_id, version) where centre_class_id is not null`, and the same with `centre_id`;
+    *   at most one DRAFT per key: `(academic_year, course_id, centre_class_id) where centre_class_id is not null and status = 'DRAFT'`, and the same for centres.
+*   There is no SUPERSEDED status (Z4). The current plan is the highest published version.
+
+**`app.fee_plan_line`:**
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | serial | no | — |
+| `plan_id` | int | no | — |
+| `academic_year` | text | no | — |
+| `fee_type_id` | int, FK → fee_type, restrict | no | — |
+| `caption_id` | int | no | — |
+| `amount` | numeric(14,2) | no | `fee_plan_line_amount_check`: `>= 0` |
+
+*   Unique: `(plan_id, fee_type_id, caption_id)`.
+*   Composite FKs: `(plan_id, academic_year)` → `fee_plan(id, academic_year)`, and `(caption_id, academic_year)` → `fee_caption(id, academic_year)`. Both restrict, with no cascade (D8).
+*   **Amounts include GST.** This is one documented rule, not a flag (Z3, D2). It is written into a column comment and DD-1.
+
+**Guards.** Each is a plpgsql function with invoker rights and `set search_path = pg_catalog, app`. Each is role-agnostic: no `current_user` and no `has_permission` branch (the 0021 lesson), so it binds every writer.
+
+*   **`fee_plan_line_guard`.** Runs BEFORE INSERT/UPDATE/DELETE on lines.
+    *   It reads its plan: `select status from app.fee_plan where id = coalesce(new.plan_id, old.plan_id) for share` (D1). A concurrent publish holds `for update`, so the guard waits, then re-reads the committed status.
+    *   It refuses when the plan is missing or not DRAFT, with 23514 and `constraint "fee_plan_line_guard"` in the message.
+    *   `plan_id`, `fee_type_id`, `caption_id` and `academic_year` are not updatable (grant).
+*   **`fee_plan_guard`.** Runs BEFORE UPDATE/DELETE on plans.
+    *   A DRAFT may be deleted.
+    *   The only update allowed is DRAFT → PUBLISHED. It sets `published_at = now()` and `published_by = coalesce(app.session_user_id(), new.published_by)`. Every other column must be unchanged.
+    *   A PUBLISHED plan refuses every update and delete.
+    *   A DRAFT may not change its key or currency.
+    *   It refuses with `constraint "fee_plan_guard"`.
+*   **`fee_caption_guard`.** Refuses a change to `due_on` when `exists (select 1 from app.fee_plan_line l join app.fee_plan p on p.id = l.plan_id where l.caption_id = new.id and p.status = 'PUBLISHED')`. The constraint name is `fee_caption_guard`.
+
+**RLS.** ENABLE and FORCE on every table (C12).
+
+| Table | select | insert, update | delete |
+|---|---|---|---|
+| fee_category, fee_type, fee_caption | `using (true)` | `(select app.has_permission('fee.setup', null))` | none (deactivate instead) |
+| fee_plan | `status = 'PUBLISHED' or (select app.has_permission('fee.setup', null))` | `fee.setup` | `fee.setup and status = 'DRAFT'` |
+| fee_plan_line | `exists (select 1 from app.fee_plan p where p.id = plan_id)` (the plan's own RLS applies inside it) | `fee.setup` | `fee.setup` |
+
+*   **DD-6 (D9):** published plans are visible network-wide. Head office sets prices; they are not centre secrets.
+*   `fee_plan` has a `centre_id` column, so T-RLS-002 gains `"fee_plan"` (between `enquiry_followup` and `number_series`) and expects four commands. `fee_plan_line` has no centre column.
 
 **Permission:** `('fee.setup', 'Maintain fee categories, fee types, instalments and fee plans', true)`, plus the `system_admin` grant.
 
-**Grants:** column grants. Codes never change. `status`, `published_at` and `published_by` change only through the publish function.
+**Grants.**
+*   Column grants for insert, plus update of name, sort, rate, `hsn_sac`, active and `due_on`.
+*   `fee_plan`: update of `status` only. The guard sets the other two publish columns.
+*   `fee_plan_line`: insert, update of `amount`, delete.
+*   `gems_etl` has no grants on fee tables (D13). Owner `DISABLE TRIGGER` is an accepted limit until the hash-chained finance audit (D-FIN-8).
 
 ### Server (`src/server/fees.ts`)
 
-Every write goes through `adminWrite`, which runs `fee.setup` with step-up and audits. Validation happens before any database access, and errors are `RbacError("invalid", "<field>: <rule>")`, as in catalogue.
+Writes go through `adminWrite` (`fee.setup`, step-up, audit). Validation runs before database access, reusing catalogue's `bad`, `code`, `name` and `reasonOf` (C6). A `feeDb` wrapper maps:
+*   the `fee_*_guard` messages to `RbacError("invalid", …, "fee.plan.locked")`;
+*   23505 to `RbacError("duplicate", …, "fee.duplicate")`.
+
+`ADMIN_MESSAGES` gains these texts (C7):
+
+| Key | Text |
+|---|---|
+| `fee.duplicate` | "A record with that code or name already exists." |
+| `fee.plan.locked` | "This plan is published and cannot change; create a new version." |
+| `fee.plan.empty` | "Add at least one line before publishing." |
+| `fee.plan.inactive` | "A line uses an inactive fee type or instalment." |
+| `fee.plan.order` | "A newer version is already published." |
+| `fee.plan.offering` | "This course is not offered for that class or centre." |
 
 ```ts
-listFeeMasters(session): { categories; types; canManage }              // everyone
-createFeeCategory / updateFeeCategory / setFeeCategoryActive          // fee.category.create | .update | .activate | .deactivate
-createFeeType / updateFeeType / setFeeTypeActive                      // fee.type.*
-listCaptions(session, year); createCaption / updateCaption / setCaptionActive   // fee.caption.*
-listPlans(session, f): rows (drafts only for fee.setup)
-getPlan(session, id): plan + lines (DRAFT only for fee.setup; else 404)
-createPlan(session, { academicYear, courseCode, centreClassId | centreId, copyFrom?: planId })  // fee.plan.create; version = max + 1
-setPlanLine(session, planId, { feeTypeId, captionId, amount | null })  // fee.plan.line; null removes
-deletePlan(session, planId)                                           // fee.plan.delete (DRAFT only)
-publishPlan(session, planId, reason)                                  // fee.plan.publish; supersedes the current one
-resolvePlan(tx, centreId, courseCode, academicYear): plan id | null   // for F2; centre override, then class
+listFeeTypes(session) / createFeeType / updateFeeType / setFeeTypeActive          // fee.type.create | .update | .activate | .deactivate
+listCaptions(session, year) / createCaption / updateCaption / setCaptionActive    // fee.caption.*
+listPlans(session, { year?, courseId?, classId?, centreId? })   // published, plus drafts for fee.setup; ordered by year, course, key, version
+getPlan(session, id)   // plan + lines + totals; RbacError notfound when invisible (404)
+createPlan(session, { academicYear, courseId, centreClassId } | { academicYear, courseId, centreId })  // fee.plan.create
+setPlanLine(session, planId, { feeTypeId, captionId, amount: string | null })  // fee.plan.line; null deletes the line
+deletePlan(session, planId)   // fee.plan.delete: lines then plan, in one transaction (D8)
+publishPlan(session, planId, reason)   // fee.plan.publish
+resolvePlan(tx, centreId, courseId, academicYear): { planId, currency } | null
 ```
 
-**Money in the code:**
-*   Amounts cross the API as strings matching `^\d{1,12}(\.\d{1,2})?$`.
-*   They are kept as strings or `Prisma.Decimal`, never as JS floats (F13).
-*   The audit records them as strings.
+**`createPlan` (C4, D7, Z8):**
+*   It takes `pg_advisory_xact_lock(hashtext('fee-plan:' || year || ':' || course || ':' || 'K' || class || 'C' || centre))`.
+*   It refuses in these cases:
+    *   the year is closed (`academicYear: closed`);
+    *   the course is inactive (`courseId: inactive or unknown`);
+    *   the class is inactive (`centreClassId: inactive or unknown`);
+    *   the course is not offered at that class (`course_centre_class`) or centre (its class or `course_centre`) → `fee.plan.offering`;
+    *   a DRAFT for the key already exists → `fee.duplicate`.
+*   `version = max(version) + 1` under that lock.
+*   **Copying.** When a published version exists, its lines are copied unchanged, including any that use since-deactivated masters (publish then refuses those). A first version starts empty.
+
+**`setPlanLine`:**
+*   Valid amounts match `^\d{1,12}(\.\d{1,2})?$`. They are stored as `::numeric(14,2)` and never parsed as a JS number (F13).
+*   Its fee type and caption must be active and in the plan's year.
 
 **`publishPlan`:**
-*   It locks the plan and any currently published plan with the same key, `for update`, lower id first.
-*   It sets the old plan to SUPERSEDED and the new one to PUBLISHED.
-*   The audit records `{ before: { published: <old id> | null }, after: { published: id, version, lines: n, total: "…" } }`.
+*   It takes the same advisory lock, then locks the plan `for update`.
+*   It refuses when:
+    *   the plan is not a DRAFT → `fee.plan.locked`;
+    *   the plan has no lines → `fee.plan.empty`;
+    *   any line uses an inactive type or caption → `fee.plan.inactive`;
+    *   a higher version is already published → `fee.plan.order`.
+*   Then it updates `status`. The guard stamps who and when.
 
-Inactive masters stay on existing lines. New lines need active fee types and captions.
+**`resolvePlan` (C13, D4, D14):**
+*   It runs in the caller's transaction and RLS; published plans are visible to all.
+*   It looks for the centre's highest-version published override first. If the centre has a class, it then looks for the class's.
+*   A centre with no class gets an override or null. A key with only a draft gives null.
+*   It returns the plan's currency. F2 refuses when that differs from the centre's currency, which F2 adds.
 
-### Pages (`/admin/fees`)
+**Money out:** reads select `amount::text` and totals `sum(amount)::text`, so "0.30" stays "0.30" (C8). The pages display a string in Indian grouping with the rupee sign (`₹1,23,456.00`), built from the string, not from a float.
 
-*   An index page.
-*   Categories, and types (a table plus forms).
-*   Captions, filtered by academic year.
-*   The plan list, filtered by year, course and class or centre.
-*   The plan page:
-    *   its lines in a fee type × caption grid, with totals per caption and per plan;
-    *   for a draft: line edits, Publish (with a reason), Delete;
-    *   for a published plan: "New version" (copies the lines).
+**Audit (C9).** The action string is a literal on each `action:` line. The T-AUD-009 scan gains `["src/server/fees.ts", /"(fee\.[a-z0-9_.]+)"/g]`. Fee categories use catalogue's `catalogue.create`/`.update`/`.activate`/`.deactivate` with `targetType: "fee_category"`.
 
-All posts go through `adminPost` routes. A non-`fee.setup` user sees published plans read-only.
+| Action | Target | before | after | Reason |
+|---|---|---|---|---|
+| `fee.type.create` | fee_type, id | — | all fields | — |
+| `fee.type.update` | fee_type, id | changed fields | changed fields | — |
+| `fee.type.activate` / `fee.type.deactivate` | fee_type, id | `{ active }` | `{ active }` | required |
+| `fee.caption.create` / `fee.caption.update` | fee_caption, id | as for types | as for types | — |
+| `fee.caption.activate` / `fee.caption.deactivate` | fee_caption, id | `{ active }` | `{ active }` | required |
+| `fee.plan.create` | fee_plan, id | — | `{ key, version, currency, copiedLines }` | — |
+| `fee.plan.line` | fee_plan, id | `{ feeType, caption, amount \| null }` | the same | — |
+| `fee.plan.delete` | fee_plan, id | `{ key, version, lines }` | — | — |
+| `fee.plan.publish` | fee_plan, id | `{ status: "DRAFT" }` | `{ status: "PUBLISHED", version, lines, total }` | required |
+
+### Pages and routes (C14)
+
+| Route | What | Writes |
+|---|---|---|
+| `/admin/fees` | Index: links to categories, types, instalments, plans | — |
+| `/admin/catalogue/masters/fee-categories` | The existing masters page (new slug) | the existing route |
+| `/admin/fees/types` | Table plus add/edit/(de)activate forms | `POST /admin/fees/types/save`, `op` = create, update or active |
+| `/admin/fees/captions?year=` | Year picker plus table and forms | `POST /admin/fees/captions/save` |
+| `/admin/fees/plans?year=&course=` | The list; managers also get "New plan" (class or centre) | `POST /admin/fees/plans/create` |
+| `/admin/fees/plans/[id]` | A fee type × caption grid with totals. A draft offers line forms, Publish (with a reason) and Delete. A published plan offers "New version". | `POST /admin/fees/plans/[id]/save`, `op` = line, publish, delete or version |
+
+*   Every route uses `adminPost`: same origin, step-up redirect, and `error`/`detail` on failure. A route redirects back to its page; a new plan goes to `/admin/fees/plans/<id>?saved=1`.
+*   An invisible or unknown plan gives `notFound()`.
+*   Readers see published plans read-only.
+*   `/admin/catalogue` links Fees.
 
 ### Tests (`tests/fee-structure.test.ts`)
 
+Fixtures (C15):
+*   Role 27 `fee_setup` (`fee.setup`). Its user `FS = …00f6` holds it at ALL scope, token `tok-feeS`.
+*   `tok-uA` is the non-holder.
+*   Seed: academic year 2026-27, course DCA (sold at METRO via `course_centre_class` in the test), centre class METRO (id 1), centres A (METRO) and B.
+*   The truncate list gains the four fee tables, with `fee_category` handled by the catalogue truncate.
+
 | ID | Goal | What it checks |
 |---|---|---|
-| T-FS-001 | G1 | Create, update and (de)activate each master. Messages arrive in order. Duplicate codes are refused. The SAC and GST rate rules hold. The audit records values. Non-holders are refused, also by SQL. Every named check refuses its values on a direct insert. |
-| T-FS-002 | G2, G3 | A draft gets lines (set, change, remove). A caption from another year is refused by the composite FK. Publish needs at least one line. Publishing a version 2 supersedes version 1 in one transaction. A published plan's lines and amounts are immutable, also by SQL as the owner. Drafts can be deleted, published plans cannot. Resolution prefers the centre override, then the class plan, then none. Amounts are exact: 0.1 + 0.2 summing to 0.30. |
-| T-FS-003 | G4 | Readers see published plans but not drafts. Routes check step-up and origin, and report field details. |
+| T-FS-001 | G1 | Fee types and captions: create, update, (de)activate, with every message in order. Duplicates give `fee.duplicate`. The rate must be in the parameter list. A caption's due date must lie in its year. The audit carries values. Non-holders are refused, also by SQL. Each named check refuses a direct insert. A fee category goes through the masters functions with `fee.setup`. |
+| T-FS-002 | G2, G3 | Plans: create checks (closed year, offering, a draft already exists). Lines: set, change, remove; a caption from another year is refused (FK); amounts are exact (`0.10 + 0.20 = "0.30"`). Publish rules: empty, inactive, order. Publishing v2 makes it current while v1 stays readable. A published plan is immutable by SQL as the owner (line insert, update, delete; plan update and delete). A caption's due date is frozen once published. A draft can be deleted, a published plan cannot. The race: session A publishes while session B adds a line, and B is refused after A commits (D1). Resolution: override, then class plan, then none; draft only gives null; a centre with no class. Currency: a class plan is INR (check). |
+| T-FS-003 | G4 | Readers see published plans and no drafts. Routes: step-up, origin, field details, unknown op. |
 
 Existing tests that change:
-*   T-RLS-002 gains `fee_plan`.
-*   T-AUD-009 gains the scan of `fees.ts` and the new actions.
-*   The fixtures add the permission, a fee-setup role and user, and truncate the new tables.
+*   T-RLS-002 list;
+*   T-AUD-009 scan and catalogue;
+*   fixtures;
+*   the masters tests, for the new `MasterKind`.
 
 ## Decisions
 
-All five are recommended options.
+All seven are recommended options.
 
-1.  **DD-1:** Fee categories and types, with SAC, GST rate and flags. `gst_inclusive` defaults to true (PMC; PRO to confirm the legacy "excluding GST" meaning).
-2.  **DD-2:** Captions per academic year.
-3.  **DD-3:** Plans per year × course × centre class, with a per-centre override. Plans are versioned: a draft becomes published, which later becomes superseded. A published plan is immutable.
-4.  **DD-4:** `fee.setup` is sensitive, at ALL scope, with step-up. Everyone reads masters and published plans.
-5.  **DD-5:** Dues, receipts, schemes, fines, bank accounts, layout fields and imports are out of scope.
+1.  **DD-1:** Fee categories are a catalogue master; fee types carry SAC/HSN, a GST rate and an order. **Plan amounts include GST** (PMC; PRO to confirm the legacy "excluding GST" flag). Rates are copied onto allocations by F3.
+2.  **DD-2:** Captions are per academic year. Their due date lies within the year and is frozen once a published plan uses it.
+3.  **DD-3:** A plan is per year × course × centre class, with a per-centre whole-plan override. Plans go DRAFT → PUBLISHED, versioned and immutable. The current plan is the highest published version. Existing dues are never repriced.
+4.  **DD-4:** `fee.setup` is sensitive, at ALL scope, with step-up.
+5.  **DD-5:** Out of scope: dues, receipts, schemes, fines, bank accounts, layout fields, the unused legacy flags, imports.
+6.  **DD-6:** Published plans are visible to every signed-in user, network-wide.
+7.  **DD-7:** Currency lives on the plan. Class plans are INR; a non-INR centre needs its own override.
 
 ## Alternatives Considered
 
-*   **Editable plans, without versions.** Rejected. Dues copy amounts, so a later edit would leave dues that match no plan, and the audit could not say which plan priced a learner.
-*   **Per-centre plans only.** Rejected. There are 386 centres. The SPEC's "Beta" screen keys plans by centre class, so class plans with overrides are the smaller data set.
+*   **Editable plans.** Rejected: dues copy from plans.
+*   **Per-centre plans only.** Rejected: there are 386 centres.
+*   **A SUPERSEDED status.** Rejected (Z4): the highest version is current by definition.
+*   **A per-fee-type inclusive flag.** Rejected (Z3, D2): one rule, fixed.
 
 ## Risks and Limits
 
-*   The GST rate list and the inclusive flag are PMC. A tax advisor should confirm the SAC codes and rates before go-live.
-*   Plans per course and centre class assume every course is priced the same within a class. An exception needs a per-centre override.
+*   The rate list, the inclusive rule and the SAC/HSN codes are PMC. The tax advisor confirms them before go-live.
+*   Owner `DISABLE TRIGGER` bypasses the guards until D-FIN-8.
+*   Advisory locks use `hashtext`, so two keys can collide. That only serialises them: there is no wrong result.
