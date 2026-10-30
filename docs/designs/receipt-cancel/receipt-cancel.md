@@ -199,3 +199,25 @@ export async function cancelReceipt(session, receiptId: string, reason: string):
 
 *   **The ledger gate (Z1).** Collection opens only once the F1 ledger posts with the receipt, or Accounts accepts a backfill rule. **That backfill rule must cover cancellations as well**, and F3 DD-5 is amended to say so. The `cancelled_at` and `cancelled_by` stamps are enough to backfill from.
 *   **Midnight.** "Today" is IST, so a receipt issued at 23:59 can be cancelled only by ticket after midnight.
+
+## Revision after EGM steps 8 and 9 (approved)
+
+This revision resolves [`zoom_out_step8_report.md`](zoom_out_step8_report.md) and [`readiness_report.md`](readiness_report.md). Where it differs from the text above, it supersedes it. The build is approved as the recommended option under the owner's standing instruction. This is not an owner signature.
+
+1.  **Step-up is checked in the database only (Z8-1).**
+    *   The guard's step 4 (now nested ifs, R10) is the single check. `receiptDb` maps `receipt_cancel_stepup_guard` to `StepUpRequired`.
+    *   `cancelReceipt` does not call `requireFreshStepUp`, and `rbac.ts` exports nothing new.
+    *   `onFailure` returns null for StepUpRequired.
+2.  **There is no lock on the app side (Z8-2, R3).** The guard's step 1 takes the registration's lock on the first write, so `cancelReceipt` step 4.3 is dropped. The read in step 4.4 (status, `receipt_no`, total, `registration_id` and the lines) is for the audit only, and it drops `today` (Z8-3, R9).
+3.  **The check is tightened (Z8-4).** It becomes `num_nonnulls(cancelled_at, cancelled_by, cancel_reason) = case when status = 'CANCELLED' then 3 else 0 end`, plus the reason format rule.
+4.  **No reason kind (Z8-6).** The ticket piece adds one if dishonours need it.
+5.  **The frozen case runs as the owner (R1).** It runs inside begin/rollback with `set_config('app.session_id', 'tok-feeR', true)` and a fresh step-up, and expects `receipt_cancel_frozen_guard`. As gems_app, `set total` is 42501.
+6.  **The receipt shows no cancelled-by name (R2).** The page shows "CANCELLED on {date}: {reason}" and gets no display name, because `app_user` is not readable by centre staff. Who cancelled is stamped in `cancelled_by` and recorded in the audit row. A definer read can come later if one is needed.
+7.  **The grant (R4).** `grant update (status, cancel_reason)` is a new grant: 0027 granted no update on `receipt`.
+8.  **Messages (R5).** Each raise message ends with `constraint "<name>"` and also sets `using constraint = '<name>'`, as in 0027.
+9.  **The route (R6).**
+    *   The action callback catches `RbacError` with `key === "fee.receipt.cancelled"` and returns `/receipts/<id>`.
+    *   Reason errors use `bad("reason: …")`.
+    *   The texts of `fee.receipt.late` and `fee.receipt.cancelled` do not start with `word:`.
+10. **The learner page (R7).** It needs only the `ADMIN_MESSAGES` entry, plus `status` on `ReceiptRow` and its query for the "(cancelled)" mark.
+11. **TOTP (R8).** `requires_totp` is recomputed when the role is assigned (the rbac functions), not when the migration inserts `role_permission`.
