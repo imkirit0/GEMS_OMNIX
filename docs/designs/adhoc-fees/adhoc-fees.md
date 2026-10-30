@@ -183,3 +183,52 @@ T-FD-001 adds `owing` to its expected `duesForPerson` shape. T-FR-004 is unchang
 
 *   **Cashier-entered amounts (PMC).** The audit records every extra. Plan fee types are refused, so a plan fee cannot be charged twice.
 *   **Ledger and reports.** Both use `owed` for what is owed. Void ADHOC dues keep `outstanding > 0` as history.
+
+## Revision after EGM steps 8 and 9 (approved)
+
+This revision resolves [`zoom_out_step8_report.md`](zoom_out_step8_report.md) and [`readiness_report.md`](readiness_report.md). Where it differs from the text above, it supersedes it. The build is approved as the recommended option under the owner's standing instruction; this is not an owner signature.
+
+1.  **Charging a plan fee twice (Z8-1, R4).** There are two layers.
+    *   **App:** `collectFee` refuses an extra whose fee type is on any line of the plan that `resolvePlan` returns for the registration, giving `fee.receipt.adhocplan`. It checks this before inserting anything.
+    *   **Database:** the guard keeps refusing a fee type that already has PLAN dues.
+
+    The limit, now stated correctly: if no plan is published when the extra is collected, and a later plan prices the same fee type, then Create dues charges it again. That case is PMC under DD-7's sign-off. Accounts' misc fee-type list (DD-3) would close it. T-AF-001 covers the app refusal.
+2.  **View (R1, R2, Z8-4).** The view is redefined with its full head, and T-AF-002 asserts that `security_invoker=true` is still in `reloptions`:
+
+    ```sql
+    create or replace view app.fee_due_balance with (security_invoker = true) as
+      select d.id as due_id, d.registration_id, <paid as before>, <outstanding as before>,
+        (case when d.source = 'PLAN' then d.gross - coalesce(sum(a.amount) filter (where r.status = 'ACTIVE'), 0) else 0 end)::numeric(14,2) as owed
+      from … group by d.id
+    ```
+
+3.  **`createDuesTx` (R3).** Both the "has dues" count and the returned total filter `source = 'PLAN'`. After a receipt that carried only extras, T-AF-001 asserts `{ count: 4, total: "20500.60" }`.
+4.  **No `owing` field (Z8-5).**
+    *   `RegistrationDues.outstanding` is now `sum(owed)` over PLAN dues, `"0.00"` when fully paid, and `null` when there are none.
+    *   The Collect form's plan amount is prefilled with `outstanding ?? "0"`.
+    *   T-FD-001 keeps its shape.
+    *   T-FR-004's TALLY expectation (no plan) becomes `canCollect: true` (R5).
+5.  **Page layout (Z8-2, R6).** The Fees row, in this order:
+    1.  the dues table, only when there are PLAN dues;
+    2.  "No fee plan" or "Create dues", as now;
+    3.  the receipts list, whenever there are receipts;
+    4.  the Collect form, whenever `canCollect`.
+
+    The receipts list and the Collect form sit outside the dues branch.
+6.  **Errors (Z8-6).** `fee_due_adhoc_guard` maps to `fee.receipt.mismatch`, and the key `fee.receipt.adhoc` is dropped. `fee.receipt.adhocplan` stays.
+7.  **Stamped date (Z8-7).** The ADHOC branch stamps `new.due_on := (now() at time zone 'Asia/Kolkata')::date` instead of checking it, as the other guards stamp their dates. It still checks currency INR, `gross > 0`, an active fee type, the registration, and the plan type.
+8.  **Allocation guard (R7).** It declares `d_source text; d_at timestamptz` and reads `d.source, d.created_at` in the due's select. Then:
+
+    ```sql
+    if d_source = 'ADHOC' then if d_at is distinct from now() then raise … constraint "receipt_allocation_guard"; end if; end if;
+    ```
+
+9.  **Validation order (R8).** extras, then amount (`"0"` only with extras), then mode, then reference and instrument date.
+10. **SQL details (R9).**
+    *   The open-dues query and the allocation window use `b.owed > 0`, and the window sums `owed`.
+    *   `over` is `${amount}::numeric > coalesce(sum(b.owed), 0)`, so it is false for a plan amount of 0.
+    *   The total is `${amount}::numeric + (select coalesce(sum(x), 0) from unnest(${amounts}::numeric[]) x)`.
+    *   The ADHOC insert is `(registration_id, centre_id, source, fee_type_id, due_on, gross, currency)` with `'ADHOC'`, today and `'INR'`.
+    *   The audit's `lines` counts every line, ADHOC included.
+    *   "extras: INR only" is raised with `bad()`.
+11. **Prisma (R10).** The generated head must leave `fee_due_plan_id_fee_type_id_caption_id_fkey` as Restrict/Restrict. If it is dropped and re-added, keep Restrict.
