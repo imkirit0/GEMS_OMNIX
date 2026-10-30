@@ -1,72 +1,82 @@
 # Fee holds (Stage 4, F4b; WF4; R-067, D-FEE-5)
 
 *   **Author:** gtm
-*   **Status:** Proposed. DD-1…DD-6 are recommended options under the owner's standing instruction (2026-10-30).
+*   **Status:** Proposed. Revised after EGM steps 5–7, which ran in parallel; the reports are [`zoom_out_report.md`](zoom_out_report.md), [`comprehension_report.md`](comprehension_report.md) and [`critic_report.md`](critic_report.md). Every finding is resolved below. DD-1…DD-8 are recommended options taken under the owner's standing instruction (2026-10-30).
 *   **Date:** 2026-10-30
 
-Evidence classes follow `docs/audit/00-README.md`. Inputs: [`input-brief.md`](input-brief.md); `docs/audit/revisions/v1.6-fee-dues-model.md`; `docs/designs/fee-receipts/fee-receipts.md`; `docs/designs/adhoc-fees/adhoc-fees.md`.
+Evidence classes follow `docs/audit/00-README.md`. Inputs: [`input-brief.md`](input-brief.md), `docs/audit/revisions/v1.6-fee-dues-model.md`, `docs/designs/fee-receipts/fee-receipts.md`, `docs/designs/adhoc-fees/adhoc-fees.md` and `docs/designs/fee-ledger/fee-ledger.md`.
 
 --------------------------------------------------------------------------------
 
 ## Overview
 
-A centre puts one plan due **on hold**, with a reason, and later **releases** it. A held due is still owed, and the learner page marks it "on hold". Collection skips it, and the database refuses any receipt line against it. Every hold and release is an append-only event. The current state is the latest event.
+A centre can put one plan due **on hold** with a reason, and later **release** it. Each hold or release is stored as an append-only event, and the current state is the latest event, ordered by an id assigned under the lock.
+
+A held due is still **owed**, but it is not **collectable**. Both figures are defined once, in `fee_due_balance`, which now also carries `held` and `collectable`. Collection reads `collectable`. The database refuses any receipt line against a held due.
 
 ## Goals
 
-*   **G1: hold and release.** A holder of `fee.hold` and `student.view` at the due's centre can hold an unheld PLAN due, or release a held one. The centre must be active, and a reason is required. Both actions are audited [T-FH-001].
-*   **G2: a held due is not collected.** `collectFee` skips held dues in the "nothing" and "over" checks and in the oldest-first allocation. Other dues are still collected. If the only dues left are held, the result is `fee.receipt.nothing` [T-FH-001].
-*   **G3: the database proves it** [T-FH-002]:
-    *   an event alternates: HOLD needs the due unheld, and RELEASE needs it held;
-    *   only PLAN dues can be held;
-    *   a reason is required;
-    *   who and when are stamped;
-    *   the event runs under the `fee-dues:` lock;
-    *   events never change;
-    *   **the allocation guard refuses a held due** (`receipt_hold_guard`);
+*   **G1: hold and release.** A holder of `fee.hold` and `student.view` at the due's centre can hold an unheld PLAN due, or release a held one, while the centre is active. A reason is required.
+    *   Holding needs something owed (D5). Releasing is always allowed.
+    *   Both actions are audited with `{ dueId, registrationId, owed }`.
+    *   The URL's person must own the due (C8). [T-FH-001]
+*   **G2: collection skips held dues.** `collectFee` uses `collectable` throughout. When the amount exceeds what is collectable only because dues are held, or when only held dues are left, the refusal is `fee.receipt.held`: "Some dues are on hold; only {collectable} can be collected." The learner page shows Outstanding and, beside it, "Collectable now". The collect form defaults to the collectable amount (C1, D4, Z6). [T-FH-001]
+*   **G3: the database proves holds.** [T-FH-002]
+    *   An event alternates: HOLD needs the due unheld and owed above 0; RELEASE needs it held.
+    *   Only PLAN dues of the event's centre can be held.
+    *   A reason is required, and who and when are stamped.
+    *   The event runs under the `fee-dues:` lock, and its id is assigned under that lock (D1).
+    *   Events never change.
+    *   The allocation guard refuses a held due (`receipt_hold_guard`).
     *   RLS: `student.view` reads, `fee.hold` writes.
-*   **G4: the hold list (R-067).** It lists a centre's dues currently on hold: learner, course, fee type, instalment, amount owed, held since, by whom and reason. It can be filtered by fee type. A history view lists events (All, Hold or Release) for a date range [T-FH-003, smoke].
+*   **G4: the hold list (R-067).** It lists a centre's dues currently on hold: learner, course, academic year, fee type, instalment, owed, held since, by whom and reason. It filters by fee type, course and academic year (Z3). The history lists events (All, Hold or Release) for an IST date range of at most 92 days, both ends included. [T-FH-003, smoke]
 
 ## Non-Goals (DD-5)
 
-*   Reminders, which will skip held dues when they are built.
-*   Bulk holds.
-*   Holds on ad-hoc dues: these are paid in the same transaction as their receipt.
+*   Reminders. When they are built, they read `fee_due_balance.held` and `collectable`.
+*   Bulk holds, and "hold every open due of this registration".
+*   Holds on ad-hoc dues.
 *   Holds that expire on their own.
+*   **Legacy import (paused).** The mapping is recorded now for the ETL piece (Z2): each legacy hold flag becomes one HOLD event per open PLAN due of that learner and fee type, with reason "Imported from legacy (YYYY-MM-DD)" and the migration actor.
 
 ## Technical Plan
 
 ### Migration `0031_fee_holds`
 
-**`app.fee_hold_event`**
+**`app.fee_hold_event`.** Every column is NOT NULL.
 
-| Column | Type | Notes |
+| Column | Type | Rule |
 |---|---|---|
-| `id` | bigserial | |
-| `due_id` | bigint | FK → `fee_due` |
+| `id` | bigserial | Re-assigned by the guard under the lock (D1). |
+| `due_id` | bigint | Plain FK to `fee_due`; the centre is checked in the guard (Z4). |
 | `centre_id` | int | |
-| `action` | text | `HOLD` or `RELEASE` (check) |
-| `reason` | text | trimmed (btrim), 1–500 characters (check) |
+| `action` | text | `HOLD` or `RELEASE`. |
+| `reason` | text | Trimmed, 1–500 characters. |
 | `created_at` | timestamptz | |
-| `created_by` | uuid | FK → `app_user` |
+| `created_by` | uuid | FK to `app_user`. |
 
-*   Every column is NOT NULL.
-*   An index on `(due_id, id)`.
-*   The composite FK `(due_id, centre_id)` → `fee_due(id, centre_id)` needs a new unique key `fee_due_id_centre_id_key`.
+Index `(due_id, id)`. Named checks on `action` and `reason`.
 
-**View `app.fee_due_hold`** (`security_invoker`). It returns one row per due with its latest event: `due_id`, `held` (`action = 'HOLD'`), `since`, `by`, `reason`. It is written as `select distinct on (due_id) … order by due_id, id desc`.
+**Guard `fee_hold_guard`** (BEFORE INSERT; invoker; rules only; nested ifs; every message carries `constraint "<name>"`). In order:
+1.  Read the due: `registration_id`, `centre_id`, `source`. If it is not found, raise `fee_hold_guard`, before any lock (`hashtext(null)` would take none, D3).
+2.  Take `pg_advisory_xact_lock(hashtext('fee-dues:' || registration_id))`.
+3.  Set `new.id := nextval('app.fee_hold_event_id_seq')`, so ids follow lock order (D1). Stamp `created_at` and `created_by`.
+4.  If the due's centre differs from `new.centre_id`, or its `source` is not `'PLAN'`, raise `fee_hold_guard`.
+5.  Read the state: `select action from app.fee_hold_event where due_id = … order by id desc limit 1` (D7).
+    *   HOLD on a held due, or RELEASE on an unheld one: raise `fee_hold_state_guard`.
+    *   HOLD with `owed = 0` (from `fee_due_balance`): raise `fee_hold_paid_guard` (D5).
 
-**Guard `fee_hold_guard`** (BEFORE INSERT; invoker; rules only; nested ifs; each message carries its constraint name):
-1.  Takes the `fee-dues:` lock on the due's registration.
-2.  Stamps `created_at` and `created_by`.
-3.  Checks that the due exists (visible), is PLAN, and belongs to `new.centre_id`. Otherwise it raises `fee_hold_guard`.
-4.  Reads the current state from the latest event. If HOLD is requested on a held due, or RELEASE on an unheld one, it raises `fee_hold_state_guard`.
+**Immutability (D8).** `fee_hold_event_no_update_delete` (row) and `fee_hold_event_no_truncate` (statement) execute `app.ticket_immutable()`.
 
-**Immutability.** The `ticket_immutable` triggers make events immutable.
+**`fee_due_balance`** (`create or replace`, keeping `security_invoker`) adds two columns at the end (D2, Z1). The `owed` expression is written out each time.
+*   `held`: `coalesce((select e.action = 'HOLD' from app.fee_hold_event e where e.due_id = d.id order by e.id desc limit 1), false)`.
+*   `collectable`: `case when <held> then 0 else <owed> end`, cast to `numeric(14,2)`.
 
-**`receipt_allocation_guard`** (create or replace) gains one step after the due is read: if the due is held (latest event is HOLD), it raises `receipt_hold_guard`. The step runs under the lock that the guard already takes.
+**`receipt_allocation_guard`** (`create or replace`, from 0029) adds one step after the due is read, under the lock the guard already holds. If the due's latest event is HOLD, it raises `receipt_hold_guard`.
 
-**RLS.**
+The event is read as invoker. A hidden event would read as "not held". That cannot happen, because the `receipt` select policy and the `fee_hold_event` select policy are both `student.view` at the same centre: a user who cannot see the event cannot see the receipt either. The guard records this dependency in a comment (D6).
+
+**RLS on `fee_hold_event`:**
 
 | Action | Policy |
 |---|---|
@@ -74,68 +84,90 @@ A centre puts one plan due **on hold**, with a reason, and later **releases** it
 | insert | `scoped_centre_ids('fee.hold')` |
 | update, delete | `false` |
 
-**Grants.**
-*   `select`, and `insert (due_id, centre_id, action, reason)`.
-*   Sequence usage.
-*   `select` on the view.
+**Grants:** `select` and `insert (due_id, centre_id, action, reason)`, plus usage on the sequence.
 
-**Permission.** `('fee.hold', 'Hold and release a learner''s fee dues', false)`, plus `system_admin`.
+**Permission:** `('fee.hold', 'Hold and release a learner''s fee dues', false)`, with `system_admin`.
+
+**`schema.prisma` (C3):** model `FeeHoldEvent` with relations to `FeeDue`, `Centre` and `AppUser` (Restrict), plus back-relations. There is no new unique key on `fee_due`.
 
 ### Server (`src/server/holds.ts`)
 
 ```ts
-export async function setHold(session, dueId: string, hold: boolean, reason: string): Promise<void>   // audit fee.hold / fee.release
-export function heldDues(session, centreId, feeTypeId?): Promise<HeldRow[]>
-export function holdHistory(session, centreId, from, to, kind: "ALL" | "HOLD" | "RELEASE"): Promise<HoldEventRow[]>
+export async function setHold(session, personId: string, dueId: string, hold: boolean, reason: string): Promise<void>
+export function heldDues(session, centreId: number, f: { feeTypeId?: number; courseCode?: string; academicYear?: string }): Promise<HeldRow[]>
+export function holdHistory(session, centreId: number, from: string, to: string, kind: "ALL" | "HOLD" | "RELEASE"): Promise<HoldEventRow[]>
 ```
 
-*   **`setHold`.** The id must match `^\d{1,18}$`. The reason is trimmed and must be 1–500 characters.
-    *   The pre-flight reads the due's centre under `student.view`. If not found, it throws notfound.
-    *   It then runs `scopedAction(fee.hold)`, which:
-        1.  authorizes `student.view`;
-        2.  applies the trading gate;
-        3.  takes the lock;
-        4.  inserts the event.
-    *   It makes two literal calls, one per action, so the audit catalogue sees both names.
-    *   Errors map as follows: `fee_hold_state_guard` → `fee.hold.state` ("This due is already on hold" / "not on hold"); others → mismatch; 42501 → Forbidden.
-*   **`heldDues`** authorizes `student.view` at the centre and filters on `fee_due_hold.held`.
-*   **`holdHistory`** allows a range of at most 92 days.
-*   **`collectFee`** joins `fee_due_hold` and filters `owed > 0 and not coalesce(h.held, false)` in the open-dues query and in the allocation window. `receiptDb` maps `receipt_hold_guard` to `fee.receipt.held` ("A due on this receipt is on hold.").
-*   **`duesForPerson`** gives each due row `held`, and `canHold` = `has_permission('fee.hold', centre)`.
+**`setHold`** runs in this order:
+1.  **Check the inputs.** The person must be a UUID and the due id must match `^\d{1,18}$`; otherwise `PersonError("notfound")`. The reason is trimmed: an empty one gives `"reason: required"`, one longer than 500 characters gives `"reason: 1-500 characters"`.
+2.  **Pre-flight (C8).** Read the due's `centre_id` and `registration_id` through registration → admission, for this person, under `student.view` scope. If nothing is found, `PersonError("notfound")`.
+3.  **Act.** Run `scopedAction({ action: hold ? "fee.hold" : "fee.release", permission: "fee.hold", centreId, targetType: "fee_due", targetId: dueId, reason })`. The action names are two literal calls. Inside the callback:
+    1.  authorize `student.view`;
+    2.  the **trading gate**, meaning the centre is ACTIVE (`"centreId: centre is not active"`);
+    3.  take the lock;
+    4.  read `owed` for the audit;
+    5.  insert the event.
+
+    Holds are not tied to `FEE_GATES`, because no money moves (D9).
+4.  **Map errors.**
+
+    | Database error | Result |
+    |---|---|
+    | `fee_hold_state_guard` | `fee.hold.state` ("This due is already on hold, or is not on hold.") |
+    | `fee_hold_paid_guard` | `fee.hold.paid` ("Nothing is owed on this due.") |
+    | `fee_hold_guard` or any other 23514 | `fee.hold.mismatch` |
+    | 42501 | `Forbidden` |
+
+5.  **Audit:** `{ after: { dueId, registrationId, owed, action } }`, with the reason stored in the audit row's reason column.
+
+**`heldDues`.** Authorizes `student.view` at the centre and returns dues with `held` from `fee_due_balance`. **`holdHistory`.** Checks the dates as ISO, `from ≤ to`, and `to − from ≤ 91`.
+
+**`collectFee`:**
+*   The open-dues query and the allocation window use `b.collectable > 0`, and the window sums `collectable`.
+*   The refusals compare against both totals: `${amount} > Σ collectable` while `${amount} ≤ Σ owed` gives `fee.receipt.held`; above `Σ owed` gives `fee.receipt.over`; no collectable but some owed gives `fee.receipt.held`.
+*   `receiptDb` maps `receipt_hold_guard` to `fee.receipt.held`. That branch goes beside `receipt_over_guard`, before the generic 23514 branch (C7, D9).
+
+**`duesForPerson`.** Each `DueRow` gains `held`. `RegistrationDues` gains `collectable` (`sum(collectable)::text`) and `canHold` (centre ACTIVE and `has_permission('fee.hold', centre)`) (C4).
 
 ### Pages and routes
 
-*   **The learner page's dues table** gains a column. For a `canHold` user it shows a Hold form (reason) on an unheld due, or a Release form on a held one. Everyone else sees "On hold" or nothing.
-*   **`POST /students/[personId]/holds`.** Fields `dueId`, `action` and `reason`; returns to the learner page.
-*   **`/fees/holds?centre=&feeType=&from=&to=&kind=`.** The hold list, plus a history table. A centre outside the user's scope returns 404.
-*   **The home page** links "Fee holds" when the user holds `fee.hold` anywhere.
+*   **The learner page's dues table** gains a column. A `canHold` user sees a Hold form (reason) on an unheld due with something owed, or a Release form on a held due. Everyone else sees "On hold" or nothing. Beside Outstanding the page shows "Collectable now", and the collect form defaults to it.
+*   **`POST /students/[personId]/holds`.** Fields: `dueId`, `action` (`hold` or `release`) and `reason`. Uses `safeRoute`, a person UUID check and `adminPost`, then returns to the learner page.
+*   **`/fees/holds?centre=&feeType=&course=&year=&from=&to=&kind=`.** The hold list plus the history. A centre outside scope gives 404.
+*   **Home page.** Links "Fee holds" when the user holds `fee.hold` at any centre (`holdCentres`).
 
 ### Tests (`tests/fee-holds.test.ts`)
 
-**Fixtures.**
-*   Role 33 `fee_hold`, with `fee.hold` and `student.view`.
-*   User `…00fd` at centre A, with `tok-feeH`.
+**Fixtures:**
+*   role 33 `fee_hold` (`fee.hold`, `student.view`);
+*   user `…00fd` at centre A with `tok-feeH`;
+*   the permission row and the truncate list.
 
 | ID | Goal | What it does |
 |---|---|---|
-| T-FH-001 | G1, G2 | Hold the oldest due, then collect: the next due is paid and the held one is untouched. The held due stays in outstanding. Release it, and it is collected again. These are refused: holding twice; releasing an unheld due; no reason; a viewer (Forbidden); out of scope (notfound); an inactive centre; an ad-hoc due. Only held dues left gives `fee.receipt.nothing`. The audit has both actions. |
-| T-FH-002 | G3 | Raw SQL as gems_app. Refused by name: an allocation against a held due; a state that does not alternate; an ADHOC due; a due at another centre. Also checked: the stamps, immutability, and RLS. |
-| T-FH-003 | G4 | `heldDues`, including the fee type filter, and `holdHistory` with its kinds and range. The route, with origin and errors. |
+| T-FH-001 | G1, G2 | **Hold and collect:** hold the oldest due, then collect. The next due is paid; the held due is untouched but still in outstanding, and collectable is lower. **Refusals:** the full outstanding gives `fee.receipt.held`; only held dues left gives `held`; release, then the due is collected. **Hold refusals:** twice, unheld release, no reason, nothing owed, a viewer (Forbidden), out of scope, another person's due (notfound), an inactive centre, an ad-hoc due. **Audit:** both actions, with the payload. |
+| T-FH-002 | G3 | **As gems_app with raw SQL**, refused by name: an allocation against a held due; non-alternating events; ADHOC; another centre; a due paid in full. **Race:** two sessions, HOLD asked first and RELEASE second, with the RELEASE granted the lock first. The ids follow lock order, so the latest state is right (D1). **Also:** stamps, immutability (owner), RLS. |
+| T-FH-003 | G4 | `heldDues` with each filter; `holdHistory` with kinds and the range limit. The route: origin, success, errors, and 404 for another person. |
 
-**Changes to existing tests.**
+**Existing tests that change:**
 *   T-RLS-002 adds `fee_hold_event`.
-*   T-AUD-009 adds `fee.hold` and `fee.release`.
-*   T-FD-001's `duesForPerson` shape adds `canHold`.
+*   T-AUD-009 adds `fee.hold` and `fee.release`, in `tests/audit-catalogue.ts` under "fee holds (src/server/holds.ts)" (C9).
+*   T-FD-001's `duesForPerson` shape gains `collectable` and `canHold`.
+*   The matrix maps R-067 to T-FH-001…003 (Z7).
+
+**Smoke checks:** the hold list is 404 without `student.view` at a centre. A hold post from a foreign origin is refused.
 
 ## Decisions (recommended options)
 
-1.  **DD-1:** Holds are per PLAN due, as append-only events. The current state is the latest event.
-2.  **DD-2:** A held due stays owed, but collection skips it. The database refuses to allocate to it (D-FEE-5).
-3.  **DD-3:** The hold list and the history make up the R-067 report.
+1.  **DD-1:** Holds are per PLAN due, recorded as append-only events. The latest event, by an id assigned under the lock, is the state.
+2.  **DD-2:** A held due stays owed but is not collectable. `fee_due_balance` defines `held` and `collectable` once. The database refuses allocation to a held due (D-FEE-5).
+3.  **DD-3:** The hold list and history form the R-067 report, with the SPEC's filters.
 4.  **DD-4 (PMC):** `fee.hold` is not sensitive.
-5.  **DD-5:** Out of scope: see Non-Goals.
-6.  **DD-6:** Releasing a hold needs a reason too, and is audited as `fee.release`.
+5.  **DD-5:** Out of scope; see Non-Goals. The legacy import mapping is recorded.
+6.  **DD-6:** A release needs a reason as well, and is audited as `fee.release`.
+7.  **DD-7:** HOLD needs something owed. RELEASE is always allowed.
+8.  **DD-8:** Holds are not tied to the collection gate, because no money moves.
 
 ## Risks and Limits
 
-*   Reminders do not exist yet. When they are built, they must read `fee_due_hold`.
+*   The hold check relies on matching RLS between `receipt` and `fee_hold_event` (D6). Any later change to either select policy must keep them aligned.
