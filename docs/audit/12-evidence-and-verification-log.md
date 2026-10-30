@@ -2151,6 +2151,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **216 passed + 3 skipped (timing) + 3 todo** (30 files);
   - the build and bundle scan passed;
   - the admin journey and all security smoke checks passed (`evidence/ci-adhoc-fees-2026-10-30.txt`).
+  - Confirmed on GitHub: run 41063636499 for `80634cc` succeeded.
 - **Limits and next steps:**
   - **DD-7 (PMC):** `fee.collect` can now create ADHOC dues, a change in separation of duties. The owner and Accounts must sign it.
   - **DD-8 (PMC):** GST on items (goods such as kits, mixed documents) is added to the tax advisor's check.
