@@ -1936,6 +1936,7 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
   - **206 passed + 3 skipped (timing) + 3 todo** (27 files);
   - build and bundle scan;
   - the admin journey and all security smoke checks passed (`evidence/ci-fee-dues-2026-10-30.txt`).
+  - Confirmed on GitHub: run 41025643241 for `b276c41` succeeded.
   - A first fresh-clone attempt collided with a second run on the shared Docker database ("tuple concurrently updated" in ETL setup). Both were stopped and the single clean run is the one recorded.
 - **Limits and next steps:**
   - DD-5 (dues visible to `student.view`) is PMC.
