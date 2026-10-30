@@ -1959,3 +1959,106 @@ T-AUD-002 and 003 were already covered (foundation, rbac, exports tests). 006/00
 | tests/fee-dues.test.ts | 0df2cc42923daa4ad3cf0f8d0f60287490680021aff2c34e80e82aa5b5d945db |
 | tests/fee-seed.ts | 8c7c25f58833e5df3f9ffe87d4d7f5cbe0f197ca77980b6da854e7477a9e3073 |
 | scripts/etl/reset.sql | 665bebbe669444ededd4df2195866e52969f78e85b58078d67411c09c8c62db8 |
+
+## E-052 Fee collection and receipts built (Stage 4, third piece F3; WF4; R-064) (2026-10-30)
+- **Request:** the owner said "yes do the next step" (2026-10-30), after F2 (E-051). DD-1…DD-9 and the build approval were taken as the recommended options under the owner's standing instruction (2026-10-29). They are not an owner signature.
+- **Review:** EGM steps 5–7 ran in parallel (zoom-out Z1–Z9, comprehension C1–C14, critic D1–D15 with 1 blocker), followed by step 8 (Z8-1…7) and step 9 (R1–R12). Every finding is resolved in `docs/designs/fee-receipts/fee-receipts.md`, and the reports sit in the same folder. There were no owner items.
+  - **Found at review:**
+    - a double-clicked submit failed with "nothing outstanding" instead of returning the receipt, because the replay check ran before the lock (D1);
+    - the tax guard failed open for a registered centre with incomplete GST details (D2);
+    - a centre that was never seeded at cutover could silently restart at receipt 1 (D3);
+    - the printed number was not proven (D5);
+    - the ETL reset would break (D7);
+    - errors at commit escaped the error mapping (R3);
+    - the tests would have broken after 31 March 2027 or 2028 (C8, R1).
+  - **Found at build:** a writer that takes the series row before the registration lock can deadlock. Postgres then aborts one transaction, so it fails closed. The lock order is now recorded.
+- **Built:**
+  - **Migration 0027:**
+    - `receipt` and `receipt_allocation`, with named checks (modes, reference and instrument date by mode, amounts).
+    - `app.financial_year(date)`, shared by the app and the guards.
+    - The view `app.fee_due_balance` (security invoker), so outstanding is defined once.
+    - **`receipt_guard`:**
+      - takes the registration lock;
+      - stamps the date, status and who/when;
+      - requires the period to be the date's financial year;
+      - requires the number to be the series current, under its row lock;
+      - builds `receipt_no` as `{code}/{yy}/{n}`, at most 16 characters.
+    - **`receipt_allocation_guard`:**
+      - lines only in the receipt's own transaction;
+      - only dues of the receipt's registration, centre and currency;
+      - never more than outstanding;
+      - the GST rate, HSN/SAC and split stamped from the fee type and the centre's registration: CGST/SGST half-up with the residual in SGST, IGST when inter-state, no GST when untaxed or outside INR;
+      - a registered centre without supply or GSTIN is refused.
+    - A deferred total check at commit.
+    - Immutability on both tables, even for the owner.
+    - RLS: read with `student.view`, issue with `fee.collect`.
+    - The permission `fee.collect`.
+    - Grants that leave the database's columns (date, number text, status, tax) and `number_series.current` ungranted.
+  - **`allocate()`** creates a missing FEEREC row only when the centre has an earlier one. Centre activation opens the current year's series.
+  - **`receipts.ts`:**
+    - `collectFee`, in this order:
+      1. the gate;
+      2. field rules;
+      3. a scoped pre-flight;
+      4. lock;
+      5. replay;
+      6. trading gate;
+      7. amount check in SQL;
+      8. number;
+      9. one insert of the receipt, then lines allocated oldest first in one `insert … select`.
+
+      It is audited without references. Errors are mapped by constraint name, inside and around the action.
+    - `getReceipt`.
+  - `duesForPerson` adds paid and outstanding per due, the receipts, and `canCollect`.
+  - The learner page gains Paid and Outstanding columns, the receipt list and the Collect form.
+  - The route `POST /students/[personId]/receipts`.
+  - A printable `/receipts/[id]` page.
+  - The ETL reset clears receipts along with dues.
+  - **`FEE_GATES.collectionLive` is committed `false`** (DD-5). It opens only when all of these hold:
+    - the tax advisor has checked NP-5 and DD-3;
+    - Accounts' worked examples pass;
+    - every centre with legacy receipts has been seeded as an upsert (NP-8);
+    - the 16-character check passes;
+    - the ledger posts in the same transaction, or a backfill rule has been accepted.
+- **Tests:** `tests/fee-receipts.test.ts`, T-FR-001…004. They include:
+  - a two-session race for the last rupee of a due;
+  - a concurrent double submit;
+  - a USD plan made by the owner;
+  - a reused key on a receipt the caller cannot see;
+  - a commit-time error mapped by an owner-installed deferred trigger;
+  - SQL and TS agreeing on the financial year in IST.
+
+  Supporting changes:
+  - The fixtures gain role 30 `fee_collect`, `tok-feeC`, and `seriesCurrent(period)`.
+  - T-RLS-002, T-AUD-009, T-FD-001/002 and T-CO-003 are updated.
+  - The real server runs 3 new checks.
+- **Mutation checks** (`evidence/mutation-fee-receipts-2026-10-30.txt`): 70 in total (36 code, 34 database). 62 CAUGHT and 8 equivalent, each still refused by another check. 2 were MISSED at first; the tests were tightened and both are now CAUGHT.
+- **Checks:** a fresh clone of `1083f3b`, with the `ci.yml` environment, ran `bash scripts/ci.sh` to exit 0 (`evidence/ci-fee-receipts-2026-10-30.txt`):
+  - no drift and 0 type errors;
+  - **210 passed + 3 skipped (timing) + 3 todo** (28 files);
+  - the build and bundle scan passed;
+  - the admin journey and all security smoke checks passed.
+- **Limits and next steps:**
+  - Fee collection cannot be used in production until DD-5's conditions are met. It also needs the F1 ledger, or an accepted backfill rule.
+  - The receipt number format, place of supply and per-allocation rounding are PMC for the tax advisor.
+  - Cancellation and post-dated cheques are F4.
+  - Ad-hoc dues are their own piece.
+  - An owner can still `DISABLE TRIGGER` until D-FIN-8 exists.
+  - Migrations 0012–0027 are not yet on Supabase.
+
+**Requirements VER: still 0.**
+
+| File | SHA-256 |
+|---|---|
+| prisma/migrations/0027_fee_receipts/migration.sql | 08c47e290c8cacbde153d96b697dfbd8e891864de940a76f186c585ebf9dddb5 |
+| prisma/schema.prisma | 42e9291e31ac1bd290b5c3dcae437cd7f896e1bf1734195e938fc22eb58bbf62 |
+| src/server/receipts.ts | a38bb141b17f6109fcf55c43751d72028c0da553d25388fca0939e5caf9c47c7 |
+| src/server/dues.ts | b925f7ea858096edba453992b0be12863e3e6b75b7eab10bf2954b2cc0455988 |
+| src/server/numbering.ts | 61ccf1b90c144aa889a27e34d7a24ac50e5fe16deb0997fbd420575cf6fd4381 |
+| src/server/centres.ts | dcfd388f96353531201dda2e95881b9717a245d47a49f949e3a86c9eca4f94d8 |
+| src/server/admin-http.ts | 2d1193af1489962596a203a09d737b66dd3a8a848f508f34b6a8a91cfcaf9689 |
+| app/students/[personId]/page.tsx | 179659953758eca4989ecef0ff11aac436433aabcf1b292bec6d0cf4a922bbff |
+| app/students/[personId]/receipts/route.ts | c0305e7a560f8e2dbe8096316552b30fcc876307adcbbde3aca7163017f85fda |
+| app/receipts/[id]/page.tsx | 32814a2880ed914351d42f245682bcecd2003697e47145d62fe233d2dbea3383 |
+| tests/fee-receipts.test.ts | 10379fbc8627f042b23d15a66deb38122cd16eb1106271155c59125bd05083a3 |
+| scripts/etl/reset.sql | 946e37b644be3546dfe55069a847c746d3d6de5f551f70db81652375f9c770c6 |
