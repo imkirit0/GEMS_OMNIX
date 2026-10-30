@@ -13,6 +13,7 @@ export default async function Fees() {
         <li><a href="/admin/fees/types">Fee types</a></li>
         <li><a href="/admin/fees/captions">Instalments</a></li>
         <li><a href="/admin/fees/plans">Fee plans</a></li>
+        <li><a href="/admin/fees/schemes">Fee schemes</a></li>
       </ul>
     </main>
   );

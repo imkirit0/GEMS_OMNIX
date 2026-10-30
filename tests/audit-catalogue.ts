@@ -33,6 +33,9 @@ export const AUDIT_CATALOGUE = [
   "fee.receipt.create", "fee.receipt.cancel",
   // fee holds (src/server/holds.ts)
   "fee.hold", "fee.release",
+  // fee schemes and concessions (src/server/schemes.ts, concessions.ts)
+  "fee.scheme.create", "fee.scheme.update", "fee.scheme.rule", "fee.scheme.courses", "fee.scheme.centres", "fee.scheme.delete",
+  "fee.scheme.approve", "fee.scheme.retire", "fee.concession.assign",
   // phone call log (src/server/call-log.ts)
   "call.create",
   // course batches (src/server/batches.ts)

@@ -3,6 +3,7 @@ import { pageRead } from "@/server/page-read";
 import { getPerson } from "@/server/people";
 import { randomUUID } from "node:crypto";
 import { duesForPerson } from "@/server/dues";
+import { schemesFor } from "@/server/concessions";
 import { MAX_EXTRAS, MODES } from "@/server/receipts";
 import { listFeeTypes } from "@/server/fees";
 import { inr } from "@/lib/money";
@@ -19,7 +20,8 @@ const LABELS: [DetailKey, string][] = [["currentAddress", "Current address"], ["
 // A learner as the viewer may see them: identity, details, then each admission in their student.view scope.
 // Malformed, missing or out-of-scope ids: the same 404 (T-SEC-001). Identity is corrected by ticket only (admission-screens
 // DD-5); contact and family details are edited directly by a student.admit holder where the learner is admitted (learner-details DD-10).
-// Each registration shows its fee dues, or "Create dues" for a fee.dues holder (fee-dues G3).
+// Each registration shows its fee dues, or "Create dues" for a fee.dues holder (fee-dues G3), and gross, concession, paid and
+// outstanding per due with a scheme picker for a fee.concession holder before anything is paid (fee-schemes DD-12).
 export default async function Student({ params, searchParams }: { params: Promise<{ personId: string }>;
   searchParams: Promise<{ error?: string; detail?: string; saved?: string }> }) {
   const { personId } = await params;
@@ -28,6 +30,8 @@ export default async function Student({ params, searchParams }: { params: Promis
     Promise.all([getPerson(s, personId), duesForPerson(s, personId), listFeeTypes(s)]));
   const adhocTypes = types.rows.filter((t) => t.active); // the server refuses a type on the learner's plan (adhoc-fees D4)
   const feesOf = new Map(fees.map((f) => [f.registrationId, f]));
+  const schemeOpts = new Map(await pageRead((s) => Promise.all(fees.filter((f) => f.canConcede)
+    .map(async (f) => [f.registrationId, await schemesFor(s, f.registrationId)] as const))));
   const countries = new Map(countryOptions());
   const shown = (k: DetailKey, v: string) =>
     k === "nationality" ? countries.get(v) ?? v : k === "employmentStatus" ? EMPLOYMENT_STATUSES[v] ?? v : k === "qualification" ? QUALIFICATIONS[v] ?? v : v;
@@ -37,7 +41,7 @@ export default async function Student({ params, searchParams }: { params: Promis
       <h1>{p.givenName} {p.familyName ?? ""}</h1>
       {saved && <p role="status">Saved.</p>}
       <AdminErrors error={error} detail={detail} labels={{ registrationId: "Course registration", centreId: "Centre", amount: "Amount", mode: "Mode",
-        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)", extras: "Ad-hoc items", reason: "Reason", action: "Action" }} />
+        reference: "Reference", instrumentDate: "Instrument date", idempotencyKey: "Form (reload the page)", extras: "Ad-hoc items", reason: "Reason", action: "Action", schemeId: "Scheme" }} />
       <p>Gender {p.gender ?? "not given"} · Born {p.dateOfBirth ?? "not given"} · Mobile {p.mobile ?? "not given"} · Email {p.email ?? "not given"}</p>
       <section>
         <h2>Contact and family</h2>
@@ -69,16 +73,16 @@ export default async function Student({ params, searchParams }: { params: Promis
                         <strong>Fees</strong>
                         {f.dues.length > 0 ? (
                           <table>
-                            <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Paid</th><th>Outstanding</th><th>Hold</th></tr></thead>
+                            <thead><tr><th>Fee type</th><th>Instalment</th><th>Due date</th><th>Amount</th><th>Concession</th><th>Paid</th><th>Outstanding</th><th>Hold</th></tr></thead>
                             <tbody>
                               {f.dues.map((d) => <tr key={d.id}><td>{d.feeTypeName}</td><td>{d.captionName}</td><td>{d.dueOn}</td><td>{inr(d.gross)}</td>
-                                <td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td><td>{f.canHold && (d.held || d.outstanding !== "0.00") ? (
+                                <td>{d.concession === "0.00" ? "" : inr(d.concession)}</td><td>{inr(d.paid)}</td><td>{inr(d.outstanding)}</td><td>{f.canHold && (d.held || d.outstanding !== "0.00") ? (
                                   <form method="post" action={`/students/${p.id}/holds`}>
                                     <input type="hidden" name="dueId" value={d.id} /><input type="hidden" name="action" value={d.held ? "release" : "hold"} />
                                     {d.held && <>On hold </>}<input name="reason" required maxLength={500} placeholder="Reason" aria-label={`Reason for ${d.feeTypeName} ${d.captionName}`} />{" "}
                                     <button type="submit">{d.held ? "Release" : "Hold"}</button>
                                   </form>) : d.held ? "On hold" : null}</td></tr>)}
-                              <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td>{inr(f.outstanding!)}</td><td>Collectable now {inr(f.collectable ?? "0")}</td></tr>
+                              <tr><td colSpan={3}>Total</td><td>{inr(f.total!)}</td><td></td><td></td><td>{inr(f.outstanding!)}</td><td>Collectable now {inr(f.collectable ?? "0")}</td></tr>
                             </tbody>
                           </table>
                         ) : f.canCreate ? (f.noPlan ? <p>No fee plan for this course yet.</p> : (
@@ -87,6 +91,15 @@ export default async function Student({ params, searchParams }: { params: Promis
                             <button type="submit">Create dues</button>
                           </form>
                         )) : null}
+                        {f.scheme && <p>Scheme {f.scheme.code} {f.scheme.name}</p>}
+                        {f.canConcede && (schemeOpts.get(r.id) ?? []).length > 0 && (
+                          <form method="post" action={`/students/${p.id}/scheme`}>
+                            <input type="hidden" name="registrationId" value={r.id} />
+                            <label>Scheme <select name="schemeId" required defaultValue=""><option value="">Choose…</option>
+                              {schemeOpts.get(r.id)!.map((o) => <option key={o.id} value={o.id}>{o.code} {o.name}</option>)}</select></label>{" "}
+                            <button type="submit">Apply scheme</button>
+                          </form>
+                        )}
                         {f.receipts.length > 0 && (
                           <p>Receipts: {f.receipts.map((x, i) => <span key={x.id}>{i > 0 && " · "}<a href={`/receipts/${x.id}`}>{x.receiptNo}</a> {x.receivedOn} {inr(x.total)} {x.mode}{x.status === "CANCELLED" ? " (cancelled)" : ""}</span>)}</p>
                         )}

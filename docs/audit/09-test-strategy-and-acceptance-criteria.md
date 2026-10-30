@@ -290,6 +290,14 @@ Each test runs in both NP-3 modes. The shipped mode is set only by the Accounts 
 | T-FH-002 | Holds proven by the database | By SQL the guards refuse, by name, an allocation to a held due, a hold that does not alternate, an ad-hoc due, another centre's due and a paid-up due; ids follow the lock order under concurrent hold and release; events never change; row security |
 | T-FH-003 | Hold list and history | Held dues of a centre by fee type, course and year; events by kind for up to 92 days; the route checks origin and the person |
 
+### T-SC: fee schemes and concessions (`docs/designs/fee-schemes/fee-schemes.md`)
+| ID | Test | Expected |
+|---|---|---|
+| T-SC-001 | Scheme lifecycle | A holder of `scheme.manage` drafts a scheme with rules per fee type, courses and optional centres; another holder of `scheme.approve`, with step-up, makes it live; a live scheme never changes and is retired with a reason; refused: approval by the maker or the last editor, without a rule or course, after its validity, without step-up, by the maker; drafts hidden from others; every action audited |
+| T-SC-002 | Assigning a scheme | A holder of `fee.concession` assigns one live scheme to a registration before anything is paid; PERCENT per due rounds half up; AMOUNT is a total per fee type taken from the latest dues first and capped at gross; owed, outstanding and collection follow, and gross = paid + concession + outstanding; refused: a second scheme, something paid, out of validity, another course or centre, draft or retired, nothing to give, a viewer, out of scope, an inactive centre |
+| T-SC-003 | Schemes proven by the database | By SQL, by name: permissions by transition, approval and retirement change nothing else, step-up, maker and editor are not the approver (a part edit stamps its editor), live parts frozen; concessions only in the assignment's transaction, on a plan due of its registration, amount stamped whatever is supplied; an assignment that gives nothing refused at commit; append-only; row security |
+| T-SC-004 | Concession register | A centre's concessions for up to 92 days, by scheme, with the total; other centres refused; the route checks origin and the person |
+
 ### T-FEE: fee collection, payments and posting (all policy-dependent expectations follow C-07 flags)
 | ID | Test | Expected |
 |---|---|---|

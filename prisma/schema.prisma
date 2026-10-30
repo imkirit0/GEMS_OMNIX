@@ -72,6 +72,8 @@ model Centre {
   receipts        Receipt[]
   journalEntries  JournalEntry[]
   feeHoldEvents   FeeHoldEvent[]
+  feeSchemeCentres FeeSchemeCentre[]
+  feeConcessions  FeeConcession[]
   tickets         Ticket[]
   ticketLevels    TicketLevel[]
   ticketEvents    TicketEvent[]
@@ -140,6 +142,11 @@ model AppUser {
   receiptsCreated         Receipt[]          @relation("receiptCreatedBy")
   receiptsCancelled       Receipt[]          @relation("receiptCancelledBy")
   feeHoldEventsCreated    FeeHoldEvent[]     @relation("feeHoldEventCreatedBy")
+  feeSchemesCreated       FeeScheme[]        @relation("feeSchemeCreatedBy")
+  feeSchemesUpdated       FeeScheme[]        @relation("feeSchemeUpdatedBy")
+  feeSchemesApproved      FeeScheme[]        @relation("feeSchemeApprovedBy")
+  feeSchemesRetired       FeeScheme[]        @relation("feeSchemeRetiredBy")
+  feeSchemeAssignments    FeeSchemeAssignment[] @relation("feeSchemeAssignmentCreatedBy")
 
   @@map("app_user")
   @@schema("app")
@@ -674,6 +681,7 @@ model Registration {
 
   dues        FeeDue[]
   receipts    Receipt[]
+  schemeAssignments FeeSchemeAssignment[]
 
   @@unique([id, centreId])
   @@index([admissionId])
@@ -710,6 +718,7 @@ model FeeType {
   category   FeeCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   lines      FeePlanLine[]
   dues          FeeDue[]
+  schemeRules   FeeSchemeRule[]
   // the ledger account it posts to (docs/designs/fee-ledger; guard in 0030)
   accountId  Int?          @map("account_id")
   account    Account?      @relation(fields: [accountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -802,6 +811,7 @@ model FeeDue {
   creator        AppUser      @relation("feeDueCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
   allocations    ReceiptAllocation[]
   holdEvents     FeeHoldEvent[]
+  concessions    FeeConcession[]
 
   @@unique([registrationId, feeTypeId, captionId])
   @@map("fee_due")
@@ -988,6 +998,7 @@ model Course {
   classes           CourseCentreClass[]
   enquiries1        Enquiry[]             @relation("enquiryCourse1")
   enquiries2        Enquiry[]             @relation("enquiryCourse2")
+  feeSchemes        FeeSchemeCourse[]
   enquiries3        Enquiry[]             @relation("enquiryCourse3")
   certifications    CourseCertification[]
   centres           CourseCentre[]
@@ -1246,5 +1257,106 @@ model FeeHoldEvent {
 
   @@index([dueId, id])
   @@map("fee_hold_event")
+  @@schema("app")
+}
+
+// ---------- Fee schemes and concessions (docs/designs/fee-schemes; checks, guards, view, RLS and grants in migration 0032) ----------
+// A scheme is made by scheme.manage and approved by another holder of scheme.approve; LIVE never changes. One assignment per
+// registration; its concessions are stamped by the database and never change.
+model FeeScheme {
+  id            Int                   @id @default(autoincrement())
+  code          String                @unique
+  name          String
+  validFrom     DateTime              @map("valid_from") @db.Date
+  validTo       DateTime              @map("valid_to") @db.Date
+  status        String                @default("DRAFT")
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  createdBy     String                @map("created_by") @db.Uuid
+  updatedAt     DateTime              @default(now()) @map("updated_at") @db.Timestamptz
+  updatedBy     String                @map("updated_by") @db.Uuid
+  approvedAt    DateTime?             @map("approved_at") @db.Timestamptz
+  approvedBy    String?               @map("approved_by") @db.Uuid
+  retiredAt     DateTime?             @map("retired_at") @db.Timestamptz
+  retiredBy     String?               @map("retired_by") @db.Uuid
+  retiredReason String?               @map("retired_reason")
+  creator       AppUser               @relation("feeSchemeCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updater       AppUser               @relation("feeSchemeUpdatedBy", fields: [updatedBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  approver      AppUser?              @relation("feeSchemeApprovedBy", fields: [approvedBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  retirer       AppUser?              @relation("feeSchemeRetiredBy", fields: [retiredBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  rules         FeeSchemeRule[]
+  courses       FeeSchemeCourse[]
+  centres       FeeSchemeCentre[]
+  assignments   FeeSchemeAssignment[]
+
+  @@map("fee_scheme")
+  @@schema("app")
+}
+
+model FeeSchemeRule {
+  schemeId  Int       @map("scheme_id")
+  feeTypeId Int       @map("fee_type_id")
+  kind      String
+  value     Decimal   @db.Decimal(14, 2)
+  scheme    FeeScheme @relation(fields: [schemeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  feeType   FeeType   @relation(fields: [feeTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([schemeId, feeTypeId])
+  @@map("fee_scheme_rule")
+  @@schema("app")
+}
+
+model FeeSchemeCourse {
+  schemeId Int       @map("scheme_id")
+  courseId Int       @map("course_id")
+  scheme   FeeScheme @relation(fields: [schemeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([schemeId, courseId])
+  @@map("fee_scheme_course")
+  @@schema("app")
+}
+
+model FeeSchemeCentre {
+  schemeId Int       @map("scheme_id")
+  centreId Int       @map("centre_id")
+  scheme   FeeScheme @relation(fields: [schemeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centre   Centre    @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([schemeId, centreId])
+  @@map("fee_scheme_centre")
+  @@schema("app")
+}
+
+model FeeSchemeAssignment {
+  id             BigInt          @id @default(autoincrement())
+  registrationId String          @unique @map("registration_id") @db.Uuid
+  centreId       Int             @map("centre_id")
+  schemeId       Int             @map("scheme_id")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  createdBy      String          @map("created_by") @db.Uuid
+  registration   Registration    @relation(fields: [registrationId, centreId], references: [id, centreId], onDelete: Restrict, onUpdate: Restrict)
+  scheme         FeeScheme       @relation(fields: [schemeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator        AppUser         @relation("feeSchemeAssignmentCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  concessions    FeeConcession[]
+
+  @@map("fee_scheme_assignment")
+  @@schema("app")
+}
+
+model FeeConcession {
+  id           BigInt              @id @default(autoincrement())
+  assignmentId BigInt              @map("assignment_id")
+  dueId        BigInt              @map("due_id")
+  centreId     Int                 @map("centre_id")
+  amount       Decimal             @db.Decimal(14, 2)
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  assignment   FeeSchemeAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  due          FeeDue              @relation(fields: [dueId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  centre       Centre              @relation(fields: [centreId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([assignmentId, dueId])
+  @@index([dueId])
+  @@index([centreId, createdAt])
+  @@map("fee_concession")
   @@schema("app")
 }

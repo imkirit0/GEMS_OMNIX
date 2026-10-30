@@ -11,11 +11,12 @@ import { PersonError } from "./person-rules";
 import { RbacError } from "./rbac";
 
 export type DueRow = { id: string; feeTypeName: string; captionName: string; dueOn: string; gross: string; currency: string;
-  paid: string; outstanding: string; held: boolean };
+  paid: string; outstanding: string; held: boolean; concession: string };
 export type ReceiptRow = { id: string; receiptNo: string; receivedOn: string; total: string; mode: string; status: string };
 export type RegistrationDues = { registrationId: string; dues: DueRow[]; total: string | null; canCreate: boolean; noPlan: boolean;
   outstanding: string | null; receipts: ReceiptRow[]; canCollect: boolean;
-  collectable: string | null; canHold: boolean }; // fee-holds: owed less held dues; may hold or release here
+  collectable: string | null; canHold: boolean; // fee-holds: owed less held dues; may hold or release here
+  scheme: { code: string; name: string } | null; canConcede: boolean }; // fee-schemes: the assigned scheme; may assign one here
 
 /** Fee collection switch (fee-receipts DD-5), committed closed: opens only after the tax advisor's check, Accounts' worked
  * examples, the legacy FEEREC seed (NP-8) and the 16-character check. The ledger is built (fee-ledger, E-055); rollout checklist: every
@@ -87,14 +88,22 @@ export async function createDues(session: string | undefined, personId: string, 
 export function duesForPerson(session: string | undefined, personId: string): Promise<RegistrationDues[]> {
   if (typeof personId !== "string" || !UUID.test(personId)) return Promise.resolve([]);
   return withScope(session, async (tx) => {
-    const regs = await tx.$queryRaw<{ id: string; centreId: number; courseId: number; year: string; canCreate: boolean; canCollect: boolean; canHold: boolean }[]>`
+    const regs = await tx.$queryRaw<{ id: string; centreId: number; courseId: number; year: string; canCreate: boolean; canCollect: boolean; canHold: boolean;
+      schemeCode: string | null; schemeName: string | null; canConcede: boolean }[]>`
       select r.id::text, r.centre_id as "centreId", co.id as "courseId", a.academic_year as year,
         (not exists (select 1 from app.fee_due d where d.registration_id = r.id and d.source = 'PLAN') and r.status = 'ACTIVE' and ce.status = 'ACTIVE'
           and app.has_permission('fee.dues', r.centre_id)) as "canCreate",
         (ce.status = 'ACTIVE' and app.has_permission('fee.collect', r.centre_id)) as "canCollect",
-        (ce.status = 'ACTIVE' and app.has_permission('fee.hold', r.centre_id)) as "canHold"
+        (ce.status = 'ACTIVE' and app.has_permission('fee.hold', r.centre_id)) as "canHold",
+        s.code as "schemeCode", s.name as "schemeName",
+        -- the guard's rule (fee-schemes Z8-5): active, plan dues, no scheme yet, nothing paid on any plan due
+        (s.id is null and r.status = 'ACTIVE' and ce.status = 'ACTIVE' and app.has_permission('fee.concession', r.centre_id)
+          and exists (select 1 from app.fee_due d where d.registration_id = r.id and d.source = 'PLAN')
+          and not exists (select 1 from app.fee_due d join app.fee_due_balance b on b.due_id = d.id
+                          where d.registration_id = r.id and d.source = 'PLAN' and b.paid > 0)) as "canConcede"
       from app.registration r join app.admission a on a.id = r.admission_id
         join app.course co on co.code = r.course_code join app.centre ce on ce.id = r.centre_id
+        left join app.fee_scheme_assignment g on g.registration_id = r.id left join app.fee_scheme s on s.id = g.scheme_id
       where a.person_id = ${personId}::uuid and r.centre_id = any ((select app.scoped_centre_ids('student.view'))::int[])
       order by a.created_at, r.created_at, length(r.register_no), r.register_no`; // one admission's courses share created_at: register order
     if (regs.length === 0) return [];
@@ -102,7 +111,8 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
     // paid and outstanding from the one definition (fee_due_balance, fee-receipts Z1)
     const dues = await tx.$queryRaw<(DueRow & { registrationId: string })[]>`
       select d.id::text, d.registration_id::text as "registrationId", t.name as "feeTypeName", c.name as "captionName",
-        d.due_on::text as "dueOn", d.gross::text as gross, d.currency::text as currency, b.paid::text as paid, b.outstanding::text as outstanding, b.held
+        d.due_on::text as "dueOn", d.gross::text as gross, d.currency::text as currency, b.paid::text as paid, b.outstanding::text as outstanding, b.held,
+        b.concession::text as concession
       from app.fee_due d join app.fee_type t on t.id = d.fee_type_id join app.fee_caption c on c.id = d.caption_id
         join app.fee_due_balance b on b.due_id = d.id
       where d.registration_id = any (${ids}::uuid[]) and d.source = 'PLAN'
@@ -124,7 +134,8 @@ export function duesForPerson(session: string | undefined, personId: string): Pr
       out.push({ registrationId: r.id, dues: dues.filter((d) => d.registrationId === r.id).map(({ registrationId: _, ...d }) => d),
         total: t?.total ?? null, canCreate: r.canCreate, noPlan, outstanding: t?.outstanding ?? null,
         receipts: receipts.filter((x) => x.registrationId === r.id).map(({ registrationId: _, ...x }) => x),
-        canCollect: FEE_GATES.collectionLive && r.canCollect, collectable: t?.collectable ?? null, canHold: r.canHold }); // ad-hoc items need no plan balance (adhoc-fees D6)
+        canCollect: FEE_GATES.collectionLive && r.canCollect, collectable: t?.collectable ?? null, canHold: r.canHold,
+        scheme: r.schemeCode === null ? null : { code: r.schemeCode, name: r.schemeName! }, canConcede: r.canConcede }); // ad-hoc items need no plan balance (adhoc-fees D6)
     }
     return out;
   });

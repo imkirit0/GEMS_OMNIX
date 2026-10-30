@@ -54,6 +54,10 @@ export const FR = { a: "00000000-0000-0000-0000-0000000000fb" } as const;
 export const LV = { a: "00000000-0000-0000-0000-0000000000fc" } as const;
 // Fee holds fixture user: role 33 fee_hold (fee.hold, student.view) at centre A. Token tok-feeH.
 export const FH = { a: "00000000-0000-0000-0000-0000000000fd" } as const;
+// Fee schemes fixture users (fee-schemes C11, R13): roles 34 scheme_maker (scheme.manage) and 35 scheme_checker (scheme.approve),
+// both sensitive, at ALL; 36 fee_concession (fee.concession, student.view) at centre A. Tokens tok-schM, tok-schA, tok-feeK.
+export const SC = { maker: "00000000-0000-0000-0000-0000000000fe", checker: "00000000-0000-0000-0000-000000000100",
+  concede: "00000000-0000-0000-0000-000000000101" } as const;
 export const CO = { m: "00000000-0000-0000-0000-0000000000f2", r1: "00000000-0000-0000-0000-0000000000f3" } as const;
 
 // Enquiry fixture users (enquiry design C11): roles 22 enquiry_worker (view, manage), 23 enquiry_viewer (view),
@@ -97,7 +101,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       app.registration, app.admission, app.person_detail, app.person,
       app.ticket_type_viewer, app.ticket_type_level, app.ticket_type, app.ticket_category, app.rate_hit,
       app.course, app.course_category, app.course_division, app.centre_class, app.academic_year, app.certification, app.batch,
-      app.journal_line, app.journal_entry, app.fee_hold_event, app.receipt_allocation, app.receipt, app.fee_due, app.fee_plan_line, app.fee_plan, app.fee_caption, app.fee_type, app.fee_category restart identity cascade`);
+      app.journal_line, app.journal_entry, app.fee_hold_event, app.fee_concession, app.fee_scheme_assignment, app.fee_scheme_rule, app.fee_scheme_course, app.fee_scheme_centre, app.fee_scheme, app.receipt_allocation, app.receipt, app.fee_due, app.fee_plan_line, app.fee_plan, app.fee_caption, app.fee_type, app.fee_category restart identity cascade`);
     if ((await db.query(`select to_regclass('app.test_ticket_counter') t`)).rows[0].t) await db.query(`truncate app.test_ticket_counter`);
     await db.query("set session_replication_role = origin");
     await db.query("update app.account set active = true where not active"); // the chart is migration data; tests may deactivate
@@ -121,14 +125,17 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('fee.collect', 'Collect fees and issue receipts at a centre', false),
       ('fee.receipt.cancel', 'Cancel a fee receipt on its day', true),
       ('ledger.view', 'View the ledger (day book) of a centre', false),
-      ('fee.hold', 'Hold and release a learner''s fee dues', false)`);
+      ('fee.hold', 'Hold and release a learner''s fee dues', false),
+      ('scheme.manage', 'Create and edit fee schemes', true), ('scheme.approve', 'Approve or retire fee schemes', true),
+      ('fee.concession', 'Assign a fee scheme to a learner', false)`);
     await db.query(`insert into app.role (id, key, name) values (1, 'centre_admin', 'Centre admin'),
       (2, 'ho_viewer', 'HO viewer'), (3, 'rbac_admin', 'RBAC admin'),
       (10, 'tk_raiser', 'Ticket raiser'), (11, 'tk_level1', 'Ticket level 1'), (12, 'tk_level2', 'Ticket level 2'),
       (13, 'tk_approver', 'Ticket approver'), (14, 'tk_reviewer', 'Ticket reviewer'), (15, 'tk_type_admin', 'Ticket type admin'),
       (16, 'tk_member', 'Centre member (no permissions)'), (17, 'student_admin', 'Student admin'), (18, 'catalogue_admin', 'Catalogue admin'),
       (22, 'enquiry_worker', 'Enquiry worker'), (23, 'enquiry_viewer', 'Enquiry viewer'), (24, 'enquiry_setup', 'Enquiry setup'),
-      (25, 'centre_manager', 'Centre manager'), (26, 'batch_manager', 'Batch manager'), (28, 'fee_setup', 'Fee setup'), (29, 'fee_dues', 'Fee dues'), (30, 'fee_collect', 'Fee collection'), (31, 'fee_cancel', 'Fee cancellation'), (32, 'ledger_viewer', 'Ledger viewer'), (33, 'fee_hold', 'Fee holds')`);
+      (25, 'centre_manager', 'Centre manager'), (26, 'batch_manager', 'Batch manager'), (28, 'fee_setup', 'Fee setup'), (29, 'fee_dues', 'Fee dues'), (30, 'fee_collect', 'Fee collection'), (31, 'fee_cancel', 'Fee cancellation'), (32, 'ledger_viewer', 'Ledger viewer'), (33, 'fee_hold', 'Fee holds'),
+      (34, 'scheme_maker', 'Scheme maker'), (35, 'scheme_checker', 'Scheme checker'), (36, 'fee_concession', 'Fee concessions')`);
     await db.query(`insert into app.role_permission values
       (1, 'org.centre.view'), (1, 'numbering.series.allocate'), (2, 'org.centre.view'),
       (3, 'rbac.view'), (3, 'rbac.user.manage'), (3, 'rbac.role.manage'),
@@ -137,7 +144,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       (12, 'ticket.approve'), (12, 'ticket.view'), (12, 'ticket.document.view'),
       (13, 'ticket.approve'), (13, 'ticket.view'), (14, 'ticket.view'),
       (15, 'ticket.type.manage'), (15, 'rbac.view'), (17, 'student.view'), (17, 'student.admit'), (18, 'catalogue.manage'),
-      (22, 'enquiry.view'), (22, 'enquiry.manage'), (23, 'enquiry.view'), (24, 'enquiry.setup'), (25, 'org.centre.manage'), (26, 'batch.manage'), (26, 'student.view'), (28, 'fee.setup'), (29, 'fee.dues'), (29, 'student.view'), (30, 'fee.collect'), (30, 'student.view'), (31, 'fee.receipt.cancel'), (31, 'student.view'), (32, 'ledger.view'), (33, 'fee.hold'), (33, 'student.view')`);
+      (22, 'enquiry.view'), (22, 'enquiry.manage'), (23, 'enquiry.view'), (24, 'enquiry.setup'), (25, 'org.centre.manage'), (26, 'batch.manage'), (26, 'student.view'), (28, 'fee.setup'), (29, 'fee.dues'), (29, 'student.view'), (30, 'fee.collect'), (30, 'student.view'), (31, 'fee.receipt.cancel'), (31, 'student.view'), (32, 'ledger.view'), (33, 'fee.hold'), (33, 'student.view'), (34, 'scheme.manage'), (35, 'scheme.approve'), (36, 'fee.concession'), (36, 'student.view')`);
     await db.query(`insert into app.app_user (id, login, display_name, status) values
       ('00000000-0000-0000-0000-00000000000a', 'ua', 'User A', 'ACTIVE'),
       ('00000000-0000-0000-0000-00000000000b', 'ub', 'User B', 'ACTIVE'),
@@ -149,6 +156,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ${Object.entries(ST).map(([k, id]) => `('${id}', '${k}', 'Student admin ${k}', 'ACTIVE')`).join(", ")},
       ('${CA.ca}', 'ca', 'Catalogue admin', 'ACTIVE'),
       ('${FS.s}', 'fees', 'Fee setup', 'ACTIVE'), ('${FD.a}', 'feed', 'Fee dues A', 'ACTIVE'), ('${FC.a}', 'feec', 'Fee collection A', 'ACTIVE'), ('${FR.a}', 'feer', 'Fee cancellation A', 'ACTIVE'), ('${LV.a}', 'leda', 'Ledger viewer A', 'ACTIVE'), ('${FH.a}', 'feeh', 'Fee holds A', 'ACTIVE'),
+      ('${SC.maker}', 'schm', 'Scheme maker', 'ACTIVE'), ('${SC.checker}', 'scha', 'Scheme checker', 'ACTIVE'), ('${SC.concede}', 'feek', 'Fee concessions A', 'ACTIVE'),
       ('${BM.a}', 'bma', 'Batch manager A', 'ACTIVE'), ('${BM.r1}', 'bmr1', 'Batch manager region 1', 'ACTIVE'),
       ('${CO.m}', 'com', 'Centre manager', 'ACTIVE'), ('${CO.r1}', 'cor1', 'Centre manager region 1', 'ACTIVE'),
       ${Object.entries(EQ).map(([k, id]) => `('${id}', 'eq${k}', 'Enquiry ${k}', 'ACTIVE')`).join(", ")}`);
@@ -169,6 +177,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
       ('${ST.sr}', 17, 'REGION', 1, null, null), ('${ST.sh}', 17, 'ALL', null, null, null),
       ('${CA.ca}', 18, 'ALL', null, null, null),
       ('${FS.s}', 28, 'ALL', null, null, null), ('${FD.a}', 29, 'CENTRE', null, null, 1), ('${FC.a}', 30, 'CENTRE', null, null, 1), ('${FR.a}', 31, 'CENTRE', null, null, 1), ('${LV.a}', 32, 'CENTRE', null, null, 1), ('${FH.a}', 33, 'CENTRE', null, null, 1),
+      ('${SC.maker}', 34, 'ALL', null, null, null), ('${SC.checker}', 35, 'ALL', null, null, null), ('${SC.concede}', 36, 'CENTRE', null, null, 1),
       ('${BM.a}', 26, 'CENTRE', null, null, 1), ('${BM.r1}', 26, 'REGION', 1, null, null),
       ('${CO.m}', 25, 'ALL', null, null, null), ('${CO.r1}', 25, 'REGION', 1, null, null),
       ('${EQ.wa}', 22, 'CENTRE', null, null, 1), ('${EQ.wa}', 17, 'CENTRE', null, null, 1), ('${EQ.wb}', 22, 'CENTRE', null, null, 3),
@@ -187,6 +196,7 @@ export async function reset({ gapRule = "GAPLESS" }: { gapRule?: "GAPLESS" | "UN
         ${Object.entries(ST).map(([k, id]) => `('${ST_TOKEN[k as keyof typeof ST]}', '${id}', '8 hours', null)`).join(", ")},
         ('tok-catA', '${CA.ca}', '8 hours', null),
         ('tok-feeS', '${FS.s}', '8 hours', null), ('tok-feeD', '${FD.a}', '8 hours', null), ('tok-feeC', '${FC.a}', '8 hours', null), ('tok-feeR', '${FR.a}', '8 hours', null), ('tok-ledA', '${LV.a}', '8 hours', null), ('tok-feeH', '${FH.a}', '8 hours', null),
+        ('tok-schM', '${SC.maker}', '8 hours', null), ('tok-schA', '${SC.checker}', '8 hours', null), ('tok-feeK', '${SC.concede}', '8 hours', null),
         ('tok-bmA', '${BM.a}', '8 hours', null), ('tok-bmR1', '${BM.r1}', '8 hours', null),
         ('tok-coM', '${CO.m}', '8 hours', null), ('tok-coR1', '${CO.r1}', '8 hours', null),
         ${Object.entries(EQ).map(([k, id]) => `('${EQ_TOKEN[k as keyof typeof EQ]}', '${id}', '8 hours', null)`).join(", ")}) v(t, u, e, r)`);

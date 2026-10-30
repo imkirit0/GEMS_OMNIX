@@ -398,6 +398,18 @@ try {
     body: new URLSearchParams({ dueId: "1", action: "hold", reason: "x" }) });
   check("T-FH a hold post from a foreign origin is refused", fhForeign.status === 403, String(fhForeign.status));
 
+  // ---------- fee schemes (T-SC: the schemes page renders; the register needs fee.concession with student.view; origin) ----------
+  const scList = await get("/admin/fees/schemes", stu);
+  check("T-SC the schemes page renders for a signed-in user", scList.status === 200 && (await scList.text()).includes("Fee schemes"), String(scList.status));
+  check("T-SC the concession register is 404 without fee.concession", (await get("/fees/concessions", stu)).status === 404);
+  await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'fee.concession')`, [studentRole]);
+  const scPage = await get("/fees/concessions", stu);
+  check("T-SC the concession register renders for a fee.concession holder", scPage.status === 200 && (await scPage.text()).includes("Concession register"), String(scPage.status));
+  const scForeign = await fetch(`${BASE}/students/${own}/scheme`, { method: "POST", redirect: "manual",
+    headers: { cookie: `__Host-gems_session=${stu}`, "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+    body: new URLSearchParams({ registrationId: own, schemeId: "1" }) });
+  check("T-SC a scheme post from a foreign origin is refused", scForeign.status === 403, String(scForeign.status));
+
   // ---------- enquiry (T-ENQ: 404 parity, Origin-less action post, a real create, the Enroll link) ----------
   await db.query(`insert into app.role_permission (role_id, permission_key) values ($1, 'enquiry.view'), ($1, 'enquiry.manage')`, [studentRole]);
   const hiddenEnq = (await db.query(`insert into app.enquiry (centre_id, given_name, date_of_birth, gender, mobile, path_id, type_id, status_id,
